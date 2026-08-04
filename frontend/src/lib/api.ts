@@ -23,6 +23,25 @@ const rawApiBase = (import.meta.env.VITE_API_URL ?? '').trim().replace(/\/+$/, '
 export const API_BASE =
   rawApiBase && !/^https?:\/\//i.test(rawApiBase) ? `https://${rawApiBase}` : rawApiBase
 
+/**
+ * A production build with no VITE_API_URL is always a misconfiguration.
+ *
+ * Left unchecked it fails in a way that is very hard to diagnose: API_BASE is
+ * "", so every request goes to the static site's own origin, the SPA rewrite
+ * answers /api/* with index.html, and the user just sees a generic connection
+ * error. Naming the real problem here saves a long hunt.
+ */
+export const API_MISCONFIGURED = import.meta.env.PROD && !API_BASE
+
+if (API_MISCONFIGURED) {
+  console.error(
+    '[BeviGrow] VITE_API_URL was empty when this bundle was built, so the app ' +
+      'has no backend address and is calling itself. Set VITE_API_URL on the ' +
+      'frontend service to the backend URL, then REBUILD — Vite inlines this ' +
+      'value at build time, so a restart is not enough.',
+  )
+}
+
 const TOKEN_KEY = 'bevigrow.token'
 
 export const tokenStore = {
@@ -56,6 +75,15 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (token) headers.set('Authorization', `Bearer ${token}`)
   if (init.body && !(init.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json')
+  }
+
+  if (API_MISCONFIGURED) {
+    throw new ApiError(
+      'This build has no backend address (VITE_API_URL was empty at build ' +
+        'time), so it is calling itself instead of the API. Set VITE_API_URL ' +
+        'on the frontend service and redeploy.',
+      0,
+    )
   }
 
   let res: Response

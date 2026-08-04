@@ -11,12 +11,15 @@ services:
   - type: web
     name: bevigrow-backend
     runtime: python
-    # Free instances cannot mount a persistent disk, and they sleep after 15
-    # minutes of inactivity (the next request takes ~50s to wake). `starter`
-    # keeps uploaded quotations and invoices on disk and the service awake.
-    # To run free instead: set `plan: free` AND delete the `disk:` block below,
-    # then point UPLOAD_DIR at ./uploads (files are lost on each redeploy).
-    plan: starter
+    # Free instance type. Two consequences to be aware of:
+    #   1. No persistent disk is allowed, so UPLOAD_DIR points at the
+    #      container filesystem and uploaded files are LOST on every redeploy.
+    #      Database records survive (they live in Neon) — only the binaries go.
+    #   2. The service sleeps after 15 minutes idle; the next request takes
+    #      roughly 50 seconds to wake it.
+    # To make uploads durable: change to `plan: starter`, re-add a `disk:`
+    # block mounted at /var/data, and set UPLOAD_DIR to /var/data/uploads.
+    plan: free
     # Matches the Neon database region (ap-southeast-1) — a backend in Oregon
     # would add roughly 200 ms of round-trip latency to every query.
     region: singapore
@@ -49,8 +52,9 @@ services:
         value: bevigrow
       - key: SEED_ADMIN_EMAIL
         value: bevigrow@gmail.com
+      # Ephemeral on the free plan — see the note on `plan` above.
       - key: UPLOAD_DIR
-        value: /var/data/uploads
+        value: ./uploads
       # Resolved from the frontend service, so a renamed service does not
       # silently break CORS. Yields a bare host; the app adds the scheme.
       - key: CORS_ORIGINS
@@ -63,13 +67,7 @@ services:
         value: 3.11.9
       - key: PYTHONUNBUFFERED
         value: '1'
-    # Persistent storage for uploaded quotations, invoices, POs and photos.
-    # Without this, Render's filesystem is ephemeral and uploads vanish on
-    # every redeploy. Requires a paid instance type.
-    disk:
-      name: bevigrow-uploads
-      mountPath: /var/data
-      sizeGB: 5
+    # No `disk:` block — Render rejects persistent disks on free instances.
 
   # -------------------------------------------------------- frontend static
   - type: web

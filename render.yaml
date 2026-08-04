@@ -87,14 +87,20 @@ services:
     autoDeploy: true
     pullRequestPreviewsEnabled: false
     envVars:
-      # Resolved from the backend service rather than hard-coded, so the two
-      # cannot drift apart. Vite inlines this at BUILD time, so changing it
-      # requires a rebuild, not a restart.
+      # A literal URL, deliberately NOT `fromService`.
+      #
+      # `fromService` resolved to an empty string here, because the static
+      # site was built before the backend service existed. Vite inlines this
+      # value at BUILD time, so the bundle shipped with no API address and
+      # called itself instead. This service is also Blueprint-managed, which
+      # means Render re-applies the values from this file on every deploy and
+      # overwrites anything set by hand in the dashboard — so the fix has to
+      # live here.
+      #
+      # If the backend's URL differs in your dashboard, change it here and
+      # redeploy; editing it in the dashboard alone will not survive.
       - key: VITE_API_URL
-        fromService:
-          name: bevigrow-backend
-          type: web
-          property: host
+        value: https://bevigrow-backend-dkay.onrender.com
       - key: NODE_VERSION
         value: 20.11.0
     routes:

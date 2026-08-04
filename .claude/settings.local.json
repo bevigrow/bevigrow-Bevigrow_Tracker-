@@ -12,7 +12,8 @@
       "Bash(node C:/Users/Thebest/AppData/Local/Temp/claude/c--Users-Thebest-OneDrive-Desktop-BEVI-GROW-APPLICATION/00f0245e-a376-48ac-9727-f726566105e1/scratchpad/viz/validate_palette.js '#B8862F,#3B9FD8,#4FA96B' --mode dark --surface '#33200F')",
       "Bash(npx tsc *)",
       "Bash(npm run *)",
-      "Bash(./.venv/Scripts/python.exe -c ' *)"
+      "Bash(./.venv/Scripts/python.exe -c ' *)",
+      "Bash(./backend/.venv/Scripts/python.exe -c ' *)"
     ]
   }
 }

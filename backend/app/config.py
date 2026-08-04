@@ -88,9 +88,24 @@ class Settings(BaseSettings):
 
     @property
     def cors_origin_list(self) -> list[str]:
+        """Allowed origins, each normalised to a full scheme://host form.
+
+        Render's `fromService` substitution supplies a bare hostname, and a
+        CORS origin without a scheme never matches the browser's `Origin`
+        header — the requests fail with an opaque CORS error.
+        """
         if self.CORS_ORIGINS.strip() == "*":
             return ["*"]
-        return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+
+        origins: list[str] = []
+        for raw in self.CORS_ORIGINS.split(","):
+            origin = raw.strip().rstrip("/")
+            if not origin:
+                continue
+            if not origin.startswith(("http://", "https://")):
+                origin = f"https://{origin}"
+            origins.append(origin)
+        return origins
 
 
 @lru_cache

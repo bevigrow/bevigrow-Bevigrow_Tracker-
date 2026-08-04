@@ -15,7 +15,13 @@ import type {
 
 // In production this is baked in at build time by Vite (VITE_API_URL).
 // In dev it stays empty so requests hit the Vite proxy on the same origin.
-export const API_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
+//
+// Render's `fromService` substitution yields a bare hostname
+// ("bevigrow-backend.onrender.com"), so add the scheme when it is missing —
+// otherwise every request resolves as a relative path and 404s.
+const rawApiBase = (import.meta.env.VITE_API_URL ?? '').trim().replace(/\/+$/, '')
+export const API_BASE =
+  rawApiBase && !/^https?:\/\//i.test(rawApiBase) ? `https://${rawApiBase}` : rawApiBase
 
 const TOKEN_KEY = 'bevigrow.token'
 

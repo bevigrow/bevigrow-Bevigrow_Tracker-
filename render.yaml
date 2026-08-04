@@ -1,31 +1,43 @@
-# Render blueprint for BeviGrow Coffee B2B Tracker.
+# Render blueprint for the BeviGrow Coffee B2B Tracker.
 #
-# Deploy: push this repo to GitHub, then in Render choose
-# "New → Blueprint" and point it at the repository.
+# Deploy: in the Render dashboard choose "New +" → "Blueprint", pick this
+# repository, and Render creates both services from this file.
 #
-# Secrets marked `sync: false` are NOT stored here — set them in the Render
-# dashboard for each service after the first deploy.
+# Values marked `sync: false` are secrets — Render prompts for them during
+# setup and never stores them in this file.
 
 services:
   # ------------------------------------------------------------ backend API
   - type: web
     name: bevigrow-backend
     runtime: python
+    # Free instances cannot mount a persistent disk, and they sleep after 15
+    # minutes of inactivity (the next request takes ~50s to wake). `starter`
+    # keeps uploaded quotations and invoices on disk and the service awake.
+    # To run free instead: set `plan: free` AND delete the `disk:` block below,
+    # then point UPLOAD_DIR at ./uploads (files are lost on each redeploy).
     plan: starter
-    region: oregon
+    # Matches the Neon database region (ap-southeast-1) — a backend in Oregon
+    # would add roughly 200 ms of round-trip latency to every query.
+    region: singapore
     rootDir: backend
-    pythonVersion: '3.11'
     buildCommand: pip install --upgrade pip && pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
-      # Neon PostgreSQL connection string, e.g.
-      # postgresql+psycopg://USER:PASS@ep-xxx.aws.neon.tech/bevigrow?sslmode=require
+      # Neon PostgreSQL. Use the POOLED connection string (host contains
+      # "-pooler"). A plain postgresql:// URL is fine — the app rewrites it
+      # onto the psycopg 3 driver on load.
       - key: DATABASE_URL
         sync: false
-      # Claude Haiku API key (AI summaries, insights, follow-ups)
+      # Claude Haiku API key. Leave unset and the AI features fall back to
+      # built-in rules rather than failing.
       - key: ANTHROPIC_API_KEY
+        sync: false
+      # Password for the seeded admin account. Only applied when the account
+      # is first created — it never overwrites an existing row.
+      - key: SEED_ADMIN_PASSWORD
         sync: false
       - key: JWT_SECRET
         generateValue: true
@@ -33,18 +45,27 @@ services:
         value: production
       - key: AI_MODEL
         value: claude-haiku-4-5
-      # Lock CORS to the deployed frontend once its URL is known.
-      - key: CORS_ORIGINS
-        value: https://bevigrow-frontend.onrender.com
-      - key: UPLOAD_DIR
-        value: /var/data/uploads
+      - key: DB_SCHEMA
+        value: bevigrow
       - key: SEED_ADMIN_EMAIL
         value: bevigrow@gmail.com
-      - key: SEED_ADMIN_PASSWORD
-        sync: false
+      - key: UPLOAD_DIR
+        value: /var/data/uploads
+      # Resolved from the frontend service, so a renamed service does not
+      # silently break CORS. Yields a bare host; the app adds the scheme.
+      - key: CORS_ORIGINS
+        fromService:
+          name: bevigrow-frontend
+          type: web
+          property: host
+      # Belt and braces alongside backend/runtime.txt.
+      - key: PYTHON_VERSION
+        value: 3.11.9
       - key: PYTHONUNBUFFERED
         value: '1'
-    # Persistent disk for uploaded quotations, invoices and sample photos.
+    # Persistent storage for uploaded quotations, invoices, POs and photos.
+    # Without this, Render's filesystem is ephemeral and uploads vanish on
+    # every redeploy. Requires a paid instance type.
     disk:
       name: bevigrow-uploads
       mountPath: /var/data
@@ -60,13 +81,19 @@ services:
     autoDeploy: true
     pullRequestPreviewsEnabled: false
     envVars:
+      # Resolved from the backend service rather than hard-coded, so the two
+      # cannot drift apart. Vite inlines this at BUILD time, so changing it
+      # requires a rebuild, not a restart.
       - key: VITE_API_URL
-        value: https://bevigrow-backend.onrender.com
+        fromService:
+          name: bevigrow-backend
+          type: web
+          property: host
       - key: NODE_VERSION
-        value: '20.11.0'
+        value: 20.11.0
     routes:
-      # Single-page app: every unmatched path serves index.html so client-side
-      # routes such as /app/contacts/12 survive a hard refresh.
+      # Single-page app: serve index.html for any unmatched path so deep links
+      # such as /app/contacts/12 survive a hard refresh.
       - type: rewrite
         source: /*
         destination: /index.html

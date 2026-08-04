@@ -58,11 +58,14 @@ services:
       # Literal rather than `fromService`: the frontend already resolves its
       # API URL from this service, and pointing the two at each other creates
       # a circular reference that can fail blueprint validation.
-      # If Render has to suffix the frontend's name (because the name is
-      # taken), update this value to match the real URL and redeploy.
-      # The app prepends https:// when the scheme is missing.
+      #
+      # onrender.com subdomains are global across all Render accounts, so
+      # "bevigrow-frontend" was already taken and Render issued
+      # "bevigrow-frontend-dkay". Both hosts are listed so the value keeps
+      # working if the frontend is ever recreated under the plain name.
+      # The app prepends https:// when a scheme is missing.
       - key: CORS_ORIGINS
-        value: bevigrow-frontend.onrender.com
+        value: bevigrow-frontend-dkay.onrender.com,bevigrow-frontend.onrender.com
       # Belt and braces alongside backend/runtime.txt.
       - key: PYTHON_VERSION
         value: 3.11.9
@@ -74,9 +77,13 @@ services:
   - type: web
     name: bevigrow-frontend
     runtime: static
-    rootDir: frontend
-    buildCommand: npm install && npm run build
-    staticPublishPath: dist
+    # No `rootDir` here on purpose. Render documents `staticPublishPath` as
+    # relative to the REPO ROOT, so combining it with a rootDir is ambiguous:
+    # `dist` can resolve to <repo>/dist, which does not exist, and every
+    # request then returns "Not Found". Both paths below are repo-root
+    # relative, which removes the ambiguity entirely.
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: frontend/dist
     autoDeploy: true
     pullRequestPreviewsEnabled: false
     envVars:

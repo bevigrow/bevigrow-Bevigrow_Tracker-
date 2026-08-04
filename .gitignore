@@ -16,11 +16,14 @@ node_modules/
 dist/
 .vite/
 
-# Environment — never commit real secrets
+# Environment — never commit real secrets.
+# Broad patterns on purpose: a bare `.env` rule does not match copies such as
+# "backend/ (2).env" or ".env.backup", which is exactly how credentials leak.
 .env
-.env.local
-.env.*.local
+.env.*
+*.env
 !.env.example
+!*.env.example
 
 # Editors / OS
 .DS_Store

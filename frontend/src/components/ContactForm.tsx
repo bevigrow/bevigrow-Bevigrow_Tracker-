@@ -123,7 +123,9 @@ export function ContactForm({
   }
 
   return (
-    <form onSubmit={submit} className="space-y-5">
+    // noValidate: the browser's native bubble for type="email" would suppress
+    // our own inline messages, giving two inconsistent validation styles.
+    <form onSubmit={submit} noValidate className="space-y-5">
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Company name *" error={errors.company_name}>
           <Input

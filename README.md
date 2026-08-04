@@ -72,11 +72,19 @@ before the first boot, since the admin row is only created once.
 
 ```env
 DATABASE_URL=postgresql+psycopg://USERNAME:PASSWORD@HOST/DBNAME?sslmode=require
+DB_SCHEMA=bevigrow
 ```
 
 Notes:
 
 - The `+psycopg` suffix selects psycopg 3 (the `psycopg[binary]` package).
+  Neon's dashboard gives you a plain `postgresql://` URL, which SQLAlchemy maps
+  to psycopg **2** and fails with `ModuleNotFoundError: No module named
+  'psycopg2'`. The app rewrites the scheme on load, so either form works.
+- **Tables live in their own `bevigrow` schema**, not `public`. That lets the
+  app share a Neon database with Neon Auth or an earlier prototype without
+  table-name collisions. Set `DB_SCHEMA` to change it; leave it blank to use
+  the default schema.
 - `sslmode=require` is mandatory — Neon rejects unencrypted connections.
 - Pooling is configured in `app/database.py` (`pool_size`, `max_overflow`,
   `pool_recycle`, `pool_pre_ping`) and tuned via environment variables.

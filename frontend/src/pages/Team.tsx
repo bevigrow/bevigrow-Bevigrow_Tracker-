@@ -282,7 +282,7 @@ function InviteModal({
       subtitle="They can sign in immediately with these credentials"
       width="max-w-lg"
     >
-      <form onSubmit={submit} className="space-y-4">
+      <form onSubmit={submit} noValidate className="space-y-4">
         <Field label="Full name *" error={errors.name}>
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Priya Sharma" />
         </Field>

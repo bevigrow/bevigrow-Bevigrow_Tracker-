@@ -59,7 +59,12 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new ApiError('Cannot reach the BeviGrow server. Check your connection.', 0)
   }
 
-  if (res.status === 401) {
+  // A 401 from the login endpoint means "wrong credentials", not "session
+  // expired" — it must surface the server's message and must NOT trigger the
+  // global sign-out, or a failed sign-in attempt reports itself as a timeout.
+  const isLoginAttempt = path.startsWith('/api/auth/login') || path.startsWith('/api/auth/token')
+
+  if (res.status === 401 && !isLoginAttempt) {
     tokenStore.clear()
     unauthorizedListeners.forEach((fn) => fn())
     throw new ApiError('Your session has expired. Please sign in again.', 401)

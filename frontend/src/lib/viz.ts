@@ -55,7 +55,20 @@ export function niceMax(value: number): number {
   return step * base
 }
 
+/**
+ * Whole-number axis ticks, always distinct.
+ *
+ * A naive `max / count` produces repeats on small ranges — with max = 1 it
+ * rounds to [0, 0, 1, 1, 1], which draws overlapping gridlines and duplicate
+ * React keys. Clamping the tick count to the range keeps them unique.
+ */
 export function ticksFor(max: number, count = 4): number[] {
-  const step = max / count
-  return Array.from({ length: count + 1 }, (_, i) => Math.round(step * i))
+  const top = Math.max(1, Math.round(max))
+  const steps = Math.max(1, Math.min(count, top))
+  const out: number[] = []
+  for (let i = 0; i <= steps; i++) {
+    const value = Math.round((top / steps) * i)
+    if (!out.includes(value)) out.push(value)
+  }
+  return out
 }

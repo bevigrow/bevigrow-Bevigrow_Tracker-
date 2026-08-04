@@ -148,10 +148,12 @@ export function Pipeline() {
                             {compactMoney(c.estimated_value_usd)}
                           </span>
                           <div className="flex gap-0.5">
+                            {/* min-h/min-w keep the hit area at 24px even though
+                                the glyph itself stays small and unobtrusive. */}
                             <button
                               onClick={() => move(c, -1)}
                               disabled={moving === c.id || status === 'new_lead' || status === 'rejected'}
-                              className="rounded p-1 text-latte/35 transition hover:bg-latte/10 hover:text-latte disabled:opacity-25"
+                              className="flex min-h-[24px] min-w-[24px] items-center justify-center rounded text-latte/35 transition hover:bg-latte/10 hover:text-latte disabled:opacity-25"
                               aria-label="Move back one stage"
                             >
                               <ChevronLeft size={14} />
@@ -159,7 +161,7 @@ export function Pipeline() {
                             <button
                               onClick={() => move(c, 1)}
                               disabled={moving === c.id || status === 'completed' || status === 'rejected'}
-                              className="rounded p-1 text-latte/35 transition hover:bg-gold/15 hover:text-gold disabled:opacity-25"
+                              className="flex min-h-[24px] min-w-[24px] items-center justify-center rounded text-latte/35 transition hover:bg-gold/15 hover:text-gold disabled:opacity-25"
                               aria-label="Move forward one stage"
                             >
                               <ChevronRight size={14} />

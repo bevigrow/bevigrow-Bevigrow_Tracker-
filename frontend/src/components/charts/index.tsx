@@ -296,8 +296,8 @@ export function TrendChart({ labels, series }: { labels: string[]; series: Serie
           ))}
         </defs>
 
-        {ticks.map((t) => (
-          <g key={t}>
+        {ticks.map((t, ti) => (
+          <g key={`tick-${ti}`}>
             <line x1={pad.l} y1={py(t)} x2={W - pad.r} y2={py(t)} stroke={GRID} strokeWidth={1} />
             <text
               x={pad.l - 8}
@@ -314,7 +314,7 @@ export function TrendChart({ labels, series }: { labels: string[]; series: Serie
 
         {labels.map((l, i) =>
           i % 3 === 0 || i === labels.length - 1 ? (
-            <text key={l + i} x={px(i)} y={H - 8} textAnchor="middle" fontSize={10} fill={AXIS_TEXT}>
+            <text key={`lab-${i}`} x={px(i)} y={H - 8} textAnchor="middle" fontSize={10} fill={AXIS_TEXT}>
               {l}
             </text>
           ) : null,

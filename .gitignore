@@ -17,13 +17,14 @@ dist/
 .vite/
 
 # Environment — never commit real secrets.
-# Broad patterns on purpose: a bare `.env` rule does not match copies such as
-# "backend/ (2).env" or ".env.backup", which is exactly how credentials leak.
-.env
-.env.*
-*.env
-!.env.example
-!*.env.example
+# Deliberately broad: editors and browsers produce copies like
+# "backend/ (2).env", ".env.txt" and ".env (2).txt". Narrow rules miss those,
+# which is exactly how live credentials end up in a public repo.
+**/.env*
+**/*.env*
+# ...but the templates must stay tracked.
+!**/.env.example
+!**/*.env.example
 
 # Editors / OS
 .DS_Store

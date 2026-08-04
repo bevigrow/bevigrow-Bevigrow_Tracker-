@@ -55,13 +55,14 @@ services:
       # Ephemeral on the free plan — see the note on `plan` above.
       - key: UPLOAD_DIR
         value: ./uploads
-      # Resolved from the frontend service, so a renamed service does not
-      # silently break CORS. Yields a bare host; the app adds the scheme.
+      # Literal rather than `fromService`: the frontend already resolves its
+      # API URL from this service, and pointing the two at each other creates
+      # a circular reference that can fail blueprint validation.
+      # If Render has to suffix the frontend's name (because the name is
+      # taken), update this value to match the real URL and redeploy.
+      # The app prepends https:// when the scheme is missing.
       - key: CORS_ORIGINS
-        fromService:
-          name: bevigrow-frontend
-          type: web
-          property: host
+        value: bevigrow-frontend.onrender.com
       # Belt and braces alongside backend/runtime.txt.
       - key: PYTHON_VERSION
         value: 3.11.9

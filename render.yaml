@@ -1,0 +1,82 @@
+# Render blueprint for BeviGrow Coffee B2B Tracker.
+#
+# Deploy: push this repo to GitHub, then in Render choose
+# "New → Blueprint" and point it at the repository.
+#
+# Secrets marked `sync: false` are NOT stored here — set them in the Render
+# dashboard for each service after the first deploy.
+
+services:
+  # ------------------------------------------------------------ backend API
+  - type: web
+    name: bevigrow-backend
+    runtime: python
+    plan: starter
+    region: oregon
+    rootDir: backend
+    pythonVersion: '3.11'
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      # Neon PostgreSQL connection string, e.g.
+      # postgresql+psycopg://USER:PASS@ep-xxx.aws.neon.tech/bevigrow?sslmode=require
+      - key: DATABASE_URL
+        sync: false
+      # Claude Haiku API key (AI summaries, insights, follow-ups)
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ENVIRONMENT
+        value: production
+      - key: AI_MODEL
+        value: claude-haiku-4-5
+      # Lock CORS to the deployed frontend once its URL is known.
+      - key: CORS_ORIGINS
+        value: https://bevigrow-frontend.onrender.com
+      - key: UPLOAD_DIR
+        value: /var/data/uploads
+      - key: SEED_ADMIN_EMAIL
+        value: bevigrow@gmail.com
+      - key: SEED_ADMIN_PASSWORD
+        sync: false
+      - key: PYTHONUNBUFFERED
+        value: '1'
+    # Persistent disk for uploaded quotations, invoices and sample photos.
+    disk:
+      name: bevigrow-uploads
+      mountPath: /var/data
+      sizeGB: 5
+
+  # -------------------------------------------------------- frontend static
+  - type: web
+    name: bevigrow-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    autoDeploy: true
+    pullRequestPreviewsEnabled: false
+    envVars:
+      - key: VITE_API_URL
+        value: https://bevigrow-backend.onrender.com
+      - key: NODE_VERSION
+        value: '20.11.0'
+    routes:
+      # Single-page app: every unmatched path serves index.html so client-side
+      # routes such as /app/contacts/12 survive a hard refresh.
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin

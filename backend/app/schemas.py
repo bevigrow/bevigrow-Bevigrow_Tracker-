@@ -1,0 +1,303 @@
+"""Pydantic request/response models."""
+from __future__ import annotations
+
+from datetime import date, datetime
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
+
+from .models import Channel, DealStatus, DocType, Role, TradeType
+
+
+class ORMModel(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ---------------------------------------------------------------- auth / users
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: "UserOut"
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class UserBase(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    email: EmailStr
+    role: Role = Role.employee
+
+
+class UserCreate(UserBase):
+    password: str = Field(min_length=8, max_length=128)
+
+
+class UserUpdate(BaseModel):
+    name: str | None = None
+    role: Role | None = None
+    is_active: bool | None = None
+    password: str | None = Field(default=None, min_length=8, max_length=128)
+
+
+class UserOut(ORMModel):
+    id: int
+    name: str
+    email: EmailStr
+    role: Role
+    is_active: bool
+    created_at: datetime
+
+
+# ------------------------------------------------------------------- contacts
+
+
+class ContactBase(BaseModel):
+    company_name: str = Field(min_length=1, max_length=200)
+    country: str = Field(min_length=1, max_length=100)
+    contact_person: str | None = None
+    email: EmailStr | None = None
+    phone: str | None = None
+    whatsapp: str | None = None
+    trade_type: TradeType = TradeType.export
+    coffee_product: str | None = None
+    quantity_kg: float | None = Field(default=None, ge=0)
+    roast_preference: str | None = None
+    bean_type: str | None = None
+    estimated_value_usd: float | None = Field(default=None, ge=0)
+    status: DealStatus = DealStatus.new_lead
+    notes: str | None = None
+    next_follow_up: date | None = None
+
+
+class ContactCreate(ContactBase):
+    owner_id: int | None = None
+
+
+class ContactUpdate(BaseModel):
+    company_name: str | None = None
+    country: str | None = None
+    contact_person: str | None = None
+    email: EmailStr | None = None
+    phone: str | None = None
+    whatsapp: str | None = None
+    trade_type: TradeType | None = None
+    coffee_product: str | None = None
+    quantity_kg: float | None = None
+    roast_preference: str | None = None
+    bean_type: str | None = None
+    estimated_value_usd: float | None = None
+    status: DealStatus | None = None
+    notes: str | None = None
+    next_follow_up: date | None = None
+    owner_id: int | None = None
+
+
+class ContactOut(ORMModel):
+    id: int
+    company_name: str
+    country: str
+    contact_person: str | None
+    email: str | None
+    phone: str | None
+    whatsapp: str | None
+    trade_type: TradeType
+    coffee_product: str | None
+    quantity_kg: float | None
+    roast_preference: str | None
+    bean_type: str | None
+    estimated_value_usd: float | None
+    status: DealStatus
+    notes: str | None
+    owner_id: int | None
+    owner: UserOut | None = None
+    last_contacted_at: datetime | None
+    next_follow_up: date | None
+    created_at: datetime
+    updated_at: datetime
+    activity_count: int = 0
+    document_count: int = 0
+
+
+class ContactDetail(ContactOut):
+    activities: list["ActivityOut"] = []
+    documents: list["DocumentOut"] = []
+    reminders: list["ReminderOut"] = []
+
+
+# ------------------------------------------------------------------ activities
+
+
+class ActivityBase(BaseModel):
+    contact_id: int
+    channel: Channel = Channel.call
+    discussion: str = Field(min_length=1)
+    customer_reply: str | None = None
+    next_follow_up: date | None = None
+    status_after: DealStatus | None = None
+    occurred_at: datetime | None = None
+
+
+class ActivityCreate(ActivityBase):
+    generate_summary: bool = True
+
+
+class ActivityUpdate(BaseModel):
+    channel: Channel | None = None
+    discussion: str | None = None
+    customer_reply: str | None = None
+    next_follow_up: date | None = None
+    status_after: DealStatus | None = None
+    ai_summary: str | None = None
+
+
+class ActivityOut(ORMModel):
+    id: int
+    contact_id: int
+    user_id: int | None
+    occurred_at: datetime
+    channel: Channel
+    discussion: str
+    customer_reply: str | None
+    ai_summary: str | None
+    next_follow_up: date | None
+    status_after: DealStatus | None
+    created_at: datetime
+    user: UserOut | None = None
+    contact_company: str | None = None
+
+
+# ------------------------------------------------------------------- documents
+
+
+class DocumentOut(ORMModel):
+    id: int
+    contact_id: int
+    doc_type: DocType
+    original_name: str
+    content_type: str | None
+    size_bytes: int
+    note: str | None
+    created_at: datetime
+    uploaded_by_id: int | None
+    download_url: str = ""
+
+
+# ------------------------------------------------------------------- reminders
+
+
+class ReminderCreate(BaseModel):
+    contact_id: int
+    due_date: date
+    message: str = Field(min_length=1, max_length=500)
+    priority: str = "medium"
+
+
+class ReminderUpdate(BaseModel):
+    due_date: date | None = None
+    message: str | None = None
+    priority: str | None = None
+    is_done: bool | None = None
+
+
+class ReminderOut(ORMModel):
+    id: int
+    contact_id: int
+    due_date: date
+    message: str
+    source: str
+    priority: str
+    is_done: bool
+    created_at: datetime
+    contact_company: str | None = None
+
+
+# ------------------------------------------------------------------- dashboard
+
+
+class KpiSet(BaseModel):
+    new_leads: int
+    export_orders: int
+    import_orders: int
+    shipments_in_progress: int
+    completed_orders: int
+    pending_follow_ups: int
+    total_contacts: int
+    activities_today: int
+    conversion_rate: float
+    pipeline_value_usd: float
+
+
+class CountryStat(BaseModel):
+    country: str
+    count: int
+    value_usd: float
+
+
+class StatusStat(BaseModel):
+    status: DealStatus
+    count: int
+
+
+class TrendPoint(BaseModel):
+    label: str
+    activities: int
+    new_leads: int
+
+
+class DashboardOut(BaseModel):
+    greeting: str
+    kpis: KpiSet
+    by_country: list[CountryStat]
+    by_status: list[StatusStat]
+    trend: list[TrendPoint]
+    export_vs_import: dict[str, int]
+    recent_activities: list[ActivityOut]
+    upcoming_follow_ups: list[ReminderOut]
+
+
+# -------------------------------------------------------------------------- ai
+
+
+class SummarizeRequest(BaseModel):
+    notes: str = Field(min_length=3, max_length=6000)
+    company_name: str | None = None
+    country: str | None = None
+
+
+class SummarizeResponse(BaseModel):
+    summary: str
+    model: str
+    ai_enabled: bool
+
+
+class InsightResponse(BaseModel):
+    content: str
+    model: str
+    generated_at: datetime
+    cached: bool
+    ai_enabled: bool
+
+
+class SuggestionItem(BaseModel):
+    contact_id: int
+    company_name: str
+    country: str
+    status: DealStatus
+    priority: str
+    reason: str
+    suggested_action: str
+    days_since_contact: int | None = None
+
+
+class SuggestionsResponse(BaseModel):
+    suggestions: list[SuggestionItem]
+    model: str
+    ai_enabled: bool
+
+
+ContactDetail.model_rebuild()
+Token.model_rebuild()

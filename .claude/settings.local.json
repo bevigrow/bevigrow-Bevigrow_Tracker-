@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($root=\"c:\\\\Users\\\\Thebest\\\\OneDrive\\\\Desktop\\\\BEVI_GROW-APPLICATION\"; @\\(\"backend\\\\app\\\\routers\",\"backend\\\\app\\\\services\",\"backend\\\\uploads\",\"frontend\\\\src\\\\components\\\\ui\",\"frontend\\\\src\\\\components\\\\layout\",\"frontend\\\\src\\\\components\\\\coffee\",\"frontend\\\\src\\\\components\\\\charts\",\"frontend\\\\src\\\\pages\",\"frontend\\\\src\\\\lib\",\"frontend\\\\public\"\\) | ForEach-Object { New-Item -ItemType Directory -Force -Path \\(Join-Path $root $_\\) | Out-Null }; Get-ChildItem -Recurse -Directory $root | Select-Object -ExpandProperty FullName)",
+      "PowerShell(cd \"c:\\\\Users\\\\Thebest\\\\OneDrive\\\\Desktop\\\\BEVI_GROW-APPLICATION\\\\backend\"; $env:PYTHONPATH=\"c:\\\\Users\\\\Thebest\\\\OneDrive\\\\Desktop\\\\BEVI_GROW-APPLICATION\\\\backend\"; & \".\\\\.venv\\\\Scripts\\\\python.exe\" \"C:\\\\Users\\\\Thebest\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-Thebest-OneDrive-Desktop-BEVI-GROW-APPLICATION\\\\00f0245e-a376-48ac-9727-f726566105e1\\\\scratchpad\\\\smoke.py\")",
+      "Bash(npm install *)",
+      "Bash(node scripts/validate_palette.js --help)",
+      "Bash(cp validate_palette.js /tmp/vp.mjs)",
+      "Bash(cp validate_palette.js __TRACKED_VAR__/vp.mjs)",
+      "Bash(node __TRACKED_VAR__/vp.mjs '#D9A05B,#7DD3FC' --mode dark --surface '#33200F')",
+      "Bash(node C:/Users/Thebest/AppData/Local/Temp/claude/c--Users-Thebest-OneDrive-Desktop-BEVI-GROW-APPLICATION/00f0245e-a376-48ac-9727-f726566105e1/scratchpad/viz/validate_palette.js '#6B4726,#82582C,#996B31,#B08037,#C4954A,#D6AC66,#E4C288' --mode dark --surface '#33200F' --ordinal)",
+      "Bash(node C:/Users/Thebest/AppData/Local/Temp/claude/c--Users-Thebest-OneDrive-Desktop-BEVI-GROW-APPLICATION/00f0245e-a376-48ac-9727-f726566105e1/scratchpad/viz/validate_palette.js '#B8862F,#3B9FD8,#4FA96B' --mode dark --surface '#33200F')",
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(./.venv/Scripts/python.exe -c ' *)"
+    ]
+  }
+}

@@ -1,0 +1,158 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-darkroast font-body text-latte antialiased;
+    /* Subtle roasted-bean texture behind everything */
+    background-image:
+      radial-gradient(ellipse 900px 500px at 12% -8%, rgba(111, 78, 55, 0.4), transparent 62%),
+      radial-gradient(ellipse 800px 480px at 92% 8%, rgba(217, 160, 91, 0.14), transparent 60%),
+      linear-gradient(180deg, #2a1a12 0%, #241610 60%, #1b100a 100%);
+    background-attachment: fixed;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-display tracking-tight;
+  }
+
+  ::selection {
+    @apply bg-gold/35 text-foam;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: rgba(27, 16, 10, 0.6);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #6f4e37, #3b2416);
+    border-radius: 999px;
+    border: 2px solid rgba(27, 16, 10, 0.9);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #c68b59, #6f4e37);
+  }
+
+  /* Native pickers render dark-on-dark otherwise */
+  input[type='date']::-webkit-calendar-picker-indicator,
+  input[type='datetime-local']::-webkit-calendar-picker-indicator {
+    filter: invert(0.8) sepia(0.6) saturate(3) hue-rotate(340deg);
+    cursor: pointer;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-caramel/15 bg-espresso/45 backdrop-blur-sm shadow-lift;
+  }
+
+  .card-hover {
+    @apply transition-all duration-300 hover:border-gold/40 hover:shadow-glow hover:-translate-y-0.5;
+  }
+
+  .input-field {
+    @apply w-full rounded-xl border border-caramel/25 bg-bean/50 px-4 py-2.5 text-sm text-latte
+      placeholder:text-latte/35 outline-none transition
+      focus:border-gold/70 focus:ring-2 focus:ring-gold/25;
+  }
+
+  .label-text {
+    @apply mb-1.5 block text-xs font-medium uppercase tracking-wider text-latte/55;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold
+      transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-primary {
+    @apply btn bg-gold-gradient text-bean shadow-lift hover:brightness-110 active:scale-[0.98];
+  }
+
+  .btn-ghost {
+    @apply btn border border-caramel/25 bg-transparent text-latte/80
+      hover:border-gold/50 hover:text-latte active:scale-[0.98];
+  }
+
+  .btn-danger {
+    @apply btn border border-red-500/35 bg-red-500/10 text-red-300 hover:bg-red-500/20;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]
+      font-semibold uppercase tracking-wide;
+  }
+
+  .table-head {
+    @apply px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-latte/50;
+  }
+
+  .table-cell {
+    @apply px-4 py-3.5 text-sm text-latte/85;
+  }
+
+  /* Frosted-glass surface used by the landing sections */
+  .glass {
+    @apply border border-latte/10 bg-latte/[0.04] backdrop-blur-md;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Coffee ripple that expands from where the cursor entered a card */
+  .ripple-host {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .ripple-host .ripple {
+    position: absolute;
+    width: 120px;
+    height: 120px;
+    margin: -60px 0 0 -60px;
+    border-radius: 9999px;
+    background: radial-gradient(circle, rgba(217, 160, 91, 0.35), transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+    animation: ripple 700ms ease-out forwards;
+  }
+}
+
+/* Respect users who prefer reduced motion: keep the UI, drop the movement. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

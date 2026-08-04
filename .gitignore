@@ -29,3 +29,6 @@ Thumbs.db
 *.swp
 
 tsconfig.tsbuildinfo
+
+# Claude Code local machine settings
+.claude/settings.local.json

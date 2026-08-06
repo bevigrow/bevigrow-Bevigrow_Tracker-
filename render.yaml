@@ -72,9 +72,15 @@ services:
       # client secret.
       - key: GOOGLE_CLIENT_ID
         sync: false
-      # Invite-only by default: only an admin can create accounts.
+      # Open sign-up: anyone who reaches the site can create their own
+      # account and sign in immediately. New accounts always land in
+      # DEFAULT_SIGNUP_ROLE (employee) — never admin — so they can use the
+      # tracker but cannot manage the team or change anyone's role.
+      #
+      # To limit this to your own company later, set ALLOWED_EMAIL_DOMAINS
+      # (e.g. "bevigrow.com") and only those addresses may register.
       - key: ALLOW_SELF_SIGNUP
-        value: 'false'
+        value: 'true'
       - key: DEFAULT_SIGNUP_ROLE
         value: employee
       # Password-reset links point at the frontend.

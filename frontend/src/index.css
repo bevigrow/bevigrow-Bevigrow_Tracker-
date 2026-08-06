@@ -145,6 +145,45 @@
   }
 }
 
+/* Touch devices need bigger hit areas than a mouse does.
+ *
+ * Apple's HIG asks for 44x44pt and Android for 48dp, but the compact desktop
+ * density is right for a pointer. `pointer: coarse` matches phones and tablets
+ * only, so the same markup gets comfortable targets on a thumb and stays tight
+ * under a cursor. Applied to the box, not the icon, so nothing looks bulkier —
+ * only the tappable area grows. */
+@media (pointer: coarse) {
+  button,
+  [role='button'],
+  select,
+  summary {
+    min-height: 44px;
+  }
+
+  /* Icon-only controls need width too, or they stay a thin strip. */
+  button[aria-label],
+  [role='button'][aria-label] {
+    min-width: 44px;
+  }
+
+  /* Inline text links have no box to grow unless they get one.
+   *
+   * Only links that do NOT already carry a display utility are touched. This
+   * file is unlayered, so it outranks Tailwind's @layer utilities no matter
+   * the specificity — a blanket `a { display: inline-flex }` silently broke
+   * the sidebar, collapsing stacked nav items onto one line. */
+  a[href]:not([class*='flex']):not([class*='block']):not([class*='grid']):not([class*='inline']) {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+
+  input[type='checkbox'] {
+    min-height: 22px;
+    min-width: 22px;
+  }
+}
+
 /* Respect users who prefer reduced motion: keep the UI, drop the movement. */
 @media (prefers-reduced-motion: reduce) {
   *,

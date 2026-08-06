@@ -86,7 +86,7 @@ export function AppShell() {
               end={end}
               className={({ isActive }) =>
                 cx(
-                  'group relative flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium transition-all duration-200',
+                  'group relative flex min-h-[44px] items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium transition-all duration-200',
                   isActive
                     ? 'bg-gold/12 text-latte'
                     : 'text-latte/55 hover:bg-latte/5 hover:text-latte/85',

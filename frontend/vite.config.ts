@@ -16,13 +16,19 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          // Three.js and GSAP are only reachable from the lazy-loaded landing
-          // page, so keeping them in their own chunks means authenticated
-          // routes never download them.
-          three: ['three', '@react-three/fiber', '@react-three/drei'],
-          gsap: ['gsap'],
-          // framer-motion is used app-wide (toasts, modals, dashboard).
+          // framer-motion is used app-wide (toasts, modals, dashboard), so a
+          // shared chunk is worth it.
           motion: ['framer-motion'],
+
+          // three.js and GSAP are deliberately NOT listed here.
+          //
+          // Naming a package in manualChunks makes Vite treat that chunk as
+          // part of the initial graph and emit a <link rel="modulepreload">
+          // for it in index.html. That preload forced every visitor — phones
+          // included — to download ~928 kB of three.js before first paint,
+          // even though the device had already decided not to render the 3D
+          // scene. Leaving them out lets Rollup derive the chunks from the
+          // dynamic import(), so they load only when actually requested.
         },
       },
     },

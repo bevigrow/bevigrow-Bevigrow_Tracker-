@@ -8,12 +8,23 @@
  *
  * GSAP ScrollTrigger drives everything on a single scrubbed timeline so the
  * animation tracks the scrollbar exactly, forwards and backwards.
+ *
+ * GSAP (~70 kB) is imported dynamically and only for devices that will run the
+ * scrubbed timeline. Phones get the finished cup drawn directly instead: a
+ * pinned, scrubbed ScrollTrigger is expensive on touch scrolling, and the
+ * bytes are pure cost if the animation never runs.
  */
-import gsap from 'gsap'
-import { ScrollTrigger } from 'gsap/ScrollTrigger'
-import { useLayoutEffect, useRef } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 
-gsap.registerPlugin(ScrollTrigger)
+/**
+ * Devices that get the finished cup instead of the scrubbed timeline: phones,
+ * and anyone asking for reduced motion.
+ */
+function prefersCompactPour(): boolean {
+  if (typeof window === 'undefined') return false
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return true
+  return window.matchMedia('(pointer: coarse)').matches && window.innerWidth < 1024
+}
 
 interface Step {
   key: string
@@ -72,109 +83,161 @@ const CUP = { x: 120, yTop: 70, yBottom: 330, wTop: 160, wBottom: 116 }
 
 export function PourScene() {
   const root = useRef<HTMLDivElement>(null)
+  // Read once, before paint, so the section is never laid out at the wrong
+  // height and then corrected.
+  const [compact] = useState(prefersCompactPour)
 
   useLayoutEffect(() => {
     const el = root.current
     if (!el) return
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      // Show the finished drink without any scroll choreography.
-      STEPS.forEach((s) => {
-        const layer = el.querySelector<SVGRectElement>(`[data-layer="${s.key}"]`)
-        if (layer) gsap.set(layer, { attr: { height: 260 * s.fill, y: 330 - 260 * s.fill } })
+
+    /** Draw the finished cappuccino with no animation and no GSAP. */
+    const showFinishedCup = () => {
+      const innerHeight = CUP.yBottom - CUP.yTop
+      STEPS.forEach((step) => {
+        const layer = el.querySelector<SVGRectElement>(`[data-layer="${step.key}"]`)
+        if (layer) {
+          layer.setAttribute('height', String(innerHeight * step.fill))
+          layer.setAttribute('y', String(CUP.yBottom - innerHeight * step.fill))
+        }
       })
-      gsap.set(el.querySelectorAll('[data-steam]'), { opacity: 0.5 })
+      el.querySelectorAll<SVGElement>('[data-steam]').forEach((n) => {
+        n.style.opacity = '0.5'
+      })
+      // Without the scrubbed timeline the captions never fade in, so reveal
+      // the last one as a static description.
+      const last = el.querySelector<HTMLElement>(`[data-caption="${STEPS[STEPS.length - 1].key}"]`)
+      if (last) {
+        last.style.opacity = '1'
+        last.style.transform = 'none'
+      }
+    }
+
+    // A pinned, scrubbed timeline fights touch scrolling and costs 70 kB to
+    // download. Phones get the finished cup instead.
+    if (compact) {
+      showFinishedCup()
       return
     }
 
-    const ctx = gsap.context(() => {
-      const tl = gsap.timeline({
-        scrollTrigger: {
-          trigger: el,
-          start: 'top top',
-          end: 'bottom bottom',
-          scrub: 0.8,
-          pin: '[data-pin]',
-          pinSpacing: false,
-          anticipatePin: 1,
-        },
-      })
+    let ctx: { revert: () => void } | undefined
+    let cancelled = false
 
-      const innerHeight = CUP.yBottom - CUP.yTop
+    void (async () => {
+      const [{ default: gsap }, { ScrollTrigger }] = await Promise.all([
+        import('gsap'),
+        import('gsap/ScrollTrigger'),
+      ])
+      if (cancelled || !root.current) return
+      gsap.registerPlugin(ScrollTrigger)
 
-      STEPS.forEach((step, i) => {
-        const at = i * 1.0
+      ctx = gsap.context(() => {
+        const tl = gsap.timeline({
+          scrollTrigger: {
+            trigger: el,
+            start: 'top top',
+            end: 'bottom bottom',
+            scrub: 0.8,
+            pin: '[data-pin]',
+            pinSpacing: false,
+            anticipatePin: 1,
+          },
+        })
 
-        // Hand swings in from the right, tilts to pour, then withdraws.
-        tl.fromTo(
-          `[data-hand="${step.key}"]`,
-          { xPercent: 135, yPercent: -18, rotate: 8, opacity: 0 },
-          { xPercent: 0, yPercent: 0, rotate: -22, opacity: 1, duration: 0.35, ease: 'power2.out' },
-          at,
-        )
-          // Stream of ingredient falling into the cup.
-          .fromTo(
-            `[data-stream="${step.key}"]`,
-            { scaleY: 0, opacity: 0, transformOrigin: 'top center' },
-            { scaleY: 1, opacity: 1, duration: 0.18, ease: 'power1.out' },
-            at + 0.3,
-          )
-          // Liquid level rises.
-          .to(
-            `[data-layer="${step.key}"]`,
-            {
-              attr: { height: innerHeight * step.fill, y: CUP.yBottom - innerHeight * step.fill },
-              duration: 0.42,
-              ease: 'power1.inOut',
-            },
-            at + 0.34,
-          )
-          // Surface ripple as it lands.
-          .fromTo(
-            `[data-ripple="${step.key}"]`,
-            { scaleX: 0.2, opacity: 0.85 },
-            { scaleX: 1.5, opacity: 0, duration: 0.4, ease: 'power2.out' },
-            at + 0.36,
-          )
-          .to(`[data-stream="${step.key}"]`, { scaleY: 0, opacity: 0, duration: 0.15 }, at + 0.72)
-          .to(
+        const innerHeight = CUP.yBottom - CUP.yTop
+
+        STEPS.forEach((step, i) => {
+          const at = i * 1.0
+
+          // Hand swings in from the right, tilts to pour, then withdraws.
+          tl.fromTo(
             `[data-hand="${step.key}"]`,
-            { xPercent: 135, rotate: 8, opacity: 0, duration: 0.3, ease: 'power2.in' },
-            at + 0.74,
+            { xPercent: 135, yPercent: -18, rotate: 8, opacity: 0 },
+            { xPercent: 0, yPercent: 0, rotate: -22, opacity: 1, duration: 0.35, ease: 'power2.out' },
+            at,
           )
-          // Caption crossfade.
-          .fromTo(
-            `[data-caption="${step.key}"]`,
-            { opacity: 0, y: 22 },
-            { opacity: 1, y: 0, duration: 0.28, ease: 'power2.out' },
-            at + 0.15,
-          )
-          .to(`[data-caption="${step.key}"]`, { opacity: 0, y: -22, duration: 0.25 }, at + 0.8)
-      })
+            // Stream of ingredient falling into the cup.
+            .fromTo(
+              `[data-stream="${step.key}"]`,
+              { scaleY: 0, opacity: 0, transformOrigin: 'top center' },
+              { scaleY: 1, opacity: 1, duration: 0.18, ease: 'power1.out' },
+              at + 0.3,
+            )
+            // Liquid level rises.
+            .to(
+              `[data-layer="${step.key}"]`,
+              {
+                attr: { height: innerHeight * step.fill, y: CUP.yBottom - innerHeight * step.fill },
+                duration: 0.42,
+                ease: 'power1.inOut',
+              },
+              at + 0.34,
+            )
+            // Surface ripple as it lands.
+            .fromTo(
+              `[data-ripple="${step.key}"]`,
+              { scaleX: 0.2, opacity: 0.85 },
+              { scaleX: 1.5, opacity: 0, duration: 0.4, ease: 'power2.out' },
+              at + 0.36,
+            )
+            .to(`[data-stream="${step.key}"]`, { scaleY: 0, opacity: 0, duration: 0.15 }, at + 0.72)
+            .to(
+              `[data-hand="${step.key}"]`,
+              { xPercent: 135, rotate: 8, opacity: 0, duration: 0.3, ease: 'power2.in' },
+              at + 0.74,
+            )
+            // Caption crossfade.
+            .fromTo(
+              `[data-caption="${step.key}"]`,
+              { opacity: 0, y: 22 },
+              { opacity: 1, y: 0, duration: 0.28, ease: 'power2.out' },
+              at + 0.15,
+            )
+            .to(`[data-caption="${step.key}"]`, { opacity: 0, y: -22, duration: 0.25 }, at + 0.8)
+        })
 
-      // Steam appears once the water is in and intensifies through the pour.
-      tl.fromTo(
-        '[data-steam]',
-        { opacity: 0 },
-        { opacity: 0.55, duration: 0.6, stagger: 0.08 },
-        1.4,
-      )
+        // Steam appears once the water is in and intensifies through the pour.
+        tl.fromTo(
+          '[data-steam]',
+          { opacity: 0 },
+          { opacity: 0.55, duration: 0.6, stagger: 0.08 },
+          1.4,
+        )
 
-      // Final flourish: the finished cup lifts slightly and glows.
-      tl.to('[data-cup]', { scale: 1.05, duration: 0.5, ease: 'power2.out' }, STEPS.length - 0.4)
-      tl.fromTo(
-        '[data-glow]',
-        { opacity: 0, scale: 0.7 },
-        { opacity: 0.75, scale: 1, duration: 0.5 },
-        STEPS.length - 0.4,
-      )
-    }, el)
+        // Final flourish: the finished cup lifts slightly and glows.
+        tl.to('[data-cup]', { scale: 1.05, duration: 0.5, ease: 'power2.out' }, STEPS.length - 0.4)
+        tl.fromTo(
+          '[data-glow]',
+          { opacity: 0, scale: 0.7 },
+          { opacity: 0.75, scale: 1, duration: 0.5 },
+          STEPS.length - 0.4,
+        )
+      }, el)
+    })()
 
-    return () => ctx.revert()
-  }, [])
+    return () => {
+      cancelled = true
+      ctx?.revert()
+    }
+  }, [compact])
 
   return (
-    <div ref={root} className="relative" style={{ height: `${(STEPS.length + 1) * 100}vh` }}>
-      <div data-pin className="sticky top-0 flex h-screen items-center overflow-hidden">
+    <div
+      ref={root}
+      className="relative"
+      // The tall runway exists only to give ScrollTrigger something to scrub
+      // against. Without the timeline it would be several screens of blank
+      // scrolling, so it collapses to a single view.
+      style={{ height: compact ? 'auto' : `${(STEPS.length + 1) * 100}vh` }}
+    >
+      <div
+        data-pin
+        className={
+          compact
+            ? 'flex min-h-[80vh] items-center overflow-hidden py-12'
+            : 'sticky top-0 flex h-screen items-center overflow-hidden'
+        }
+      >
         <div className="mx-auto grid w-full max-w-6xl grid-cols-1 items-center gap-8 px-6 lg:grid-cols-2">
           {/* Captions */}
           <div className="relative order-2 h-52 lg:order-1">
@@ -374,8 +437,14 @@ export function PourScene() {
           </div>
         </div>
 
-        {/* Scroll affordance */}
-        <div className="pointer-events-none absolute bottom-8 left-1/2 -translate-x-1/2 text-center">
+        {/* Scroll affordance — only when there is a scroll story to follow */}
+        <div
+          className={
+            compact
+              ? 'hidden'
+              : 'pointer-events-none absolute bottom-8 left-1/2 -translate-x-1/2 text-center'
+          }
+        >
           <div className="mx-auto mb-2 h-9 w-5 rounded-full border border-latte/25">
             <div className="mx-auto mt-1.5 h-2 w-1 animate-bounce rounded-full bg-gold" />
           </div>

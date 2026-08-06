@@ -12,16 +12,23 @@ export function AmbientParticles({ density = 34 }: { density?: number }) {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
+    // This loop runs every frame for as long as the page is open, so it is the
+    // kind of thing that quietly drains a phone battery. Fewer particles and a
+    // capped pixel ratio keep it cheap where it matters.
+    const isPhone =
+      window.matchMedia('(pointer: coarse)').matches && window.innerWidth < 1024
+    const count = isPhone ? Math.round(density / 3) : density
+
     let raf = 0
     let width = 0
     let height = 0
-    const dpr = Math.min(window.devicePixelRatio || 1, 2)
+    const dpr = Math.min(window.devicePixelRatio || 1, isPhone ? 1.5 : 2)
 
     type P = { x: number; y: number; r: number; vy: number; vx: number; a: number }
     let particles: P[] = []
 
     const seed = () => {
-      particles = Array.from({ length: density }, () => ({
+      particles = Array.from({ length: count }, () => ({
         x: Math.random() * width,
         y: Math.random() * height,
         r: 0.8 + Math.random() * 2.2,
@@ -60,12 +67,20 @@ export function AmbientParticles({ density = 34 }: { density?: number }) {
       raf = requestAnimationFrame(tick)
     }
 
+    // Burning frames on a backgrounded tab helps nobody.
+    const onVisibility = () => {
+      cancelAnimationFrame(raf)
+      if (!document.hidden) raf = requestAnimationFrame(tick)
+    }
+
     resize()
     tick()
     window.addEventListener('resize', resize)
+    document.addEventListener('visibilitychange', onVisibility)
     return () => {
       cancelAnimationFrame(raf)
       window.removeEventListener('resize', resize)
+      document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [density])
 

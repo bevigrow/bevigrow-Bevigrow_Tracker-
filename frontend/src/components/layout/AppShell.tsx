@@ -15,22 +15,34 @@ import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 
 import { useAuth } from '../../lib/auth'
+import type { Role } from '../../lib/types'
 import { initials } from '../../lib/format'
 import { AmbientParticles, Steam } from '../coffee/Ambient'
 import { cx } from '../ui'
 
-const NAV = [
+interface NavItem {
+  to: string
+  label: string
+  icon: typeof LayoutDashboard
+  end?: boolean
+  /** When set, only these roles see the link. The API enforces it as well. */
+  roles?: Role[]
+}
+
+const NAV: NavItem[] = [
   { to: '/app', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/app/pipeline', label: 'Pipeline', icon: BarChart3 },
   { to: '/app/contacts', label: 'Customers', icon: Users },
   { to: '/app/activities', label: 'Activity Log', icon: MessageSquare },
   { to: '/app/documents', label: 'Documents', icon: FileText },
   { to: '/app/reminders', label: 'Follow-ups', icon: Bell },
-  { to: '/app/team', label: 'Team', icon: Users2 },
+  { to: '/app/team', label: 'Team', icon: Users2, roles: ['admin', 'manager'] },
 ]
 
 export function AppShell() {
   const { user, logout } = useAuth()
+  // Hide links the current role cannot use, so nobody is sent to a dead end.
+  const visibleNav = NAV.filter((item) => !item.roles || (user && item.roles.includes(user.role)))
   const [open, setOpen] = useState(false)
   const location = useLocation()
 
@@ -79,7 +91,7 @@ export function AppShell() {
         </div>
 
         <nav className="flex-1 space-y-1 px-3">
-          {NAV.map(({ to, label, icon: Icon, end }) => (
+          {visibleNav.map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
               to={to}
@@ -107,15 +119,34 @@ export function AppShell() {
         </nav>
 
         <div className="border-t border-caramel/15 p-4">
-          <div className="mb-3 flex items-center gap-3 rounded-xl bg-espresso/50 px-3 py-2.5">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gold-gradient text-xs font-bold text-bean">
-              {initials(user?.name ?? 'BG')}
-            </div>
-            <div className="min-w-0">
+          <NavLink
+            to="/app/profile"
+            className={({ isActive }) =>
+              cx(
+                'mb-3 flex items-center gap-3 rounded-xl px-3 py-2.5 transition',
+                isActive ? 'bg-gold/12 ring-1 ring-gold/30' : 'bg-espresso/50 hover:bg-espresso/80',
+              )
+            }
+          >
+            {user?.avatar_url ? (
+              <img
+                src={user.avatar_url}
+                alt=""
+                referrerPolicy="no-referrer"
+                className="h-9 w-9 shrink-0 rounded-full border border-caramel/30 object-cover"
+              />
+            ) : (
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gold-gradient text-xs font-bold text-bean">
+                {initials(user?.name ?? 'BG')}
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-latte">{user?.name}</p>
-              <p className="truncate text-[11px] capitalize text-latte/45">{user?.role}</p>
+              <p className="truncate text-[11px] capitalize text-latte/45">
+                {user?.role} · view profile
+              </p>
             </div>
-          </div>
+          </NavLink>
           <button
             onClick={logout}
             className="flex w-full items-center justify-center gap-2 rounded-xl border border-caramel/20 px-3 py-2 text-sm text-latte/60 transition hover:border-red-400/40 hover:text-red-300"

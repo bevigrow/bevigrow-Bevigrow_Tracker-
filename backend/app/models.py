@@ -79,16 +79,37 @@ OPEN_PIPELINE = {
 }
 
 
+class AuthProvider(str, enum.Enum):
+    password = "password"
+    google = "google"
+
+
 class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
-    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Empty for Google-only accounts, which have no password to hash.
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     role: Mapped[Role] = mapped_column(Enum(Role, native_enum=False), default=Role.employee)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    # --- sign-in method
+    auth_provider: Mapped[AuthProvider] = mapped_column(
+        Enum(AuthProvider, native_enum=False), default=AuthProvider.password
+    )
+    # Google's stable subject id. Never the email — users can change that.
+    google_sub: Mapped[str | None] = mapped_column(String(64), unique=True, index=True)
+    avatar_url: Mapped[str | None] = mapped_column(String(500))
+    last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # --- password reset
+    # Only the hash is stored, so a database leak cannot be replayed as a
+    # valid reset link.
+    reset_token_hash: Mapped[str | None] = mapped_column(String(128), index=True)
+    reset_token_expires: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     contacts: Mapped[list["Contact"]] = relationship(back_populates="owner")
     activities: Mapped[list["Activity"]] = relationship(back_populates="user")

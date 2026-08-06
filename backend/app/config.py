@@ -43,6 +43,55 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = str(BASE_DIR / "uploads")
     MAX_UPLOAD_MB: int = 15
 
+    # ---------------------------------------------------------------- auth
+    # Google Identity Services OAuth client ID. Blank disables Google sign-in
+    # entirely — the button is hidden and the endpoint refuses.
+    GOOGLE_CLIENT_ID: str = ""
+
+    # When False, only an admin can create accounts (invite-only). When True,
+    # anyone may register and lands in the lowest-privilege role.
+    ALLOW_SELF_SIGNUP: bool = False
+    # Optional: restrict self-signup and Google sign-in to one or more email
+    # domains, e.g. "bevigrow.com,partner.com". Blank allows any domain.
+    ALLOWED_EMAIL_DOMAINS: str = ""
+    # Role handed to accounts created by signup or first Google sign-in.
+    DEFAULT_SIGNUP_ROLE: str = "employee"
+
+    # Password-reset links point here.
+    FRONTEND_URL: str = "http://localhost:5173"
+    RESET_TOKEN_TTL_MINUTES: int = 60
+
+    # SMTP for password-reset email. Unset means no mail is sent; an admin can
+    # still reset a password from the Team page.
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = "BeviGrow <no-reply@bevigrow.local>"
+    SMTP_STARTTLS: bool = True
+
+    @property
+    def google_enabled(self) -> bool:
+        return bool(self.GOOGLE_CLIENT_ID.strip())
+
+    @property
+    def smtp_enabled(self) -> bool:
+        return bool(self.SMTP_HOST.strip())
+
+    @property
+    def allowed_domains(self) -> list[str]:
+        return [
+            d.strip().lower().lstrip("@")
+            for d in self.ALLOWED_EMAIL_DOMAINS.split(",")
+            if d.strip()
+        ]
+
+    def email_domain_allowed(self, email: str) -> bool:
+        domains = self.allowed_domains
+        if not domains:
+            return True
+        return email.rsplit("@", 1)[-1].lower() in domains
+
     # Comma-separated list, or "*" for any origin.
     CORS_ORIGINS: str = "*"
 

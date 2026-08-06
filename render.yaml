@@ -66,6 +66,27 @@ services:
       # The app prepends https:// when a scheme is missing.
       - key: CORS_ORIGINS
         value: bevigrow-frontend-dkay.onrender.com,bevigrow-frontend.onrender.com
+      # --- authentication -------------------------------------------------
+      # Google OAuth client ID. Blank hides the Google button; the app still
+      # works with email + password. This is the public client ID, never the
+      # client secret.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      # Invite-only by default: only an admin can create accounts.
+      - key: ALLOW_SELF_SIGNUP
+        value: 'false'
+      - key: DEFAULT_SIGNUP_ROLE
+        value: employee
+      # Password-reset links point at the frontend.
+      - key: FRONTEND_URL
+        value: https://bevigrow-frontend-dkay.onrender.com
+      # SMTP is intentionally NOT declared here. Without it, "Forgot password"
+      # reports that no mail can be sent and an admin sets the password from
+      # the Team page instead — which needs no configuration at all. To enable
+      # reset emails later, add SMTP_HOST / SMTP_USER / SMTP_PASSWORD in the
+      # Render dashboard; undeclared variables are not overwritten by a
+      # blueprint sync.
+
       # Belt and braces alongside backend/runtime.txt.
       - key: PYTHON_VERSION
         value: 3.11.9

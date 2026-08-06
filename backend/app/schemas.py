@@ -5,7 +5,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from .models import Channel, DealStatus, DocType, Role, TradeType
+from .models import AuthProvider, Channel, DealStatus, DocType, Role, TradeType
 
 
 class ORMModel(BaseModel):
@@ -50,6 +50,58 @@ class UserOut(ORMModel):
     role: Role
     is_active: bool
     created_at: datetime
+    auth_provider: AuthProvider = AuthProvider.password
+    avatar_url: str | None = None
+    last_login: datetime | None = None
+
+
+class GoogleLoginRequest(BaseModel):
+    credential: str = Field(min_length=10, description="Google ID token from GIS")
+
+
+class SignupRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ForgotPasswordResponse(BaseModel):
+    # Deliberately identical whether or not the address exists, so this
+    # endpoint cannot be used to enumerate accounts.
+    message: str
+    email_sent: bool
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=16)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class ProfileUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+
+
+class AdminResetPasswordRequest(BaseModel):
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class AuthConfigOut(BaseModel):
+    """Public, unauthenticated: tells the login page what to render."""
+
+    google_enabled: bool
+    google_client_id: str
+    self_signup_enabled: bool
+    password_reset_enabled: bool
+    allowed_email_domains: list[str]
 
 
 # ------------------------------------------------------------------- contacts

@@ -197,6 +197,82 @@ assets.
 
 ---
 
+## Authentication & user management
+
+Sign-in is built into the app itself — there is no third-party auth vendor, no
+Google Workspace dependency, and no service account. User records live in the
+same Neon database as the trading data, so roles and business records never
+drift apart.
+
+### Sign-in methods
+
+| Method | Enabled by | Notes |
+|---|---|---|
+| Email + password | always on | PBKDF2-SHA256 hashes; the plaintext is never stored |
+| Google Sign-In | setting `GOOGLE_CLIENT_ID` | button is hidden when unset |
+
+Google ID tokens are verified server-side against Google's published keys —
+signature, expiry, issuer, and **audience**. The audience check is what stops a
+token minted for any other website being replayed here. Unverified Google email
+addresses are rejected so they cannot be used to claim an existing account.
+
+### Roles
+
+| Role | Can do |
+|---|---|
+| `admin` | Everything, including managing the team and assigning roles |
+| `manager` | All trading data; can view the team but not change roles |
+| `employee` | Log activity and manage accounts; no team access |
+
+Every role check is enforced **in the API**, not only in the UI. Hiding a nav
+link is a convenience; the server rejects the request regardless.
+
+Built-in safeguards: an admin cannot deactivate, demote, or delete their own
+account, and the last remaining admin cannot be deleted — so an instance can
+never be locked out of its own administration.
+
+### Adding and removing people — without sharing any credentials
+
+1. Sign in as an admin → **Team**
+2. **Add member** → name, email, temporary password, role
+3. Send them the temporary password privately; they change it on **Profile**
+
+To revoke access, use **Deactivate** rather than Delete — the person can no
+longer sign in, but their logged interactions stay attached to the accounts
+they worked on. Deleting removes the user row entirely.
+
+Forgot a password? With SMTP configured, **Forgot password** emails a
+single-use link that expires in an hour. Without SMTP, an admin sets a new
+password from the Team page (the key icon). Reset tokens are stored **hashed**,
+so a database leak cannot be replayed as a working link.
+
+### Setting up Google Sign-In (optional, ~5 minutes)
+
+1. Go to <https://console.cloud.google.com/apis/credentials>
+2. **Create Credentials → OAuth client ID → Web application**
+3. Under **Authorised JavaScript origins** add every origin the app is served
+   from, e.g. `http://localhost:5173` and your Render frontend URL
+4. Copy the **Client ID** (ends in `.apps.googleusercontent.com`) into
+   `GOOGLE_CLIENT_ID`
+
+You never need the client secret. Leave `ALLOW_SELF_SIGNUP=false` and Google
+sign-in only works for people an admin has already invited — a Google account
+alone does not grant access.
+
+### Self sign-up
+
+Off by default. Set `ALLOW_SELF_SIGNUP=true` to let people register themselves;
+pair it with `ALLOWED_EMAIL_DOMAINS=yourcompany.com` so only your own domain
+can register. New accounts land in `DEFAULT_SIGNUP_ROLE` (`employee`).
+
+### Sessions
+
+A JWT signed with `JWT_SECRET`, valid 12 hours, held in `localStorage`. Any
+401 anywhere in the app clears it and returns the user to sign-in. Signing out
+discards the token. Changing `JWT_SECRET` invalidates every existing session.
+
+---
+
 ## Design
 
 **Palette.** Espresso `#3B2416` · Dark Roast `#2A1A12` · Caramel `#C68B59` ·

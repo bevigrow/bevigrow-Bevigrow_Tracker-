@@ -1,6 +1,7 @@
 /** Thin typed fetch wrapper around the BeviGrow API. */
 import type {
   Activity,
+  AuthConfig,
   Contact,
   ContactDetail,
   Dashboard,
@@ -146,15 +147,49 @@ export interface ContactFilters {
 
 export const api = {
   // ---- auth
+  authConfig: () => request<AuthConfig>('/api/auth/config'),
   login: (email: string, password: string) =>
     request<{ access_token: string; user: User }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),
+  loginWithGoogle: (credential: string) =>
+    request<{ access_token: string; user: User }>('/api/auth/google', {
+      method: 'POST',
+      body: JSON.stringify({ credential }),
+    }),
+  signup: (name: string, email: string, password: string) =>
+    request<{ access_token: string; user: User }>('/api/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify({ name, email, password }),
+    }),
+  forgotPassword: (email: string) =>
+    request<{ message: string; email_sent: boolean }>('/api/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+  resetPassword: (token: string, new_password: string) =>
+    request<{ access_token: string; user: User }>('/api/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, new_password }),
+    }),
   me: () => request<User>('/api/auth/me'),
+  updateProfile: (name: string) =>
+    request<User>('/api/auth/me', { method: 'PATCH', body: JSON.stringify({ name }) }),
+  changePassword: (current_password: string, new_password: string) =>
+    request<User>('/api/auth/me/password', {
+      method: 'POST',
+      body: JSON.stringify({ current_password, new_password }),
+    }),
 
   // ---- users
-  listUsers: () => request<User[]>('/api/users'),
+  listUsers: (f: { search?: string; role?: string; is_active?: boolean } = {}) =>
+    request<User[]>(`/api/users${qs({ ...f })}`),
+  adminResetPassword: (id: number, new_password: string) =>
+    request<User>(`/api/users/${id}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ new_password }),
+    }),
   createUser: (body: { name: string; email: string; password: string; role: string }) =>
     request<User>('/api/users', { method: 'POST', body: JSON.stringify(body) }),
   updateUser: (id: number, body: Record<string, unknown>) =>

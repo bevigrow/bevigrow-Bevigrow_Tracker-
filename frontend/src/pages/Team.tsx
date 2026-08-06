@@ -1,4 +1,4 @@
-import { Sparkles, Trash2, UserPlus } from 'lucide-react'
+import { KeyRound, Search, Sparkles, Trash2, UserPlus } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { ChartFrame, LegendItem, RoastBarChart, BarTable } from '../components/charts'
@@ -15,7 +15,7 @@ import {
 } from '../components/ui'
 import { ApiError, api } from '../lib/api'
 import { useAuth } from '../lib/auth'
-import { formatDate, initials } from '../lib/format'
+import { formatDate, formatDateTime, initials } from '../lib/format'
 import { useToast } from '../lib/toast'
 import type { Insight, LeaderboardRow, Role, User } from '../lib/types'
 
@@ -28,12 +28,20 @@ export function Team() {
   const [loading, setLoading] = useState(true)
   const [inviting, setInviting] = useState(false)
   const [deleting, setDeleting] = useState<User | null>(null)
+  const [resetting, setResetting] = useState<User | null>(null)
+  const [search, setSearch] = useState('')
+  const [roleFilter, setRoleFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
       const [u, b, w] = await Promise.all([
-        api.listUsers(),
+        api.listUsers({
+          search: search.trim() || undefined,
+          role: roleFilter || undefined,
+          is_active: statusFilter === '' ? undefined : statusFilter === 'active',
+        }),
         api.leaderboard(30).catch(() => []),
         api.weekly().catch(() => null),
       ])
@@ -45,10 +53,12 @@ export function Team() {
     } finally {
       setLoading(false)
     }
-  }, [toast])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, roleFilter, statusFilter])
 
   useEffect(() => {
-    void load()
+    const id = window.setTimeout(() => void load(), 300)
+    return () => window.clearTimeout(id)
   }, [load])
 
   const changeRole = async (u: User, role: Role) => {
@@ -145,6 +155,58 @@ export function Team() {
         </ChartFrame>
       )}
 
+      {/* Search & filters */}
+      <Card className="!p-4">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="relative">
+            <Search
+              size={15}
+              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-latte/35"
+            />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search name or email..."
+              className="pl-10"
+              aria-label="Search team members"
+            />
+          </div>
+          <Select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            aria-label="Filter by role"
+            options={[
+              { value: '', label: 'All roles' },
+              { value: 'admin', label: 'Admin' },
+              { value: 'manager', label: 'Manager' },
+              { value: 'employee', label: 'Employee' },
+            ]}
+          />
+          <Select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            aria-label="Filter by status"
+            options={[
+              { value: '', label: 'Active and inactive' },
+              { value: 'active', label: 'Active only' },
+              { value: 'inactive', label: 'Deactivated only' },
+            ]}
+          />
+        </div>
+        {(search || roleFilter || statusFilter) && (
+          <button
+            onClick={() => {
+              setSearch('')
+              setRoleFilter('')
+              setStatusFilter('')
+            }}
+            className="mt-3 text-xs text-gold hover:underline"
+          >
+            Clear filters
+          </button>
+        )}
+      </Card>
+
       {/* Members */}
       {loading ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -159,17 +221,42 @@ export function Team() {
           {users.map((u) => (
             <Card key={u.id} ripple className={u.is_active ? '' : 'opacity-55'}>
               <div className="flex items-start gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gold-gradient text-sm font-bold text-bean">
-                  {initials(u.name)}
-                </div>
+                {u.avatar_url ? (
+                  <img
+                    src={u.avatar_url}
+                    alt=""
+                    referrerPolicy="no-referrer"
+                    className="h-11 w-11 shrink-0 rounded-full border border-caramel/30 object-cover"
+                  />
+                ) : (
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gold-gradient text-sm font-bold text-bean">
+                    {initials(u.name)}
+                  </div>
+                )}
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium text-latte">
                     {u.name}
                     {u.id === me?.id && <span className="ml-1.5 text-[11px] text-gold">you</span>}
                   </p>
                   <p className="truncate text-[11px] text-latte/45">{u.email}</p>
-                  <p className="mt-0.5 text-[10px] text-latte/30">
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    <span
+                      className={
+                        u.is_active
+                          ? 'chip border-emerald-400/40 bg-emerald-400/10 text-emerald-300'
+                          : 'chip border-red-400/40 bg-red-400/10 text-red-300'
+                      }
+                    >
+                      {u.is_active ? 'Active' : 'Deactivated'}
+                    </span>
+                    <span className="chip border-caramel/25 bg-bean/40 text-latte/55">
+                      {u.auth_provider === 'google' ? 'Google' : 'Password'}
+                    </span>
+                  </div>
+                  <p className="mt-1.5 text-[10px] text-latte/30">
                     Joined {formatDate(u.created_at)}
+                    {' \u00b7 '}
+                    {u.last_login ? `last seen ${formatDateTime(u.last_login)}` : 'never signed in'}
                   </p>
                 </div>
               </div>
@@ -192,6 +279,14 @@ export function Team() {
                       className="shrink-0 rounded-lg border border-caramel/25 px-2.5 py-1.5 text-[11px] text-latte/60 transition hover:border-gold/45 hover:text-latte"
                     >
                       {u.is_active ? 'Disable' : 'Enable'}
+                    </button>
+                    <button
+                      onClick={() => setResetting(u)}
+                      className="shrink-0 rounded-lg p-2 text-latte/40 transition hover:bg-gold/15 hover:text-gold"
+                      aria-label={`Reset password for ${u.name}`}
+                      title="Set a new password"
+                    >
+                      <KeyRound size={14} />
                     </button>
                     <button
                       onClick={() => setDeleting(u)}
@@ -218,6 +313,15 @@ export function Team() {
         onCreated={(u) => {
           setUsers((list) => [u, ...list])
           setInviting(false)
+        }}
+      />
+
+      <ResetPasswordModal
+        user={resetting}
+        onClose={() => setResetting(null)}
+        onDone={() => {
+          setResetting(null)
+          void load()
         }}
       />
 
@@ -319,6 +423,78 @@ function InviteModal({
           </Button>
           <Button type="submit" loading={busy}>
             Create account
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+
+/** Admin-set password. The path used when no mail provider is configured. */
+function ResetPasswordModal({
+  user,
+  onClose,
+  onDone,
+}: {
+  user: User | null
+  onClose: () => void
+  onDone: () => void
+}) {
+  const toast = useToast()
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!user) return
+    if (password.length < 8) {
+      setError('Use at least 8 characters.')
+      return
+    }
+    setError('')
+    setBusy(true)
+    try {
+      await api.adminResetPassword(user.id, password)
+      toast.success(`New password set for ${user.name}. Share it privately.`)
+      setPassword('')
+      onDone()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not reset the password.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal
+      open={!!user}
+      onClose={onClose}
+      title="Set a new password"
+      subtitle={user ? `${user.name} \u00b7 ${user.email}` : ''}
+      width="max-w-md"
+    >
+      <form onSubmit={submit} noValidate className="space-y-4">
+        <p className="rounded-lg border border-caramel/20 bg-bean/40 px-3.5 py-2.5 text-[12px] leading-relaxed text-latte/55">
+          This replaces the password immediately. Send it over a private channel and ask them
+          to change it from their Profile page.
+        </p>
+        <Field label="New password" error={error} hint="At least 8 characters">
+          <Input
+            type="text"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="TempPass1234"
+            autoComplete="new-password"
+          />
+        </Field>
+        <div className="flex justify-end gap-3 border-t border-caramel/15 pt-4">
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" loading={busy}>
+            Set password
           </Button>
         </div>
       </form>

@@ -23,6 +23,8 @@ export type DealStatus =
   | 'completed'
   | 'rejected'
 
+export type AuthProvider = 'password' | 'google'
+
 export interface User {
   id: number
   name: string
@@ -30,6 +32,18 @@ export interface User {
   role: Role
   is_active: boolean
   created_at: string
+  auth_provider: AuthProvider
+  avatar_url: string | null
+  last_login: string | null
+}
+
+/** Public config that decides what the login page offers. */
+export interface AuthConfig {
+  google_enabled: boolean
+  google_client_id: string
+  self_signup_enabled: boolean
+  password_reset_enabled: boolean
+  allowed_email_domains: string[]
 }
 
 export interface Contact {

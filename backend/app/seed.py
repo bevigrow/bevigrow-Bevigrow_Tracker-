@@ -5,7 +5,7 @@ import logging
 import random
 from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from .config import settings
@@ -26,9 +26,62 @@ from .security import hash_password
 log = logging.getLogger("bevigrow.seed")
 
 
+# Columns added after the first release. `create_all` only creates missing
+# TABLES — it never alters an existing one — so a deployed database would keep
+# its old shape and every query naming a new column would fail. Each entry is
+# applied with ADD COLUMN IF NOT EXISTS, which is safe to re-run on every boot.
+_ADDED_COLUMNS: list[tuple[str, str, str]] = [
+    # (table, column, DDL type)
+    ("users", "auth_provider", "VARCHAR(20) DEFAULT 'password' NOT NULL"),
+    ("users", "google_sub", "VARCHAR(64)"),
+    ("users", "avatar_url", "VARCHAR(500)"),
+    ("users", "last_login", "TIMESTAMP WITH TIME ZONE"),
+    ("users", "reset_token_hash", "VARCHAR(128)"),
+    ("users", "reset_token_expires", "TIMESTAMP WITH TIME ZONE"),
+]
+
+
+def _existing_columns(conn, table: str) -> set[str]:
+    if settings.is_sqlite:
+        rows = conn.execute(text(f"PRAGMA table_info({table})")).all()
+        return {r[1] for r in rows}
+    rows = conn.execute(
+        text(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name = :t AND table_schema = :s"
+        ),
+        {"t": table, "s": settings.schema or "public"},
+    ).scalars()
+    return set(rows)
+
+
+def migrate_columns() -> None:
+    """Add columns introduced after the initial deployment. Idempotent."""
+    prefix = f'"{settings.schema}".' if settings.schema else ""
+    with engine.begin() as conn:
+        for table, column, ddl in _ADDED_COLUMNS:
+            if column in _existing_columns(conn, table):
+                continue
+            # SQLite understands neither IF NOT EXISTS here nor a timezone-aware
+            # type, so keep the statement plain and rely on the guard above.
+            col_type = ddl.replace("TIMESTAMP WITH TIME ZONE", "TIMESTAMP") if settings.is_sqlite else ddl
+            conn.execute(text(f"ALTER TABLE {prefix}{table} ADD COLUMN {column} {col_type}"))
+            log.info("Added column %s.%s", table, column)
+
+        # google_sub must be unique, but only where it is set.
+        if not settings.is_sqlite:
+            conn.execute(
+                text(
+                    f"CREATE UNIQUE INDEX IF NOT EXISTS ix_users_google_sub "
+                    f"ON {prefix}users (google_sub) WHERE google_sub IS NOT NULL"
+                )
+            )
+
+
 def create_tables() -> None:
     ensure_schema()
     Base.metadata.create_all(bind=engine)
+    migrate_columns()
 
 
 def ensure_admin(db: Session) -> User:

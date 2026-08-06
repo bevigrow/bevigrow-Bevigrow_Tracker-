@@ -42,7 +42,9 @@ export function Landing() {
 
       {/* ---------------------------------------------------------- hero */}
       <section className="relative flex min-h-screen flex-col items-center justify-center px-6 py-20">
-        <div className="pointer-events-none absolute left-1/2 top-1/2 h-[30rem] w-[30rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-mocha/25 blur-[120px]" />
+        {/* Sized against the viewport: a fixed 30rem is wider than a small phone
+            and pushed the page into horizontal scrolling. */}
+        <div className="pointer-events-none absolute left-1/2 top-1/2 h-[80vw] w-[80vw] max-h-[30rem] max-w-[30rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-mocha/25 blur-[120px]" />
 
         <motion.div
           initial={{ opacity: 0, y: 24 }}

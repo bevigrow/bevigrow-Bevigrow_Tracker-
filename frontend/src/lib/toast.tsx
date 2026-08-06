@@ -49,7 +49,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={api}>
       {children}
-      <div className="pointer-events-none fixed bottom-6 right-6 z-[100] flex w-80 flex-col gap-3">
+      <div // w-80 plus the 1.5rem inset overflows a 320px screen, so cap it.
+        className="pointer-events-none fixed bottom-6 right-6 z-[100] flex w-[min(20rem,calc(100vw-3rem))] flex-col gap-3">
         <AnimatePresence initial={false}>
           {toasts.map((t) => (
             <motion.div

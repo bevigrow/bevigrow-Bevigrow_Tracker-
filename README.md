@@ -6,7 +6,7 @@ proof uploads, and AI-assisted summaries powered by **Claude Haiku**.
 
 ```
 ├── backend/     FastAPI + SQLAlchemy + Neon PostgreSQL + JWT
-├── frontend/    React + TypeScript + Tailwind + Framer Motion + GSAP + Three.js
+├── frontend/    React + TypeScript + Tailwind + Framer Motion
 └── render.yaml  One-click Render blueprint for both services
 ```
 
@@ -290,15 +290,15 @@ colour-vision-deficiency separation and contrast:
 Every chart also ships a table view, and the world map encodes magnitude with
 both size and shade so it survives greyscale.
 
-**Motion.** A Three.js coffee bean that cracks open on click or drag; a
-GSAP ScrollTrigger sequence that builds a cappuccino layer by layer as you
-scroll; Framer Motion for page and component transitions; ambient particles and
-steam. All of it respects `prefers-reduced-motion` — the pour scene renders its
-finished state rather than animating.
+**Motion.** Framer Motion for page and component transitions, ambient coffee
+particles, and steam. The Three.js coffee bean and the scroll-driven pour
+sequence were removed: they cost ~1 MB of JavaScript to parse, which was the
+single largest reason the site felt slow on phones. All motion respects
+`prefers-reduced-motion`.
 
-**Performance.** Three.js (950 kB) and GSAP live in their own chunks behind the
-lazy-loaded landing page, so authenticated routes start from an ~84 kB entry
-bundle (26 kB gzipped).
+**Performance.** No 3D or scroll-animation libraries ship at all. Every route
+is code-split, so the landing page is ~6 kB and the whole first load is under
+270 kB on a phone.
 
 ---
 

@@ -1,4 +1,3 @@
-import { AnimatePresence, motion } from 'framer-motion'
 import { Loader2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { ButtonHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react'
@@ -192,45 +191,36 @@ export function Modal({ open, onClose, title, subtitle, children, width = 'max-w
     }
   }, [open, onClose])
 
+  if (!open) return null
+
   return (
-    <AnimatePresence>
-      {open && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:p-6">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-            className="fixed inset-0 bg-bean/80 backdrop-blur-sm"
-          />
-          <motion.div
-            initial={{ opacity: 0, y: 24, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 16, scale: 0.97 }}
-            transition={{ type: 'spring', stiffness: 320, damping: 30 }}
-            className={cx(
-              'relative z-10 my-8 w-full rounded-2xl border border-caramel/25 bg-espresso shadow-cup',
-              width,
-            )}
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:p-6">
+      <div
+        onClick={onClose}
+        className="animate-fade-in fixed inset-0 bg-bean/80 backdrop-blur-sm"
+      />
+      <div
+        className={cx(
+          'animate-scale-in relative z-10 my-8 w-full rounded-2xl border border-caramel/25 bg-espresso shadow-cup',
+          width,
+        )}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-caramel/15 px-6 py-5">
+          <div>
+        <h3 className="text-xl text-latte">{title}</h3>
+        {subtitle && <p className="mt-1 text-sm text-latte/50">{subtitle}</p>}
+          </div>
+          <button
+        onClick={onClose}
+        aria-label="Close"
+        className="rounded-lg p-1.5 text-latte/50 transition hover:bg-latte/10 hover:text-latte"
           >
-            <div className="flex items-start justify-between gap-4 border-b border-caramel/15 px-6 py-5">
-              <div>
-                <h3 className="text-xl text-latte">{title}</h3>
-                {subtitle && <p className="mt-1 text-sm text-latte/50">{subtitle}</p>}
-              </div>
-              <button
-                onClick={onClose}
-                aria-label="Close"
-                className="rounded-lg p-1.5 text-latte/50 transition hover:bg-latte/10 hover:text-latte"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="px-6 py-5">{children}</div>
-          </motion.div>
+        <X size={18} />
+          </button>
         </div>
-      )}
-    </AnimatePresence>
+        <div className="px-6 py-5">{children}</div>
+      </div>
+    </div>
   )
 }
 

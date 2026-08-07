@@ -1,4 +1,3 @@
-import { AnimatePresence, motion } from 'framer-motion'
 import { createContext, useCallback, useContext, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 
@@ -51,29 +50,22 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <div // w-80 plus the 1.5rem inset overflows a 320px screen, so cap it.
         className="pointer-events-none fixed bottom-6 right-6 z-[100] flex w-[min(20rem,calc(100vw-3rem))] flex-col gap-3">
-        <AnimatePresence initial={false}>
-          {toasts.map((t) => (
-            <motion.div
-              key={t.id}
-              layout
-              initial={{ opacity: 0, x: 60, scale: 0.94 }}
-              animate={{ opacity: 1, x: 0, scale: 1 }}
-              exit={{ opacity: 0, x: 60, scale: 0.94 }}
-              transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-              className={`pointer-events-auto relative overflow-hidden rounded-xl border ${STYLES[t.kind].border} bg-espresso/95 p-4 pl-5 shadow-cup backdrop-blur`}
-            >
-              <span className={`absolute inset-y-0 left-0 w-1 ${STYLES[t.kind].accent}`} />
-              {/* Steam wisps drifting off the notification */}
-              {t.kind === 'success' && (
-                <span className="pointer-events-none absolute -top-1 left-8 h-6 w-1.5 rounded-full bg-latte/25 blur-[2px] animate-steam" />
-              )}
-              <div className="flex items-start gap-2.5">
-                <span className="text-base leading-none">{STYLES[t.kind].icon}</span>
-                <p className="text-sm leading-snug text-latte/90">{t.message}</p>
-              </div>
-            </motion.div>
-          ))}
-        </AnimatePresence>
+        {toasts.map((t) => (
+          <div
+            key={t.id}
+            className={`animate-slide-in-right pointer-events-auto relative overflow-hidden rounded-xl border ${STYLES[t.kind].border} bg-espresso/95 p-4 pl-5 shadow-cup backdrop-blur`}
+          >
+            <span className={`absolute inset-y-0 left-0 w-1 ${STYLES[t.kind].accent}`} />
+            {/* Steam wisps drifting off the notification */}
+            {t.kind === 'success' && (
+              <span className="pointer-events-none absolute -top-1 left-8 h-6 w-1.5 rounded-full bg-latte/25 blur-[2px] animate-steam" />
+            )}
+            <div className="flex items-start gap-2.5">
+              <span className="text-base leading-none">{STYLES[t.kind].icon}</span>
+              <p className="text-sm leading-snug text-latte/90">{t.message}</p>
+            </div>
+          </div>
+        ))}
       </div>
     </ToastContext.Provider>
   )

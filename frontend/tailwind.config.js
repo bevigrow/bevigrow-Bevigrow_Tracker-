@@ -51,8 +51,35 @@ export default {
           '0%': { height: '0%' },
           '100%': { height: '100%' },
         },
+        /* Replacements for the framer-motion entrances. CSS does these on the
+           compositor without 122 kB of JavaScript in the critical path. */
+        fadeIn: {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
+        fadeInUp: {
+          from: { opacity: '0', transform: 'translateY(24px)' },
+          to: { opacity: '1', transform: 'none' },
+        },
+        fadeInUpSm: {
+          from: { opacity: '0', transform: 'translateY(12px)' },
+          to: { opacity: '1', transform: 'none' },
+        },
+        scaleIn: {
+          from: { opacity: '0', transform: 'scale(.97) translateY(16px)' },
+          to: { opacity: '1', transform: 'none' },
+        },
+        slideInRight: {
+          from: { opacity: '0', transform: 'translateX(60px) scale(.94)' },
+          to: { opacity: '1', transform: 'none' },
+        },
       },
       animation: {
+        'fade-in': 'fadeIn .4s ease-out both',
+        'fade-in-up': 'fadeInUp .6s cubic-bezier(.16,1,.3,1) both',
+        'fade-in-up-sm': 'fadeInUpSm .4s ease-out both',
+        'scale-in': 'scaleIn .28s cubic-bezier(.16,1,.3,1) both',
+        'slide-in-right': 'slideInRight .32s cubic-bezier(.16,1,.3,1) both',
         steam: 'steam 3.6s ease-out infinite',
         float: 'float 6s ease-in-out infinite',
         ripple: 'ripple 700ms ease-out forwards',

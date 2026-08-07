@@ -1,4 +1,3 @@
-import { motion } from 'framer-motion'
 import { ArrowLeft, Coffee } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
@@ -34,12 +33,7 @@ export function AuthShell({
         {backLabel}
       </Link>
 
-      <motion.div
-        initial={{ opacity: 0, y: 26 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-        className="relative z-10 w-full max-w-md"
-      >
+      <div className="animate-fade-in-up relative z-10 w-full max-w-md">
         <div className="mb-8 text-center">
           <div className="relative mx-auto mb-5 w-fit">
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gold-gradient shadow-cup">
@@ -56,7 +50,7 @@ export function AuthShell({
         </div>
 
         {footer && <div className="mt-6 text-center text-sm text-latte/45">{footer}</div>}
-      </motion.div>
+      </div>
     </div>
   )
 }
@@ -64,28 +58,18 @@ export function AuthShell({
 export function AuthError({ message }: { message: string }) {
   if (!message) return null
   return (
-    <motion.p
-      initial={{ opacity: 0, y: -6 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="mb-4 rounded-lg border border-red-400/30 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-300"
-      role="alert"
-    >
+    <p className="animate-fade-in-up-sm mb-4 rounded-lg border border-red-400/30 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-300" role="alert">
       {message}
-    </motion.p>
+    </p>
   )
 }
 
 export function AuthNotice({ message }: { message: string }) {
   if (!message) return null
   return (
-    <motion.p
-      initial={{ opacity: 0, y: -6 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="mb-4 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3.5 py-2.5 text-sm text-emerald-200"
-      role="status"
-    >
+    <p className="animate-fade-in-up-sm mb-4 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3.5 py-2.5 text-sm text-emerald-200" role="status">
       {message}
-    </motion.p>
+    </p>
   )
 }
 

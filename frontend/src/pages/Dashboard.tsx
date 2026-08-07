@@ -1,4 +1,3 @@
-import { motion } from 'framer-motion'
 import {
   CheckCircle2,
   Clock,
@@ -142,12 +141,7 @@ export function Dashboard() {
       {/* ----------------------------------------------------------- kpis */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {KPI_CARDS.map((card, i) => (
-          <motion.div
-            key={card.label}
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: i * 0.05 }}
-          >
+          <div key={card.label} className="animate-fade-in-up-sm" style={{ animationDelay: `${i * 50}ms` }}>
             <Link to={card.to}>
               <Card ripple className="h-full">
                 <div className="flex items-start justify-between">
@@ -170,7 +164,7 @@ export function Dashboard() {
                 </p>
               </Card>
             </Link>
-          </motion.div>
+          </div>
         ))}
       </div>
 
@@ -206,16 +200,10 @@ export function Dashboard() {
                 .map((l) => l.replace(/^[-•*]\s*/, '').trim())
                 .filter(Boolean)
                 .map((line, i) => (
-                  <motion.li
-                    key={i}
-                    initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.06 }}
-                    className="flex gap-3 text-sm leading-relaxed text-latte/75"
-                  >
+                  <li key={i} className="flex gap-3 text-sm leading-relaxed text-latte/75">
                     <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-gold" />
                     {line}
-                  </motion.li>
+                  </li>
                 ))}
             </ul>
           ) : (

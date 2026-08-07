@@ -14,23 +14,11 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: false,
     rollupOptions: {
-      output: {
-        manualChunks: {
-          // framer-motion is used app-wide (toasts, modals, dashboard), so a
-          // shared chunk is worth it.
-          motion: ['framer-motion'],
-
-          // three.js and GSAP are deliberately NOT listed here.
-          //
-          // Naming a package in manualChunks makes Vite treat that chunk as
-          // part of the initial graph and emit a <link rel="modulepreload">
-          // for it in index.html. That preload forced every visitor — phones
-          // included — to download ~928 kB of three.js before first paint,
-          // even though the device had already decided not to render the 3D
-          // scene. Leaving them out lets Rollup derive the chunks from the
-          // dynamic import(), so they load only when actually requested.
-        },
-      },
+      // No manualChunks. Naming a package here makes Vite treat that chunk as
+      // part of the initial graph and emit a <link rel="modulepreload"> for
+      // it, which pulls the bytes down before first paint whether or not the
+      // page needs them. Letting Rollup derive chunks from the real imports
+      // keeps the critical path to what the route actually uses.
     },
   },
 })

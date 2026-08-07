@@ -34,8 +34,12 @@ services:
       # onto the psycopg 3 driver on load.
       - key: DATABASE_URL
         sync: false
-      # Claude Haiku API key. Leave unset and the AI features fall back to
-      # built-in rules rather than failing.
+      # Google Gemini API key — free tier, no card required. This is the
+      # recommended provider; get one at https://aistudio.google.com/apikey
+      - key: GEMINI_API_KEY
+        sync: false
+      # Anthropic Claude Haiku — paid alternative. Leave both unset and the AI
+      # features fall back to built-in rules rather than failing.
       - key: ANTHROPIC_API_KEY
         sync: false
       # Password for the seeded admin account. Only applied when the account
@@ -46,6 +50,11 @@ services:
         generateValue: true
       - key: ENVIRONMENT
         value: production
+      # "auto" prefers Gemini when its key is present, else Anthropic.
+      - key: AI_PROVIDER
+        value: auto
+      - key: GEMINI_MODEL
+        value: gemini-2.0-flash
       - key: AI_MODEL
         value: claude-haiku-4-5
       - key: DB_SCHEMA

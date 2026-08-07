@@ -18,7 +18,7 @@ from ..schemas import (
     SummarizeRequest,
     SummarizeResponse,
 )
-from ..services import ai
+from ..services import ai, providers
 from .dashboard import compute_stats
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
@@ -40,8 +40,10 @@ AWAITING_REPLY = {
 def ai_status(_: User = Depends(get_current_user)):
     return {
         "ai_enabled": ai.ai_enabled(),
-        "model": settings.AI_MODEL,
-        "note": "All AI features run on Claude Haiku for low cost and fast response.",
+        "model": ai.active_model(),
+        "provider": providers.active_provider() or "none",
+        "note": "Gemini (free tier) is preferred when configured; otherwise Claude Haiku, "
+                "otherwise built-in rules.",
     }
 
 
@@ -50,7 +52,7 @@ def summarize(payload: SummarizeRequest, _: User = Depends(get_current_user)):
     summary, used_ai = ai.summarize_interaction(
         payload.notes, payload.company_name, payload.country
     )
-    return SummarizeResponse(summary=summary, model=settings.AI_MODEL, ai_enabled=used_ai)
+    return SummarizeResponse(summary=summary, model=ai.active_model(), ai_enabled=used_ai)
 
 
 def _cached_insight(
@@ -73,7 +75,7 @@ def _cached_insight(
             )
 
     content, used_ai = builder()
-    record = AIInsight(kind=kind, content=content, model=settings.AI_MODEL if used_ai else "rule-based")
+    record = AIInsight(kind=kind, content=content, model=ai.active_model() if used_ai else "rule-based")
     db.add(record)
     db.commit()
     db.refresh(record)
@@ -180,7 +182,7 @@ def build_suggestions(db: Session, limit: int, min_days_silent: int) -> Suggesti
     ]
     return SuggestionsResponse(
         suggestions=suggestions,
-        model=settings.AI_MODEL if used_ai else "rule-based",
+        model=ai.active_model() if used_ai else "rule-based",
         ai_enabled=used_ai,
     )
 

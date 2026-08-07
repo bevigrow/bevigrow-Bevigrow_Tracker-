@@ -35,9 +35,20 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 12
 
-    # AI — Claude Haiku only. Opus-tier models are intentionally not used.
+    # ----------------------------------------------------------------- ai
+    # Which backend to use: "auto" picks Gemini when its key is present
+    # (it has a free tier), otherwise Anthropic. Force one with "gemini" or
+    # "anthropic". With no key configured the app uses built-in rules.
+    AI_PROVIDER: str = "auto"
+
+    # Google Gemini — free tier, no card required.
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-2.0-flash"
+
+    # Anthropic Claude Haiku — paid, but inexpensive.
     ANTHROPIC_API_KEY: str = ""
     AI_MODEL: str = "claude-haiku-4-5"
+
     AI_MAX_TOKENS: int = 900
 
     UPLOAD_DIR: str = str(BASE_DIR / "uploads")

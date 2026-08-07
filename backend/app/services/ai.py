@@ -1,11 +1,12 @@
-"""Claude Haiku integration for summaries, dashboard insights and follow-ups.
+"""Summaries, dashboard insights and follow-up ranking.
 
-Model constraint: this module only ever calls Claude Haiku (`claude-haiku-4-5`).
-Opus-tier models are deliberately not used — Haiku gives low cost, fast response
-and business-quality prose, which is exactly what these features need.
+The actual model call lives in `providers.py`, which supports Google Gemini
+(free tier) and Anthropic Claude Haiku. This module only shapes the prompts and
+parses the results.
 
-Every function degrades gracefully: if ANTHROPIC_API_KEY is unset or the API
-errors, a deterministic local fallback is returned so the product keeps working.
+Every function degrades gracefully: with no provider configured, or when one
+errors, a deterministic local fallback is returned so the product keeps working
+and nothing 500s because an AI was unavailable.
 """
 from __future__ import annotations
 
@@ -13,26 +14,18 @@ import json
 import logging
 import re
 
-import anthropic
-
 from ..config import settings
+from . import providers
 
 log = logging.getLogger("bevigrow.ai")
 
-_client: anthropic.Anthropic | None = None
-
 
 def ai_enabled() -> bool:
-    return bool(settings.ANTHROPIC_API_KEY.strip())
+    return providers.active_provider() is not None
 
 
-def _get_client() -> anthropic.Anthropic | None:
-    global _client
-    if not ai_enabled():
-        return None
-    if _client is None:
-        _client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
-    return _client
+def active_model() -> str:
+    return providers.active_model()
 
 
 BRAND_SYSTEM = (
@@ -45,27 +38,8 @@ BRAND_SYSTEM = (
 
 
 def _complete(prompt: str, *, system: str = BRAND_SYSTEM, max_tokens: int | None = None) -> str | None:
-    """Single Haiku call. Returns None when AI is unavailable or errored."""
-    client = _get_client()
-    if client is None:
-        return None
-    try:
-        message = client.messages.create(
-            model=settings.AI_MODEL,
-            max_tokens=max_tokens or settings.AI_MAX_TOKENS,
-            system=system,
-            messages=[{"role": "user", "content": prompt}],
-        )
-    except anthropic.APIError as exc:  # rate limits, auth, overloaded, bad request
-        log.warning("Claude Haiku request failed: %s", exc)
-        return None
-    except Exception as exc:  # network / unexpected
-        log.warning("Claude Haiku request failed unexpectedly: %s", exc)
-        return None
-
-    parts = [block.text for block in message.content if block.type == "text"]
-    text = "\n".join(parts).strip()
-    return text or None
+    """One model call. Returns None when AI is unavailable or errored."""
+    return providers.complete(prompt, system, max_tokens or settings.AI_MAX_TOKENS)
 
 
 # ------------------------------------------------------------- meeting summary

@@ -10,7 +10,7 @@ import {
   Sparkles,
   TrendingUp,
 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import {
@@ -22,9 +22,7 @@ import {
   Sparkline,
   TrendChart,
   TrendTable,
-  WorldMap,
 } from '../components/charts'
-import type { MapMarker } from '../components/charts'
 import { Steam } from '../components/coffee/Ambient'
 import { Button, Card, EmptyState, Spinner, StatusBadge } from '../components/ui'
 import { api } from '../lib/api'
@@ -32,9 +30,7 @@ import { useAuth } from '../lib/auth'
 import {
   CHANNEL_META,
   compactMoney,
-  coordsFor,
   formatDateTime,
-  projectToPercent,
   relativeDays,
   statusLabel,
 } from '../lib/format'
@@ -80,18 +76,6 @@ export function Dashboard() {
       setRefreshingAi(false)
     }
   }
-
-  const markers = useMemo<MapMarker[]>(() => {
-    if (!data) return []
-    return data.by_country
-      .map((c) => {
-        const coords = coordsFor(c.country)
-        if (!coords) return null
-        const { left, top } = projectToPercent(coords[0], coords[1])
-        return { country: c.country, count: c.count, value_usd: c.value_usd, left, top }
-      })
-      .filter((m): m is MapMarker => m !== null)
-  }, [data])
 
   if (loading) return <Spinner label="Brewing your dashboard…" />
   if (!data) {
@@ -297,8 +281,8 @@ export function Dashboard() {
       </div>
 
       <ChartFrame
-        title="International Buyers & Suppliers"
-        subtitle="Marker size and shade both encode the number of accounts"
+        title="Accounts by Country"
+        subtitle="Where your coffee buyers and suppliers are"
         table={
           <BarTable
             data={data.by_country.map((c) => ({ label: c.country, value: c.count }))}
@@ -306,7 +290,14 @@ export function Dashboard() {
           />
         }
       >
-        <WorldMap markers={markers} />
+        <RoastBarChart
+          data={data.by_country.map((c) => ({
+            label: c.country,
+            value: c.count,
+            meta: compactMoney(c.value_usd) + ' pipeline',
+          }))}
+          unit="accounts"
+        />
       </ChartFrame>
 
       {/* ------------------------------------------ recent + follow-ups */}

@@ -5,7 +5,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from ..config import settings
 from ..database import get_db
 from ..deps import get_current_user
 from ..models import Activity, Contact, DealStatus, Document, Reminder, TradeType, User
@@ -180,16 +179,8 @@ def delete_contact(
     if not contact:
         raise HTTPException(status_code=404, detail="Contact not found")
 
-    # Remove uploaded files from disk alongside the DB rows.
-    from pathlib import Path
-
-    upload_dir = Path(settings.UPLOAD_DIR)
-    for doc in contact.documents:
-        try:
-            (upload_dir / doc.stored_name).unlink(missing_ok=True)
-        except OSError:
-            pass
-
+    # Documents cascade with the contact; their bytes live in the same table,
+    # so there is nothing on disk to clean up.
     db.delete(contact)
     db.commit()
 

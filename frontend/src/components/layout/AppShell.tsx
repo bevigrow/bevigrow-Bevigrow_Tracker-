@@ -17,7 +17,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
 import type { Role } from '../../lib/types'
 import { initials } from '../../lib/format'
-import { AmbientParticles, Steam } from '../coffee/Ambient'
+import { Steam } from '../coffee/Ambient'
 import { cx } from '../ui'
 
 interface NavItem {
@@ -51,8 +51,6 @@ export function AppShell() {
 
   return (
     <div className="relative min-h-screen">
-      <AmbientParticles density={26} />
-
       {/* Mobile overlay */}
       {open && (
         <div
@@ -78,7 +76,7 @@ export function AppShell() {
             </div>
             <div>
               <p className="font-display text-lg leading-none text-latte">BeviGrow</p>
-              <p className="mt-1 text-[10px] uppercase tracking-[0.2em] text-gold/70">Coffee B2B</p>
+              <p className="mt-1 text-[10px] uppercase tracking-[0.2em] text-gold/70">Trade Tracker</p>
             </div>
           </div>
           <button
@@ -169,12 +167,8 @@ export function AppShell() {
           </button>
           <div className="flex-1">
             <p className="text-[11px] uppercase tracking-[0.22em] text-gold/60">
-              Coffee Export &amp; Import Operations
+              Export &amp; Import Operations
             </p>
-          </div>
-          <div className="hidden items-center gap-2 rounded-full border border-caramel/20 bg-espresso/50 px-3 py-1.5 sm:flex">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-            <span className="text-[11px] text-latte/55">Live</span>
           </div>
         </header>
 

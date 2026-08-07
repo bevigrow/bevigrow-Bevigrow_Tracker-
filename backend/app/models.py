@@ -12,6 +12,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    LargeBinary,
     String,
     Text,
 )
@@ -207,7 +208,13 @@ class Activity(Base):
 
 
 class Document(Base):
-    """Uploaded proof: quotation, invoice, PO, screenshot, sample photo."""
+    """Uploaded proof: quotation, invoice, PO, screenshot, sample photo.
+
+    The bytes live in this table, not on the container filesystem. Render's
+    free instances have no persistent disk — the filesystem is rebuilt on every
+    deploy, so files stored there disappear silently and the record is left
+    pointing at nothing. The database survives deploys, so uploads do too.
+    """
 
     __tablename__ = "documents"
 
@@ -219,7 +226,9 @@ class Document(Base):
 
     doc_type: Mapped[DocType] = mapped_column(Enum(DocType, native_enum=False), default=DocType.other)
     original_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    stored_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Retained for rows written before files moved into the database.
+    stored_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    content: Mapped[bytes | None] = mapped_column(LargeBinary)
     content_type: Mapped[str | None] = mapped_column(String(120))
     size_bytes: Mapped[int] = mapped_column(Integer, default=0)
     note: Mapped[str | None] = mapped_column(String(400))

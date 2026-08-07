@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     AI_MAX_TOKENS: int = 900
 
     UPLOAD_DIR: str = str(BASE_DIR / "uploads")
-    MAX_UPLOAD_MB: int = 15
+    MAX_UPLOAD_MB: int = 8   # Neon free tier is 0.5 GB total; keep files modest
 
     # ---------------------------------------------------------------- auth
     # Google Identity Services OAuth client ID. Blank disables Google sign-in

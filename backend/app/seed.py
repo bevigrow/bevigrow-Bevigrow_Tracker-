@@ -49,6 +49,8 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("contacts", "sourcing_from", "VARCHAR(150)"),
     ("contacts", "rfq_source", "VARCHAR(150)"),
     ("contacts", "rfq_reference", "VARCHAR(120)"),
+    # File bytes moved off the ephemeral container filesystem.
+    ("documents", "content", "BYTEA"),
 ]
 
 

@@ -8,9 +8,9 @@ import { formatDateTime, initials } from '../lib/format'
 import { useToast } from '../lib/toast'
 
 const ROLE_BLURB: Record<string, string> = {
-  admin: 'Full access, including team management and application settings.',
+  admin: 'Full access, including managing the team.',
   manager: 'Full access to all trading data. Cannot manage the team.',
-  employee: 'Can log activity and manage the accounts they work on.',
+  employee: 'Can record quotes and log activity.',
 }
 
 export function Profile() {

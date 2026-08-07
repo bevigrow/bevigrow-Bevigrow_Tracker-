@@ -18,11 +18,9 @@ import {
   CupMeter,
   LegendItem,
   RoastBarChart,
-  Sparkline,
   TrendChart,
   TrendTable,
 } from '../components/charts'
-import { Steam } from '../components/coffee/Ambient'
 import { Button, Card, EmptyState, Spinner, StatusBadge } from '../components/ui'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
@@ -114,7 +112,6 @@ export function Dashboard() {
       {/* ------------------------------------------------------- greeting */}
       <div className="relative overflow-hidden rounded-2xl border border-caramel/20 bg-roast-gradient p-7">
         <div className="pointer-events-none absolute -right-12 -top-12 h-52 w-52 rounded-full bg-gold/15 blur-3xl" />
-        <Steam count={4} className="absolute left-8 top-0 opacity-50" />
         <div className="relative flex flex-wrap items-end justify-between gap-6">
           <div>
             <h1 className="font-display text-3xl text-latte sm:text-4xl">
@@ -144,19 +141,13 @@ export function Dashboard() {
           <div key={card.label} className="animate-fade-in-up-sm" style={{ animationDelay: `${i * 50}ms` }}>
             <Link to={card.to}>
               <Card ripple className="h-full">
-                <div className="flex items-start justify-between">
-                  <div
-                    className="flex h-10 w-10 items-center justify-center rounded-xl"
-                    style={{ background: `${card.tint}22`, color: card.tint }}
-                  >
-                    <card.icon size={19} />
-                  </div>
-                  <Sparkline
-                    values={data.trend.map((t) => t.activities)}
-                    color={card.tint}
-                    width={54}
-                    height={22}
-                  />
+                {/* One sparkline per card showed the same series six times,
+                    so it decorated rather than informed. */}
+                <div
+                  className="flex h-10 w-10 items-center justify-center rounded-xl"
+                  style={{ background: `${card.tint}22`, color: card.tint }}
+                >
+                  <card.icon size={19} />
                 </div>
                 <p className="mt-4 font-body text-3xl font-semibold text-latte">{card.value}</p>
                 <p className="mt-1 text-[11px] uppercase tracking-wider text-latte/45">
@@ -223,21 +214,14 @@ export function Dashboard() {
         <Card>
           <h3 className="mb-1 font-display text-lg text-latte">Conversion</h3>
           <p className="mb-4 text-[11px] text-latte/40">Completed vs closed deals</p>
-          <div className="flex items-center justify-around">
+          {/* Export share is already two of the KPI cards above. */}
+          <div className="flex items-center justify-center">
             <CupMeter
               value={k.conversion_rate}
               max={100}
               label="Win rate"
               caption={`${k.completed_orders} completed`}
-              size={128}
-            />
-            <CupMeter
-              value={k.export_orders}
-              max={Math.max(1, k.export_orders + k.import_orders)}
-              label="Export share"
-              caption={`${k.import_orders} import`}
-              color={ROAST_RAMP[3]}
-              size={128}
+              size={136}
             />
           </div>
         </Card>

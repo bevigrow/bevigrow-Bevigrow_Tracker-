@@ -2,7 +2,7 @@ import { ArrowLeft, Coffee } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
-import { AmbientParticles, Steam } from '../../components/coffee/Ambient'
+import { Steam } from '../../components/coffee/Ambient'
 
 /** Shared frame for every unauthenticated page, so they read as one product. */
 export function AuthShell({
@@ -22,7 +22,6 @@ export function AuthShell({
 }) {
   return (
     <div className="relative flex min-h-screen items-center justify-center px-5 py-12">
-      <AmbientParticles density={30} />
       <div className="pointer-events-none absolute left-1/2 top-1/3 h-96 w-96 -translate-x-1/2 rounded-full bg-mocha/25 blur-[110px]" />
 
       <Link

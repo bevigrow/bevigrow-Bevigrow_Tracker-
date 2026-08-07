@@ -62,20 +62,34 @@ def _gemini(prompt: str, system: str, max_tokens: int) -> str:
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "systemInstruction": {"parts": [{"text": system}]},
         "generationConfig": {
-            "maxOutputTokens": max_tokens,
+            # gemini-flash-latest reasons before answering and charges those
+            # thinking tokens against maxOutputTokens, which truncated
+            # summaries mid-sentence. Disabling thinking is rejected by this
+            # model (400), so the budget is widened instead — the visible
+            # answer stays short because the prompt asks for it.
+            "maxOutputTokens": max(max_tokens * 4, 2048),
             "temperature": 0.4,
         },
     }
     try:
         with httpx.Client(timeout=TIMEOUT) as client:
+            # Key goes in the header, not the query string: it is Google's
+            # documented form, it works with both the AIza… and newer AQ.…
+            # key formats, and it keeps the secret out of URLs and access logs.
             res = client.post(
                 url,
-                params={"key": settings.GEMINI_API_KEY.strip()},
+                headers={"X-goog-api-key": settings.GEMINI_API_KEY.strip()},
                 json=payload,
             )
     except httpx.HTTPError as exc:
         raise ProviderError(f"Could not reach Gemini: {exc}") from exc
 
+    if res.status_code == 429:
+        raise ProviderError(
+            "Gemini free-tier quota exhausted for "
+            f"{settings.GEMINI_MODEL}. It resets daily; using the built-in "
+            "summaries until then."
+        )
     if res.status_code != 200:
         # Surface the reason at WARNING so a bad key or exhausted quota is
         # visible in the logs rather than silently degrading forever.

@@ -43,7 +43,7 @@ class Settings(BaseSettings):
 
     # Google Gemini — free tier, no card required.
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_MODEL: str = "gemini-flash-latest"
 
     # Anthropic Claude Haiku — paid, but inexpensive.
     ANTHROPIC_API_KEY: str = ""

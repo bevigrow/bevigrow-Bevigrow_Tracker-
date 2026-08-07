@@ -108,18 +108,35 @@ class AuthConfigOut(BaseModel):
 
 
 class ContactBase(BaseModel):
-    company_name: str = Field(min_length=1, max_length=200)
-    country: str = Field(min_length=1, max_length=100)
+    """A quote/RFQ. Nothing here is mandatory except a name to file it under,
+    and even that falls back to a placeholder rather than rejecting the entry —
+    real marketplace RFQs routinely omit the email, phone, port or country."""
+
+    company_name: str | None = Field(default=None, max_length=200)
+    country: str | None = Field(default=None, max_length=100)
     contact_person: str | None = None
-    email: EmailStr | None = None
+    # Free text, not EmailStr: buyers paste "-", a name, or several addresses.
+    email: str | None = Field(default=None, max_length=255)
     phone: str | None = None
     whatsapp: str | None = None
     trade_type: TradeType = TradeType.export
     coffee_product: str | None = None
-    quantity_kg: float | None = Field(default=None, ge=0)
+    quantity_kg: float | None = None
+    quantity_note: str | None = Field(default=None, max_length=200)
     roast_preference: str | None = None
     bean_type: str | None = None
-    estimated_value_usd: float | None = Field(default=None, ge=0)
+    estimated_value_usd: float | None = None
+
+    # Trade terms as they appear on an RFQ
+    hs_code: str | None = Field(default=None, max_length=60)
+    shipping_terms: str | None = Field(default=None, max_length=40)
+    destination_port: str | None = Field(default=None, max_length=150)
+    payment_terms: str | None = Field(default=None, max_length=80)
+    origin_preference: str | None = Field(default=None, max_length=200)
+    sourcing_from: str | None = Field(default=None, max_length=150)
+    rfq_source: str | None = Field(default=None, max_length=150)
+    rfq_reference: str | None = Field(default=None, max_length=120)
+
     status: DealStatus = DealStatus.new_lead
     notes: str | None = None
     next_follow_up: date | None = None
@@ -133,15 +150,24 @@ class ContactUpdate(BaseModel):
     company_name: str | None = None
     country: str | None = None
     contact_person: str | None = None
-    email: EmailStr | None = None
+    email: str | None = None
     phone: str | None = None
     whatsapp: str | None = None
     trade_type: TradeType | None = None
     coffee_product: str | None = None
     quantity_kg: float | None = None
+    quantity_note: str | None = None
     roast_preference: str | None = None
     bean_type: str | None = None
     estimated_value_usd: float | None = None
+    hs_code: str | None = None
+    shipping_terms: str | None = None
+    destination_port: str | None = None
+    payment_terms: str | None = None
+    origin_preference: str | None = None
+    sourcing_from: str | None = None
+    rfq_source: str | None = None
+    rfq_reference: str | None = None
     status: DealStatus | None = None
     notes: str | None = None
     next_follow_up: date | None = None
@@ -151,7 +177,7 @@ class ContactUpdate(BaseModel):
 class ContactOut(ORMModel):
     id: int
     company_name: str
-    country: str
+    country: str | None
     contact_person: str | None
     email: str | None
     phone: str | None
@@ -159,9 +185,18 @@ class ContactOut(ORMModel):
     trade_type: TradeType
     coffee_product: str | None
     quantity_kg: float | None
+    quantity_note: str | None = None
     roast_preference: str | None
     bean_type: str | None
     estimated_value_usd: float | None
+    hs_code: str | None = None
+    shipping_terms: str | None = None
+    destination_port: str | None = None
+    payment_terms: str | None = None
+    origin_preference: str | None = None
+    sourcing_from: str | None = None
+    rfq_source: str | None = None
+    rfq_reference: str | None = None
     status: DealStatus
     notes: str | None
     owner_id: int | None

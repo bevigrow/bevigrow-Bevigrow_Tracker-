@@ -43,7 +43,7 @@ export function ActivityForm({
     setPreviewing(true)
     try {
       const notes = reply.trim() ? `${discussion}\nCustomer reply: ${reply}` : discussion
-      const res = await api.summarize(notes, contact.company_name, contact.country)
+      const res = await api.summarize(notes, contact.company_name, contact.country ?? undefined)
       setPreview(res.summary)
       if (!res.ai_enabled) {
         toast.info('Claude Haiku is not configured — showing the built-in summary.')

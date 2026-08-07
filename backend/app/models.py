@@ -121,9 +121,13 @@ class Contact(Base):
     __tablename__ = "contacts"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    # Only the company name is required, and even that is filled with a
+    # placeholder rather than rejected. Real RFQs routinely omit an email, a
+    # phone number, or a port — refusing them would mean losing the enquiry.
     company_name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
-    country: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    country: Mapped[str | None] = mapped_column(String(100), index=True)
     contact_person: Mapped[str | None] = mapped_column(String(150))
+    # Plain strings, not validated emails: buyers often paste "-" or a name.
     email: Mapped[str | None] = mapped_column(String(255))
     phone: Mapped[str | None] = mapped_column(String(60))
     whatsapp: Mapped[str | None] = mapped_column(String(60))
@@ -133,9 +137,22 @@ class Contact(Base):
     )
     coffee_product: Mapped[str | None] = mapped_column(String(150))
     quantity_kg: Mapped[float | None] = mapped_column(Float)
+    # The requirement as the buyer wrote it: "600 Kg each item",
+    # "700kg to 1 ton per month", "1 Twenty-Foot Container".
+    quantity_note: Mapped[str | None] = mapped_column(String(200))
     roast_preference: Mapped[str | None] = mapped_column(String(100))
     bean_type: Mapped[str | None] = mapped_column(String(100))
     estimated_value_usd: Mapped[float | None] = mapped_column(Float)
+
+    # --- trade terms, as they appear on a marketplace RFQ
+    hs_code: Mapped[str | None] = mapped_column(String(60))
+    shipping_terms: Mapped[str | None] = mapped_column(String(40))
+    destination_port: Mapped[str | None] = mapped_column(String(150))
+    payment_terms: Mapped[str | None] = mapped_column(String(80))
+    origin_preference: Mapped[str | None] = mapped_column(String(200))
+    sourcing_from: Mapped[str | None] = mapped_column(String(150))
+    rfq_source: Mapped[str | None] = mapped_column(String(150))
+    rfq_reference: Mapped[str | None] = mapped_column(String(120))
 
     status: Mapped[DealStatus] = mapped_column(
         Enum(DealStatus, native_enum=False), default=DealStatus.new_lead, index=True

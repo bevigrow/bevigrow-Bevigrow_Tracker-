@@ -103,14 +103,14 @@ export function Contacts() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-3xl text-latte">Customers &amp; Suppliers</h1>
+          <h1 className="font-display text-3xl text-latte">Quotes &amp; Enquiries</h1>
           <p className="mt-1 text-sm text-latte/50">
-            {loading ? 'Loading…' : `${contacts.length} account${contacts.length === 1 ? '' : 's'}`}
+            {loading ? 'Loading…' : `${contacts.length} quote${contacts.length === 1 ? '' : 's'}`}
             {activeFilters.length > 0 && ' matching your filters'}
           </p>
         </div>
         <Button onClick={() => setCreating(true)} icon={<Plus size={16} />}>
-          New Account
+          New Quote
         </Button>
       </div>
 
@@ -125,7 +125,7 @@ export function Contacts() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search company, person, product…"
+              placeholder="Search company, person, product, port, HS code…"
               className="pl-10"
             />
           </div>
@@ -188,7 +188,7 @@ export function Contacts() {
               </Button>
             ) : (
               <Button onClick={() => setCreating(true)} icon={<Plus size={16} />}>
-                New Account
+                New Quote
               </Button>
             )
           }
@@ -315,8 +315,8 @@ export function Contacts() {
       <Modal
         open={creating}
         onClose={() => setCreating(false)}
-        title="New Coffee Account"
-        subtitle="Add a customer (export) or supplier (import)"
+        title="New Quote"
+        subtitle="Record an RFQ or enquiry — nothing is mandatory"
         width="max-w-3xl"
       >
         <ContactForm
@@ -332,7 +332,7 @@ export function Contacts() {
         open={!!editing}
         onClose={() => setEditing(null)}
         title={editing?.company_name ?? ''}
-        subtitle="Edit account details"
+        subtitle="Edit quote details"
         width="max-w-3xl"
       >
         {editing && (

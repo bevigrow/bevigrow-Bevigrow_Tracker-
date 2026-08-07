@@ -38,6 +38,17 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("users", "last_login", "TIMESTAMP WITH TIME ZONE"),
     ("users", "reset_token_hash", "VARCHAR(128)"),
     ("users", "reset_token_expires", "TIMESTAMP WITH TIME ZONE"),
+    # RFQ fields — marketplace enquiries carry trade terms the first release
+    # had nowhere to put.
+    ("contacts", "quantity_note", "VARCHAR(200)"),
+    ("contacts", "hs_code", "VARCHAR(60)"),
+    ("contacts", "shipping_terms", "VARCHAR(40)"),
+    ("contacts", "destination_port", "VARCHAR(150)"),
+    ("contacts", "payment_terms", "VARCHAR(80)"),
+    ("contacts", "origin_preference", "VARCHAR(200)"),
+    ("contacts", "sourcing_from", "VARCHAR(150)"),
+    ("contacts", "rfq_source", "VARCHAR(150)"),
+    ("contacts", "rfq_reference", "VARCHAR(120)"),
 ]
 
 
@@ -67,6 +78,17 @@ def migrate_columns() -> None:
             col_type = ddl.replace("TIMESTAMP WITH TIME ZONE", "TIMESTAMP") if settings.is_sqlite else ddl
             conn.execute(text(f"ALTER TABLE {prefix}{table} ADD COLUMN {column} {col_type}"))
             log.info("Added column %s.%s", table, column)
+
+        # `country` started out NOT NULL. Marketplace RFQs often omit it, and
+        # rejecting the row would lose the enquiry, so the constraint is
+        # dropped where it still exists.
+        if not settings.is_sqlite:
+            try:
+                conn.execute(
+                    text(f"ALTER TABLE {prefix}contacts ALTER COLUMN country DROP NOT NULL")
+                )
+            except Exception:  # noqa: BLE001 - already nullable
+                pass
 
         # google_sub must be unique, but only where it is set.
         if not settings.is_sqlite:

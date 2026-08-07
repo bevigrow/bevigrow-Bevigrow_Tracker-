@@ -49,7 +49,8 @@ export interface AuthConfig {
 export interface Contact {
   id: number
   company_name: string
-  country: string
+  /** Optional: marketplace RFQs often omit it. */
+  country: string | null
   contact_person: string | null
   email: string | null
   phone: string | null
@@ -57,9 +58,19 @@ export interface Contact {
   trade_type: TradeType
   coffee_product: string | null
   quantity_kg: number | null
+  /** The requirement in the buyer's own words. */
+  quantity_note: string | null
   roast_preference: string | null
   bean_type: string | null
   estimated_value_usd: number | null
+  hs_code: string | null
+  shipping_terms: string | null
+  destination_port: string | null
+  payment_terms: string | null
+  origin_preference: string | null
+  sourcing_from: string | null
+  rfq_source: string | null
+  rfq_reference: string | null
   status: DealStatus
   notes: string | null
   owner_id: number | null

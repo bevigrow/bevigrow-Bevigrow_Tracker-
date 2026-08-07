@@ -135,7 +135,7 @@ export function ContactDetail() {
             </div>
             <h1 className="font-display text-3xl text-latte">{contact.company_name}</h1>
             <p className="mt-1 text-sm text-latte/50">
-              {contact.country}
+              {contact.country ?? 'Country not given'}
               {contact.contact_person ? ` · ${contact.contact_person}` : ''}
             </p>
             <div className="mt-3 flex flex-wrap gap-4 text-xs text-latte/55">
@@ -177,12 +177,25 @@ export function ContactDetail() {
 
         <div className="mt-6 grid gap-4 border-t border-caramel/15 pt-5 sm:grid-cols-2 lg:grid-cols-4">
           <Stat label="Coffee product" value={contact.coffee_product ?? '—'} />
-          <Stat label="Quantity" value={kg(contact.quantity_kg)} />
+          <Stat
+            label="Quantity"
+            value={contact.quantity_note || kg(contact.quantity_kg)}
+          />
           <Stat
             label="Roast / bean"
             value={[contact.roast_preference, contact.bean_type].filter(Boolean).join(' · ') || '—'}
           />
           <Stat label="Estimated value" value={money(contact.estimated_value_usd)} />
+          <Stat label="Shipping terms" value={contact.shipping_terms ?? '—'} />
+          <Stat label="Destination port" value={contact.destination_port ?? '—'} />
+          <Stat label="Payment terms" value={contact.payment_terms ?? '—'} />
+          <Stat label="HS code" value={contact.hs_code ?? '—'} />
+          <Stat label="Origin preference" value={contact.origin_preference ?? '—'} />
+          <Stat label="Sourcing from" value={contact.sourcing_from ?? '—'} />
+          <Stat
+            label="RFQ source"
+            value={[contact.rfq_source, contact.rfq_reference].filter(Boolean).join(' · ') || '—'}
+          />
           <Stat label="Owner" value={contact.owner?.name ?? 'Unassigned'} />
           <Stat label="Last contacted" value={relativeDays(contact.last_contacted_at)} />
           <Stat

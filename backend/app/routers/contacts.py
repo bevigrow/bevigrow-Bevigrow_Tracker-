@@ -72,6 +72,9 @@ def list_contacts(
                 func.lower(func.coalesce(Contact.contact_person, "")).like(needle),
                 func.lower(func.coalesce(Contact.coffee_product, "")).like(needle),
                 func.lower(func.coalesce(Contact.email, "")).like(needle),
+                func.lower(func.coalesce(Contact.destination_port, "")).like(needle),
+                func.lower(func.coalesce(Contact.hs_code, "")).like(needle),
+                func.lower(func.coalesce(Contact.rfq_reference, "")).like(needle),
             )
         )
     if trade_type:
@@ -140,6 +143,10 @@ def create_contact(
     data = payload.model_dump()
     if not data.get("owner_id"):
         data["owner_id"] = user.id
+    # A quote with no name is still worth keeping — file it under a
+    # placeholder rather than refusing the entry.
+    if not (data.get("company_name") or "").strip():
+        data["company_name"] = "Untitled quote"
     contact = Contact(**data)
     db.add(contact)
     db.commit()

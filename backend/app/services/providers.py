@@ -134,6 +134,40 @@ def _anthropic(prompt: str, system: str, max_tokens: int) -> str:
 # ------------------------------------------------------------------ public
 
 
+def key_fingerprint(raw: str) -> str:
+    """Enough of a key to recognise it, never enough to use it.
+
+    The prefix is the useful part: a Gemini API key starts "AIza", whereas an
+    OAuth token starts "AQ." and the API rejects it. Telling those apart
+    without printing the secret is the whole point.
+    """
+    key = raw.strip()
+    if not key:
+        return "not set"
+    return f"{key[:4]}… ({len(key)} chars)"
+
+
+def probe(provider: str) -> str:
+    """Make the smallest real call and report what actually happened.
+
+    `complete()` deliberately swallows provider errors so a dead API key can
+    never break a page. That is right for users and useless for whoever has to
+    fix the key, so this path re-raises the detail instead.
+    """
+    try:
+        if provider == "gemini":
+            _gemini("Reply with the single word: ok", "You are a connectivity probe.", 16)
+        elif provider == "anthropic":
+            _anthropic("Reply with the single word: ok", "You are a connectivity probe.", 16)
+        else:
+            return "no provider configured"
+    except ProviderError as exc:
+        return str(exc)
+    except Exception as exc:  # noqa: BLE001
+        return f"Unexpected {type(exc).__name__}: {exc}"
+    return "ok"
+
+
 def complete(prompt: str, system: str, max_tokens: int) -> str | None:
     """Generate text, or return None so the caller can use its fallback."""
     provider = active_provider()

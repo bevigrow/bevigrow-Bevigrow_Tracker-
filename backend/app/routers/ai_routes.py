@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..database import get_db
-from ..deps import get_current_user
+from ..deps import get_current_user, require_roles
 from ..models import AIInsight, Contact, DealStatus, Reminder, User
 from ..schemas import (
     InsightResponse,
@@ -44,6 +44,41 @@ def ai_status(_: User = Depends(get_current_user)):
         "provider": providers.active_provider() or "none",
         "note": "Gemini (free tier) is preferred when configured; otherwise Claude Haiku, "
                 "otherwise built-in rules.",
+    }
+
+
+@router.get("/diagnose")
+def ai_diagnose(_: User = Depends(require_roles("admin"))):
+    """Why is the AI falling back to templates?
+
+    `/status` says which provider *would* be used; it cannot say whether the
+    key works. This calls each configured provider for real and returns the
+    error verbatim, so a wrong key, a spent balance and an exhausted quota are
+    distinguishable from each other without reading server logs.
+
+    Admin-only, and it reports key prefixes rather than keys.
+    """
+    return {
+        "selected_provider": providers.active_provider() or "none",
+        "ai_provider_setting": settings.AI_PROVIDER,
+        "gemini": {
+            "key": providers.key_fingerprint(settings.GEMINI_API_KEY),
+            "model": settings.GEMINI_MODEL,
+            "probe": (
+                providers.probe("gemini")
+                if settings.GEMINI_API_KEY.strip()
+                else "skipped - no key"
+            ),
+        },
+        "anthropic": {
+            "key": providers.key_fingerprint(settings.ANTHROPIC_API_KEY),
+            "model": settings.AI_MODEL,
+            "probe": (
+                providers.probe("anthropic")
+                if settings.ANTHROPIC_API_KEY.strip()
+                else "skipped - no key"
+            ),
+        },
     }
 
 

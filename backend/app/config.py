@@ -110,6 +110,21 @@ class Settings(BaseSettings):
     SEED_ADMIN_PASSWORD: str = "Bevi@GROW30@"
     SEED_ADMIN_NAME: str = "BeviGrow Admin"
 
+    @field_validator("*", mode="before")
+    @classmethod
+    def _trim_pasted_whitespace(cls, value):
+        """Strip surrounding whitespace from every setting that arrives as text.
+
+        These values are pasted into a hosting dashboard by hand, and a copy
+        that catches a trailing newline is normal. The failures it causes are
+        not obvious: a newline on GEMINI_MODEL is interpolated into the API
+        URL and httpx rejects the whole request with "invalid non-printable
+        ASCII character", which reads like a library bug rather than a stray
+        keystroke. Trimming once here beats remembering to .strip() at each
+        use site, and no setting this app has is meant to end in a space.
+        """
+        return value.strip() if isinstance(value, str) else value
+
     @field_validator("DATABASE_URL")
     @classmethod
     def _use_psycopg3_driver(cls, value: str) -> str:

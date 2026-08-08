@@ -248,3 +248,129 @@ def _fallback_suggestions(candidates: list[dict]) -> list[dict]:
     order = {"high": 0, "medium": 1, "low": 2}
     out.sort(key=lambda s: (order[s["priority"]], -(s.get("days_since_contact") or 0)))
     return out
+
+
+# ------------------------------------------------------------------ outreach
+
+
+CHANNEL_STYLE = {
+    "linkedin": "a LinkedIn connection note: under 300 characters, no greeting line, no signature",
+    "email": "a cold email: subject line on the first line prefixed 'Subject: ', then 4-6 short sentences",
+    "website_form": "a website contact-form enquiry: one short paragraph, no subject line",
+    "instagram": "an Instagram direct message: two or three sentences, plain and friendly",
+    "phone": "a call script: three bullet points to cover in under a minute",
+    "whatsapp": "a WhatsApp message: two or three sentences, plain and friendly",
+    "other": "a short introductory message of four or five sentences",
+}
+
+
+def draft_outreach(
+    company_name: str | None,
+    contact_person: str | None,
+    country: str | None,
+    method: str,
+    context: str | None,
+) -> tuple[str, bool]:
+    """Write a first-contact message for a coffee roaster or buyer."""
+    who = company_name or "the company"
+    style = CHANNEL_STYLE.get(method, CHANNEL_STYLE["other"])
+
+    prompt = (
+        f"Write a first-contact message from BeviGrow, a coffee export and "
+        f"import company, to {who}"
+        + (f" in {country}" if country else "")
+        + (f", addressed to {contact_person}" if contact_person else "")
+        + ".\n\n"
+        f"Format: {style}.\n\n"
+        "Rules:\n"
+        "- Lead with what BeviGrow can supply, not with flattery.\n"
+        "- Ask one clear question that is easy to answer.\n"
+        "- No emoji, no exclamation marks, no 'I hope this finds you well'.\n"
+        "- Never invent prices, certifications, volumes or past dealings.\n"
+        "- Output only the message itself.\n"
+        + (f"\nWhat we know about them: {context.strip()}\n" if context else "")
+    )
+    result = _complete(prompt, max_tokens=700)
+    if result:
+        return result, True
+    return _fallback_draft(company_name, contact_person, method), False
+
+
+def _fallback_draft(company_name: str | None, contact_person: str | None, method: str) -> str:
+    who = contact_person or "there"
+    company = company_name or "your team"
+    if method == "linkedin":
+        return (
+            f"Hi {who} — I work with BeviGrow, a coffee export and import company. "
+            f"We supply green and roasted Arabica and Robusta to roasters and "
+            f"distributors. Would {company} be open to seeing our current origin "
+            f"list and indicative pricing?"
+        )
+    return (
+        f"Subject: Green and roasted coffee supply for {company}\n\n"
+        f"Hello {who},\n\n"
+        f"I work with BeviGrow, a coffee export and import company. We supply "
+        f"green and roasted Arabica and Robusta, with flexible volumes and CIF "
+        f"or FOB terms.\n\n"
+        f"Would you be open to receiving our current origin list and indicative "
+        f"pricing? If there is a particular origin or profile you are sourcing, "
+        f"tell me and I will quote against it directly.\n\n"
+        f"Best regards,\nBeviGrow"
+    )
+
+
+def analyse_reply(
+    company_name: str | None, their_reply: str, what_we_sent: str | None = None
+) -> tuple[str, str, str, bool]:
+    """Read their response.
+
+    Returns (summary, suggested_status, suggested_action, used_ai). The status
+    is one of the OutreachStatus values the UI already understands.
+    """
+    valid = {"replied", "waiting_reply", "not_interested", "no_response", "follow_up_needed"}
+
+    prompt = (
+        "A coffee company replied to our outreach. Read the reply and respond "
+        "with ONLY a JSON object (no markdown fence, no commentary) with "
+        "exactly these keys:\n"
+        '  "summary": one or two sentences capturing what they actually said, '
+        "including any volumes, origins, prices, timings or conditions,\n"
+        '  "status": one of "replied", "waiting_reply", "not_interested",\n'
+        '  "next_action": one imperative sentence, max 18 words, saying what we '
+        "should do next.\n\n"
+        "Use \"not_interested\" only when they clearly decline.\n\n"
+        f"Company: {company_name or 'unknown'}\n"
+        + (f"What we sent: {what_we_sent.strip()[:800]}\n" if what_we_sent else "")
+        + f"Their reply: {their_reply.strip()[:2000]}"
+    )
+
+    raw = _complete(prompt, max_tokens=600)
+    if raw:
+        text = raw.strip()
+        fence = re.search(r"```(?:json)?\s*(.*?)```", text, re.S)
+        if fence:
+            text = fence.group(1).strip()
+        start, end = text.find("{"), text.rfind("}")
+        if start != -1 and end > start:
+            try:
+                data = json.loads(text[start : end + 1])
+                summary = str(data.get("summary", "")).strip()
+                status = str(data.get("status", "replied")).strip().lower()
+                action = str(data.get("next_action", "")).strip()
+                if summary:
+                    return (
+                        summary,
+                        status if status in valid else "replied",
+                        action or "Reply and propose a concrete next step.",
+                        True,
+                    )
+            except json.JSONDecodeError:
+                log.warning("Could not parse the reply analysis as JSON")
+
+    cleaned = " ".join(their_reply.split())
+    return (
+        cleaned[:280] + ("…" if len(cleaned) > 280 else ""),
+        "replied",
+        "Read their reply and respond with a concrete next step.",
+        False,
+    )

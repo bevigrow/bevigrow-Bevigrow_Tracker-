@@ -157,7 +157,7 @@ export function Activities() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <Link
-                      to={`/app/contacts/${a.contact_id}`}
+                      to={`/app/trade/quotes/${a.contact_id}`}
                       className="text-sm font-semibold text-latte hover:text-gold"
                     >
                       {a.contact_company ?? `Account #${a.contact_id}`}

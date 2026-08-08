@@ -1,0 +1,692 @@
+import { Clock, Globe, Plus, Search, Send, Sparkles, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+
+import {
+  Button,
+  Card,
+  ConfirmDialog,
+  EmptyState,
+  Field,
+  Input,
+  Modal,
+  Select,
+  Skeleton,
+  Textarea,
+} from '../components/ui'
+import { ApiError, api } from '../lib/api'
+import {
+  METHOD_META,
+  METHOD_ORDER,
+  OUTREACH_META,
+  OUTREACH_ORDER,
+  formatDate,
+  outreachLabel,
+  relativeDays,
+} from '../lib/format'
+import { useToast } from '../lib/toast'
+import type { ContactMethod, Outreach as Row, OutreachStats, OutreachStatus } from '../lib/types'
+
+/** Status pill. Colour always ships with the label, never alone. */
+function StatusPill({ status }: { status: OutreachStatus }) {
+  const m = OUTREACH_META[status]
+  return (
+    <span
+      className="chip"
+      style={{ borderColor: `${m.hex}66`, backgroundColor: `${m.hex}1f`, color: m.hex }}
+    >
+      <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: m.hex }} />
+      {m.label}
+    </span>
+  )
+}
+
+export function Outreach() {
+  const toast = useToast()
+  const [rows, setRows] = useState<Row[]>([])
+  const [stats, setStats] = useState<OutreachStats | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  const [search, setSearch] = useState('')
+  const [method, setMethod] = useState('')
+  const [status, setStatus] = useState('')
+  const [dueOnly, setDueOnly] = useState(false)
+
+  const [editing, setEditing] = useState<Row | null>(null)
+  const [creating, setCreating] = useState(false)
+  const [deleting, setDeleting] = useState<Row | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [list, s] = await Promise.all([
+        api.listOutreach({
+          search: search.trim() || undefined,
+          contact_method: method || undefined,
+          status: status || undefined,
+          due: dueOnly || undefined,
+        }),
+        api.outreachStats().catch(() => null),
+      ])
+      setRows(list)
+      setStats(s)
+    } catch {
+      toast.error('Could not load the outreach list.')
+    } finally {
+      setLoading(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, method, status, dueOnly])
+
+  useEffect(() => {
+    const id = window.setTimeout(() => void load(), 300)
+    return () => window.clearTimeout(id)
+  }, [load])
+
+  const followUp = async (row: Row) => {
+    try {
+      const updated = await api.logFollowUp(row.id)
+      setRows((list) => list.map((r) => (r.id === row.id ? updated : r)))
+      toast.success(`Follow-up logged. Next one ${relativeDays(updated.next_follow_up)}.`)
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not log the follow-up.')
+    }
+  }
+
+  const remove = async () => {
+    if (!deleting) return
+    try {
+      await api.deleteOutreach(deleting.id)
+      setRows((list) => list.filter((r) => r.id !== deleting.id))
+      toast.success('Record removed.')
+    } catch {
+      toast.error('Could not delete the record.')
+    } finally {
+      setDeleting(null)
+    }
+  }
+
+  const filtered = search || method || status || dueOnly
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="font-display text-3xl text-latte">Outreach</h1>
+          <p className="mt-1 text-sm text-latte/50">
+            {loading ? 'Loading…' : `${rows.length} compan${rows.length === 1 ? 'y' : 'ies'}`}
+            {filtered && ' matching your filters'}
+          </p>
+        </div>
+        <Button onClick={() => setCreating(true)} icon={<Plus size={16} />}>
+          Log Outreach
+        </Button>
+      </div>
+
+      {/* Four numbers, not a dashboard. */}
+      {stats && stats.total > 0 && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Stat label="Tracked" value={stats.total} />
+          <Stat label="Awaiting reply" value={stats.awaiting_reply} />
+          <Stat label="Replied" value={stats.replied} accent="#4FD18B" />
+          <Stat
+            label="Due now"
+            value={stats.due_today + stats.overdue}
+            accent={stats.due_today + stats.overdue > 0 ? '#E0A458' : undefined}
+          />
+        </div>
+      )}
+
+      <Card className="!p-4">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="relative">
+            <Search
+              size={15}
+              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-latte/35"
+            />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search company, person, website, notes…"
+              className="pl-10"
+              aria-label="Search outreach"
+            />
+          </div>
+          <Select
+            value={method}
+            onChange={(e) => setMethod(e.target.value)}
+            aria-label="Filter by contact method"
+            options={[
+              { value: '', label: 'All channels' },
+              ...METHOD_ORDER.map((m) => ({ value: m, label: METHOD_META[m].label })),
+            ]}
+          />
+          <Select
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            aria-label="Filter by status"
+            options={[
+              { value: '', label: 'All statuses' },
+              ...OUTREACH_ORDER.map((s) => ({ value: s, label: outreachLabel(s) })),
+            ]}
+          />
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-4">
+          <label className="flex cursor-pointer items-center gap-2 text-xs text-latte/55">
+            <input
+              type="checkbox"
+              checked={dueOnly}
+              onChange={(e) => setDueOnly(e.target.checked)}
+              className="h-4 w-4 accent-[#D9A05B]"
+            />
+            Only show follow-ups that are due
+          </label>
+          {filtered && (
+            <button
+              onClick={() => {
+                setSearch('')
+                setMethod('')
+                setStatus('')
+                setDueOnly(false)
+              }}
+              className="text-xs text-gold hover:underline"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+      </Card>
+
+      {loading ? (
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-28 w-full" />
+          ))}
+        </div>
+      ) : rows.length === 0 ? (
+        <EmptyState
+          emoji="📮"
+          title={filtered ? 'Nothing matches those filters' : 'No outreach logged yet'}
+          hint={
+            filtered
+              ? 'Try widening the search.'
+              : 'Record the first roaster you contacted — where you found them, what you sent, and when to chase.'
+          }
+          action={
+            filtered ? undefined : (
+              <Button onClick={() => setCreating(true)} icon={<Plus size={16} />}>
+                Log Outreach
+              </Button>
+            )
+          }
+        />
+      ) : (
+        <div className="space-y-3">
+          {rows.map((r) => {
+            const overdue =
+              r.next_follow_up &&
+              new Date(r.next_follow_up) <= new Date(new Date().toDateString()) &&
+              r.status !== 'no_response' &&
+              r.status !== 'not_interested'
+            return (
+              <Card key={r.id} className="!p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <button
+                    onClick={() => setEditing(r)}
+                    className="min-w-0 flex-1 text-left"
+                    aria-label={`Open ${r.company_name}`}
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium text-latte">{r.company_name}</span>
+                      {r.contact_person && (
+                        <span className="text-[11px] text-latte/45">· {r.contact_person}</span>
+                      )}
+                      {r.country && <span className="text-[11px] text-latte/35">{r.country}</span>}
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <StatusPill status={r.status} />
+                      <span className="chip border-caramel/25 bg-bean/40 text-latte/55">
+                        {METHOD_META[r.contact_method].icon} {METHOD_META[r.contact_method].label}
+                      </span>
+                      {r.follow_ups_sent > 0 && (
+                        <span className="text-[11px] text-latte/40">
+                          {r.follow_ups_sent} follow-up{r.follow_ups_sent === 1 ? '' : 's'}
+                        </span>
+                      )}
+                    </div>
+                    {(r.reply_summary || r.their_reply) && (
+                      <p className="mt-2 line-clamp-2 rounded-lg border border-emerald-400/20 bg-emerald-400/[0.06] px-3 py-2 text-[12px] leading-relaxed text-latte/75">
+                        {r.reply_summary || r.their_reply}
+                      </p>
+                    )}
+                    {r.next_action && (
+                      <p className="mt-2 text-[12px] text-gold/85">→ {r.next_action}</p>
+                    )}
+                    <p className="mt-2 text-[11px] text-latte/35">
+                      {r.contacted_on ? `Contacted ${formatDate(r.contacted_on)}` : 'Not yet sent'}
+                      {r.next_follow_up && (
+                        <>
+                          {' · '}
+                          <span className={overdue ? 'text-gold' : ''}>
+                            next {relativeDays(r.next_follow_up)}
+                          </span>
+                        </>
+                      )}
+                    </p>
+                  </button>
+
+                  <div className="flex shrink-0 items-center gap-1">
+                    {r.website && (
+                      <a
+                        href={r.website.startsWith('http') ? r.website : `https://${r.website}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-lg p-2 text-latte/40 transition hover:bg-latte/10 hover:text-gold"
+                        aria-label={`Open ${r.company_name} website`}
+                      >
+                        <Globe size={15} />
+                      </a>
+                    )}
+                    <button
+                      onClick={() => followUp(r)}
+                      className="rounded-lg p-2 text-latte/40 transition hover:bg-gold/15 hover:text-gold"
+                      aria-label={`Log a follow-up for ${r.company_name}`}
+                      title="I chased them again today"
+                    >
+                      <Clock size={15} />
+                    </button>
+                    <button
+                      onClick={() => setDeleting(r)}
+                      className="rounded-lg p-2 text-latte/40 transition hover:bg-red-500/15 hover:text-red-300"
+                      aria-label={`Delete ${r.company_name}`}
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                </div>
+              </Card>
+            )
+          })}
+        </div>
+      )}
+
+      <OutreachModal
+        open={creating || !!editing}
+        row={editing}
+        onClose={() => {
+          setCreating(false)
+          setEditing(null)
+        }}
+        onSaved={() => {
+          setCreating(false)
+          setEditing(null)
+          void load()
+        }}
+      />
+
+      <ConfirmDialog
+        open={!!deleting}
+        title="Delete this record?"
+        message={`Everything recorded about ${deleting?.company_name} will be permanently removed.`}
+        onConfirm={remove}
+        onCancel={() => setDeleting(null)}
+      />
+    </div>
+  )
+}
+
+function Stat({ label, value, accent }: { label: string; value: number; accent?: string }) {
+  return (
+    <div className="rounded-xl border border-caramel/15 bg-espresso/40 px-4 py-3">
+      <p className="font-body text-2xl font-semibold" style={{ color: accent ?? undefined }}>
+        {value}
+      </p>
+      <p className="mt-0.5 text-[11px] uppercase tracking-wider text-latte/45">{label}</p>
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────────── the form */
+
+const EMPTY = {
+  company_name: '',
+  contact_person: '',
+  website: '',
+  email: '',
+  country: '',
+  contact_method: 'email' as ContactMethod,
+  contact_point: '',
+  contacted_on: '',
+  message_sent: '',
+  status: 'follow_up_needed' as OutreachStatus,
+  their_reply: '',
+  replied_on: '',
+  next_action: '',
+  next_follow_up: '',
+  notes: '',
+}
+
+function OutreachModal({
+  open,
+  row,
+  onClose,
+  onSaved,
+}: {
+  open: boolean
+  row: Row | null
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const toast = useToast()
+  const [form, setForm] = useState(EMPTY)
+  const [busy, setBusy] = useState(false)
+  const [drafting, setDrafting] = useState(false)
+  const [reading, setReading] = useState(false)
+
+  useEffect(() => {
+    const str = (v: string | null | undefined) => v ?? ''
+    setForm(
+      row
+        ? {
+            company_name: str(row.company_name),
+            contact_person: str(row.contact_person),
+            website: str(row.website),
+            email: str(row.email),
+            country: str(row.country),
+            contact_method: row.contact_method,
+            contact_point: str(row.contact_point),
+            contacted_on: str(row.contacted_on),
+            message_sent: str(row.message_sent),
+            status: row.status,
+            their_reply: str(row.their_reply),
+            replied_on: str(row.replied_on),
+            next_action: str(row.next_action),
+            next_follow_up: str(row.next_follow_up),
+            notes: str(row.notes),
+          }
+        : EMPTY,
+    )
+  }, [row, open])
+
+  const set = (k: keyof typeof EMPTY) => (v: string) => setForm((f) => ({ ...f, [k]: v }))
+  const text = (v: string) => (v.trim() ? v.trim() : null)
+
+  /** Ask the AI for a first-contact message written for this channel. */
+  const draft = async () => {
+    setDrafting(true)
+    try {
+      const res = await api.draftMessage({
+        company_name: text(form.company_name),
+        contact_person: text(form.contact_person),
+        country: text(form.country),
+        contact_method: form.contact_method,
+        context: text(form.notes),
+      })
+      setForm((f) => ({ ...f, message_sent: res.message }))
+      toast[res.ai_enabled ? 'success' : 'info'](
+        res.ai_enabled ? 'Draft written — edit it before sending.' : 'AI is off; inserted a template.',
+      )
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not draft a message.')
+    } finally {
+      setDrafting(false)
+    }
+  }
+
+  /** Save first (the reply must exist server-side), then have the AI read it. */
+  const readReply = async () => {
+    if (!row) {
+      toast.info('Save the record first, then the AI can read the reply.')
+      return
+    }
+    if (!form.their_reply.trim()) {
+      toast.error('Paste their reply first.')
+      return
+    }
+    setReading(true)
+    try {
+      await api.updateOutreach(row.id, { their_reply: form.their_reply.trim() })
+      const res = await api.analyseReply(row.id)
+      setForm((f) => ({
+        ...f,
+        status: res.suggested_status,
+        next_action: f.next_action.trim() || res.suggested_action,
+      }))
+      toast[res.ai_enabled ? 'success' : 'info'](
+        res.ai_enabled ? 'Reply read and summarised.' : 'AI is off; saved the reply as written.',
+      )
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not read the reply.')
+    } finally {
+      setReading(false)
+    }
+  }
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setBusy(true)
+    const payload: Record<string, unknown> = {
+      company_name: text(form.company_name),
+      contact_person: text(form.contact_person),
+      website: text(form.website),
+      email: text(form.email),
+      country: text(form.country),
+      contact_method: form.contact_method,
+      contact_point: text(form.contact_point),
+      contacted_on: form.contacted_on || null,
+      message_sent: text(form.message_sent),
+      status: form.status,
+      their_reply: text(form.their_reply),
+      replied_on: form.replied_on || null,
+      next_action: text(form.next_action),
+      next_follow_up: form.next_follow_up || null,
+      notes: text(form.notes),
+    }
+    try {
+      if (row) await api.updateOutreach(row.id, payload)
+      else await api.createOutreach(payload)
+      toast.success(row ? 'Record updated.' : '📮 Outreach logged.')
+      onSaved()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not save the record.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={row ? row.company_name : 'Log Outreach'}
+      subtitle="Nothing is required — save whatever you have"
+      width="max-w-3xl"
+    >
+      <form onSubmit={submit} noValidate className="space-y-5">
+        {/* who */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Company">
+            <Input
+              value={form.company_name}
+              onChange={(e) => set('company_name')(e.target.value)}
+              placeholder="Oslo Specialty Roastery"
+            />
+          </Field>
+          <Field label="Contact person">
+            <Input
+              value={form.contact_person}
+              onChange={(e) => set('contact_person')(e.target.value)}
+              placeholder="Ingrid"
+            />
+          </Field>
+          <Field label="Website">
+            <Input
+              value={form.website}
+              onChange={(e) => set('website')(e.target.value)}
+              placeholder="oslospecialty.no"
+            />
+          </Field>
+          <Field label="Country">
+            <Input
+              value={form.country}
+              onChange={(e) => set('country')(e.target.value)}
+              placeholder="Norway"
+            />
+          </Field>
+        </div>
+
+        {/* where we contacted them */}
+        <div className="rounded-xl border border-caramel/15 bg-bean/25 p-4">
+          <p className="mb-3 text-[11px] uppercase tracking-wider text-gold/70">
+            Where we contacted them
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Channel">
+              <Select
+                value={form.contact_method}
+                onChange={(e) => set('contact_method')(e.target.value)}
+                options={METHOD_ORDER.map((m) => ({
+                  value: m,
+                  label: `${METHOD_META[m].icon}  ${METHOD_META[m].label}`,
+                }))}
+              />
+            </Field>
+            <Field
+              label="Exact place"
+              hint="The LinkedIn URL, the contact-form page, the inbox"
+            >
+              <Input
+                value={form.contact_point}
+                onChange={(e) => set('contact_point')(e.target.value)}
+                placeholder="oslospecialty.no/contact"
+              />
+            </Field>
+            <Field label="Email (if they have one)">
+              <Input
+                value={form.email}
+                onChange={(e) => set('email')(e.target.value)}
+                placeholder="—"
+              />
+            </Field>
+            <Field label="Date contacted">
+              <Input
+                type="date"
+                value={form.contacted_on}
+                onChange={(e) => set('contacted_on')(e.target.value)}
+              />
+            </Field>
+          </div>
+        </div>
+
+        {/* what we sent */}
+        <Field label="Message we sent">
+          <div className="mb-2 flex justify-end">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={draft}
+              loading={drafting}
+              icon={<Sparkles size={13} />}
+              className="px-3 py-1.5 text-xs"
+            >
+              Draft with AI
+            </Button>
+          </div>
+          <Textarea
+            rows={5}
+            value={form.message_sent}
+            onChange={(e) => set('message_sent')(e.target.value)}
+            placeholder="Paste what you sent, or let the AI draft it for this channel."
+          />
+        </Field>
+
+        {/* what came back */}
+        <div className="rounded-xl border border-caramel/15 bg-bean/25 p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[11px] uppercase tracking-wider text-gold/70">What came back</p>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={readReply}
+              loading={reading}
+              icon={<Sparkles size={13} />}
+              className="px-3 py-1.5 text-xs"
+            >
+              Read reply with AI
+            </Button>
+          </div>
+
+          <Field label="Their reply" className="mb-4">
+            <Textarea
+              rows={4}
+              value={form.their_reply}
+              onChange={(e) => set('their_reply')(e.target.value)}
+              placeholder="Paste exactly what they wrote back."
+            />
+          </Field>
+
+          {row?.reply_summary && (
+            <p className="mb-4 rounded-lg border border-emerald-400/25 bg-emerald-400/[0.07] p-3 text-[12px] leading-relaxed text-latte/80">
+              <span className="mb-1 block text-[10px] uppercase tracking-wider text-emerald-300/70">
+                AI summary
+              </span>
+              {row.reply_summary}
+            </p>
+          )}
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Status">
+              <Select
+                value={form.status}
+                onChange={(e) => set('status')(e.target.value)}
+                options={OUTREACH_ORDER.map((s) => ({ value: s, label: outreachLabel(s) }))}
+              />
+            </Field>
+            <Field label="Date they replied">
+              <Input
+                type="date"
+                value={form.replied_on}
+                onChange={(e) => set('replied_on')(e.target.value)}
+              />
+            </Field>
+          </div>
+        </div>
+
+        {/* what next */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Our next action">
+            <Input
+              value={form.next_action}
+              onChange={(e) => set('next_action')(e.target.value)}
+              placeholder="Send FOB pricing and a sample"
+            />
+          </Field>
+          <Field label="Next follow-up date">
+            <Input
+              type="date"
+              value={form.next_follow_up}
+              onChange={(e) => set('next_follow_up')(e.target.value)}
+            />
+          </Field>
+        </div>
+
+        <Field label="Notes / memory" hint="Anything worth remembering next time you talk">
+          <Textarea
+            rows={3}
+            value={form.notes}
+            onChange={(e) => set('notes')(e.target.value)}
+            placeholder="No email or LinkedIn published. Small-batch roaster, around 200 kg a month. Asked to be contacted after harvest."
+          />
+        </Field>
+
+        <div className="flex justify-end gap-3 border-t border-caramel/15 pt-4">
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" loading={busy} icon={<Send size={14} />}>
+            {row ? 'Save changes' : 'Log outreach'}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  )
+}

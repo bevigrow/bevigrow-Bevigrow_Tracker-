@@ -90,12 +90,12 @@ export function Dashboard() {
   const firstName = user?.name?.split(' ')[0] ?? 'there'
 
   const KPI_CARDS = [
-    { icon: Coffee, label: 'New Coffee Leads', value: k.new_leads, tint: ROAST_RAMP[4], to: '/app/contacts?status=new_lead' },
-    { icon: Globe2, label: 'Export Orders', value: k.export_orders, tint: CATEGORICAL[0], to: '/app/contacts?trade_type=export' },
-    { icon: Download, label: 'Import Orders', value: k.import_orders, tint: CATEGORICAL[1], to: '/app/contacts?trade_type=import' },
-    { icon: Ship, label: 'Shipments in Progress', value: k.shipments_in_progress, tint: ROAST_RAMP[2], to: '/app/pipeline' },
-    { icon: CheckCircle2, label: 'Completed Orders', value: k.completed_orders, tint: CATEGORICAL[2], to: '/app/contacts?status=completed' },
-    { icon: Clock, label: 'Pending Follow-ups', value: k.pending_follow_ups, tint: '#D9705B', to: '/app/reminders' },
+    { icon: Coffee, label: 'New Coffee Leads', value: k.new_leads, tint: ROAST_RAMP[4], to: '/app/trade/quotes?status=new_lead' },
+    { icon: Globe2, label: 'Export Orders', value: k.export_orders, tint: CATEGORICAL[0], to: '/app/trade/quotes?trade_type=export' },
+    { icon: Download, label: 'Import Orders', value: k.import_orders, tint: CATEGORICAL[1], to: '/app/trade/quotes?trade_type=import' },
+    { icon: Ship, label: 'Shipments in Progress', value: k.shipments_in_progress, tint: ROAST_RAMP[2], to: '/app/trade/pipeline' },
+    { icon: CheckCircle2, label: 'Completed Orders', value: k.completed_orders, tint: CATEGORICAL[2], to: '/app/trade/quotes?status=completed' },
+    { icon: Clock, label: 'Pending Follow-ups', value: k.pending_follow_ups, tint: '#D9705B', to: '/app/trade/follow-ups' },
   ]
 
   const pipelineBars = data.by_status
@@ -277,7 +277,7 @@ export function Dashboard() {
         <Card>
           <div className="mb-4 flex items-center justify-between">
             <h3 className="font-display text-lg text-latte">Recent Interactions</h3>
-            <Link to="/app/activities" className="text-xs text-gold hover:underline">
+            <Link to="/app/trade/activity" className="text-xs text-gold hover:underline">
               View all
             </Link>
           </div>
@@ -313,7 +313,7 @@ export function Dashboard() {
         <Card>
           <div className="mb-4 flex items-center justify-between">
             <h3 className="font-display text-lg text-latte">Upcoming Follow-ups</h3>
-            <Link to="/app/reminders" className="text-xs text-gold hover:underline">
+            <Link to="/app/trade/follow-ups" className="text-xs text-gold hover:underline">
               Manage
             </Link>
           </div>

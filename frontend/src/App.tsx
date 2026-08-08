@@ -7,11 +7,11 @@ import { EmptyState, Spinner } from './components/ui'
 import { AuthProvider, useAuth } from './lib/auth'
 import { ToastProvider } from './lib/toast'
 import type { Role } from './lib/types'
-import { Dashboard } from './pages/Dashboard'
+import { Hub } from './pages/Hub'
 import { Login } from './pages/Login'
 
-// The landing page pulls in Three.js and GSAP (~950 kB). Splitting it out keeps
-// that weight off every authenticated route — the dashboard never loads it.
+// Every route is split, so a visit to Outreach never downloads the trade
+// dashboard's charts and vice versa.
 const Landing = lazy(() => import('./pages/Landing').then((m) => ({ default: m.Landing })))
 const SignUp = lazy(() => import('./pages/auth/SignUp').then((m) => ({ default: m.SignUp })))
 const ForgotPassword = lazy(() =>
@@ -20,6 +20,7 @@ const ForgotPassword = lazy(() =>
 const ResetPassword = lazy(() =>
   import('./pages/auth/ResetPassword').then((m) => ({ default: m.ResetPassword })),
 )
+const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })))
 const Pipeline = lazy(() => import('./pages/Pipeline').then((m) => ({ default: m.Pipeline })))
 const Contacts = lazy(() => import('./pages/Contacts').then((m) => ({ default: m.Contacts })))
 const ContactDetail = lazy(() =>
@@ -28,10 +29,10 @@ const ContactDetail = lazy(() =>
 const Activities = lazy(() => import('./pages/Activities').then((m) => ({ default: m.Activities })))
 const Documents = lazy(() => import('./pages/Documents').then((m) => ({ default: m.Documents })))
 const Reminders = lazy(() => import('./pages/Reminders').then((m) => ({ default: m.Reminders })))
+const Outreach = lazy(() => import('./pages/Outreach').then((m) => ({ default: m.Outreach })))
 const Team = lazy(() => import('./pages/Team').then((m) => ({ default: m.Team })))
 const Profile = lazy(() => import('./pages/Profile').then((m) => ({ default: m.Profile })))
 
-/** Requires a signed-in user, and optionally one of a set of roles. */
 function RequireAuth({ children, roles }: { children: ReactNode; roles?: Role[] }) {
   const { user, loading } = useAuth()
 
@@ -44,8 +45,8 @@ function RequireAuth({ children, roles }: { children: ReactNode; roles?: Role[] 
   }
   if (!user) return <Navigate to="/login" replace />
 
-  // The API enforces this too — the guard here only avoids showing a page that
-  // would fail on every request.
+  // The API enforces this too — the guard only avoids showing a page whose
+  // every request would be rejected.
   if (roles && !roles.includes(user.role)) {
     return (
       <EmptyState
@@ -58,16 +59,12 @@ function RequireAuth({ children, roles }: { children: ReactNode; roles?: Role[] 
   return <>{children}</>
 }
 
-function PageFallback() {
-  return <Spinner label="Brewing…" />
-}
-
 export default function App() {
   return (
     <Router>
       <ToastProvider>
         <AuthProvider>
-          <Suspense fallback={<PageFallback />}>
+          <Suspense fallback={<Spinner label="Brewing…" />}>
             <Routes>
               {/* public */}
               <Route path="/" element={<Landing />} />
@@ -85,13 +82,22 @@ export default function App() {
                   </RequireAuth>
                 }
               >
-                <Route index element={<Dashboard />} />
-                <Route path="pipeline" element={<Pipeline />} />
-                <Route path="contacts" element={<Contacts />} />
-                <Route path="contacts/:id" element={<ContactDetail />} />
-                <Route path="activities" element={<Activities />} />
-                <Route path="documents" element={<Documents />} />
-                <Route path="reminders" element={<Reminders />} />
+                {/* the choice between the two workspaces */}
+                <Route index element={<Hub />} />
+
+                {/* workspace 1 — inbound quoting */}
+                <Route path="trade" element={<Dashboard />} />
+                <Route path="trade/quotes" element={<Contacts />} />
+                <Route path="trade/quotes/:id" element={<ContactDetail />} />
+                <Route path="trade/pipeline" element={<Pipeline />} />
+                <Route path="trade/activity" element={<Activities />} />
+                <Route path="trade/documents" element={<Documents />} />
+                <Route path="trade/follow-ups" element={<Reminders />} />
+
+                {/* workspace 2 — outbound prospecting */}
+                <Route path="outreach" element={<Outreach />} />
+
+                {/* shared */}
                 <Route path="profile" element={<Profile />} />
                 <Route
                   path="team"
@@ -101,6 +107,14 @@ export default function App() {
                     </RequireAuth>
                   }
                 />
+
+                {/* the old flat URLs, kept so existing links and bookmarks work */}
+                <Route path="contacts" element={<Navigate to="/app/trade/quotes" replace />} />
+                <Route path="contacts/:id" element={<LegacyQuoteRedirect />} />
+                <Route path="pipeline" element={<Navigate to="/app/trade/pipeline" replace />} />
+                <Route path="activities" element={<Navigate to="/app/trade/activity" replace />} />
+                <Route path="documents" element={<Navigate to="/app/trade/documents" replace />} />
+                <Route path="reminders" element={<Navigate to="/app/trade/follow-ups" replace />} />
               </Route>
 
               <Route path="*" element={<Navigate to="/" replace />} />
@@ -110,4 +124,10 @@ export default function App() {
       </ToastProvider>
     </Router>
   )
+}
+
+/** /app/contacts/12 → /app/trade/quotes/12 */
+function LegacyQuoteRedirect() {
+  const id = window.location.pathname.split('/').pop()
+  return <Navigate to={`/app/trade/quotes/${id}`} replace />
 }

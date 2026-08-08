@@ -85,6 +85,32 @@ class AuthProvider(str, enum.Enum):
     google = "google"
 
 
+class ContactMethod(str, enum.Enum):
+    """How we reached out. Website form matters because many small roasters
+    publish neither an email address nor a LinkedIn profile."""
+
+    linkedin = "linkedin"
+    email = "email"
+    website_form = "website_form"
+    instagram = "instagram"
+    phone = "phone"
+    whatsapp = "whatsapp"
+    other = "other"
+
+
+class OutreachStatus(str, enum.Enum):
+    follow_up_needed = "follow_up_needed"
+    follow_up_sent = "follow_up_sent"
+    waiting_reply = "waiting_reply"
+    replied = "replied"
+    no_response = "no_response"
+    not_interested = "not_interested"
+
+
+# Statuses where the conversation is over, one way or the other.
+OUTREACH_CLOSED = {OutreachStatus.not_interested, OutreachStatus.no_response}
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -267,4 +293,65 @@ class AIInsight(Base):
     model: Mapped[str] = mapped_column(String(60), default="")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, index=True
+    )
+
+
+class Outreach(Base):
+    """One company we have reached out to, and everything that followed.
+
+    Deliberately separate from `Contact`. A Contact is an inbound enquiry that
+    already wants coffee and moves through a quoting pipeline. An Outreach row
+    is cold prospecting: we found a roaster, we messaged them somewhere, and we
+    are waiting to hear back. Forcing both through one table would mean every
+    quote carried empty outreach fields and every prospect carried empty trade
+    terms.
+
+    The whole conversation lives on the row rather than in a child table —
+    outbound prospecting is a handful of touches, not a long history, and one
+    row per company keeps the list scannable.
+    """
+
+    __tablename__ = "outreach"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # Nothing is mandatory except a name to file it under.
+    company_name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    contact_person: Mapped[str | None] = mapped_column(String(150))
+    website: Mapped[str | None] = mapped_column(String(300))
+    email: Mapped[str | None] = mapped_column(String(255))
+    country: Mapped[str | None] = mapped_column(String(100), index=True)
+
+    contact_method: Mapped[ContactMethod] = mapped_column(
+        Enum(ContactMethod, native_enum=False), default=ContactMethod.email, index=True
+    )
+    # Where exactly, when the method alone is not enough: a LinkedIn URL, the
+    # contact-form page, the inbox the message went to.
+    contact_point: Mapped[str | None] = mapped_column(String(300))
+
+    contacted_on: Mapped[date | None] = mapped_column(Date, index=True)
+    message_sent: Mapped[str | None] = mapped_column(Text)
+
+    status: Mapped[OutreachStatus] = mapped_column(
+        Enum(OutreachStatus, native_enum=False),
+        default=OutreachStatus.follow_up_needed,
+        index=True,
+    )
+    their_reply: Mapped[str | None] = mapped_column(Text)
+    reply_summary: Mapped[str | None] = mapped_column(Text)
+    replied_on: Mapped[date | None] = mapped_column(Date)
+
+    next_action: Mapped[str | None] = mapped_column(Text)
+    next_follow_up: Mapped[date | None] = mapped_column(Date, index=True)
+    follow_ups_sent: Mapped[int] = mapped_column(Integer, default=0)
+
+    # The digital memory: anything worth remembering next time we talk.
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    owner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    owner: Mapped["User | None"] = relationship()
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )

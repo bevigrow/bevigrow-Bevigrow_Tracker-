@@ -97,7 +97,7 @@ export function ContactDetail() {
     try {
       await api.deleteContact(contact.id)
       toast.success('Account removed.')
-      navigate('/app/contacts')
+      navigate('/app/trade/quotes')
     } catch {
       toast.error('Could not delete the account.')
     }
@@ -109,7 +109,7 @@ export function ContactDetail() {
       <EmptyState
         emoji="🔍"
         title="Account not found"
-        action={<Link to="/app/contacts" className="btn-primary">Back to accounts</Link>}
+        action={<Link to="/app/trade/quotes" className="btn-primary">Back to accounts</Link>}
       />
     )
   }
@@ -117,7 +117,7 @@ export function ContactDetail() {
   return (
     <div className="space-y-6">
       <Link
-        to="/app/contacts"
+        to="/app/trade/quotes"
         className="inline-flex items-center gap-2 text-sm text-latte/50 transition hover:text-latte"
       >
         <ArrowLeft size={15} />

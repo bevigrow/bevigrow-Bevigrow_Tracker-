@@ -181,3 +181,54 @@ export function initials(name: string) {
     .map((p) => p[0]?.toUpperCase() ?? '')
     .join('')
 }
+
+
+/* ------------------------------------------------------------- outreach */
+
+import type { ContactMethod, OutreachStatus } from './types'
+
+export const METHOD_META: Record<ContactMethod, { label: string; icon: string }> = {
+  linkedin: { label: 'LinkedIn', icon: '🔗' },
+  email: { label: 'Email', icon: '✉️' },
+  website_form: { label: 'Website enquiry', icon: '🌐' },
+  instagram: { label: 'Instagram', icon: '📷' },
+  phone: { label: 'Phone', icon: '📞' },
+  whatsapp: { label: 'WhatsApp', icon: '💬' },
+  other: { label: 'Other', icon: '☕' },
+}
+
+export const METHOD_ORDER: ContactMethod[] = [
+  'email',
+  'linkedin',
+  'website_form',
+  'instagram',
+  'whatsapp',
+  'phone',
+  'other',
+]
+
+/**
+ * Outreach statuses. Same rule as the deal statuses: every colour clears 4.5:1
+ * on the dark surface, and each always ships beside its label.
+ */
+export const OUTREACH_META: Record<OutreachStatus, { label: string; hex: string }> = {
+  follow_up_needed: { label: 'Follow-up needed', hex: '#E0A458' },
+  follow_up_sent: { label: 'Follow-up sent', hex: '#DCAB63' },
+  waiting_reply: { label: 'Waiting for reply', hex: '#7FC7E8' },
+  replied: { label: 'Replied', hex: '#4FD18B' },
+  no_response: { label: 'No response', hex: '#C99A6B' },
+  not_interested: { label: 'Not interested', hex: '#EA8C8C' },
+}
+
+export const OUTREACH_ORDER: OutreachStatus[] = [
+  'follow_up_needed',
+  'follow_up_sent',
+  'waiting_reply',
+  'replied',
+  'no_response',
+  'not_interested',
+]
+
+export function outreachLabel(s: OutreachStatus) {
+  return OUTREACH_META[s]?.label ?? s
+}

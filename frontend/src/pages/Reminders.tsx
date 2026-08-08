@@ -178,7 +178,7 @@ export function Reminders() {
                 <div className="flex flex-wrap items-center gap-2">
                   <PriorityBadge priority={s.priority} />
                   <Link
-                    to={`/app/contacts/${s.contact_id}`}
+                    to={`/app/trade/quotes/${s.contact_id}`}
                     className="text-sm font-semibold text-latte hover:text-gold"
                   >
                     {s.company_name}
@@ -250,7 +250,7 @@ export function Reminders() {
                     </p>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px]">
                       <Link
-                        to={`/app/contacts/${r.contact_id}`}
+                        to={`/app/trade/quotes/${r.contact_id}`}
                         className="text-latte/50 hover:text-gold"
                       >
                         {r.contact_company ?? `Account #${r.contact_id}`}

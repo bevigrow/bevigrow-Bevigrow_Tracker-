@@ -195,3 +195,70 @@ export interface LeaderboardRow {
   name: string
   activities: number
 }
+
+
+/* ------------------------------------------------------------- outreach */
+
+export type ContactMethod =
+  | 'linkedin'
+  | 'email'
+  | 'website_form'
+  | 'instagram'
+  | 'phone'
+  | 'whatsapp'
+  | 'other'
+
+export type OutreachStatus =
+  | 'follow_up_needed'
+  | 'follow_up_sent'
+  | 'waiting_reply'
+  | 'replied'
+  | 'no_response'
+  | 'not_interested'
+
+/** One company we contacted, and everything that came back. */
+export interface Outreach {
+  id: number
+  company_name: string
+  contact_person: string | null
+  website: string | null
+  email: string | null
+  country: string | null
+  contact_method: ContactMethod
+  /** The exact place: a LinkedIn URL, the contact-form page, an inbox. */
+  contact_point: string | null
+  contacted_on: string | null
+  message_sent: string | null
+  status: OutreachStatus
+  their_reply: string | null
+  reply_summary: string | null
+  replied_on: string | null
+  next_action: string | null
+  next_follow_up: string | null
+  follow_ups_sent: number
+  notes: string | null
+  owner_id: number | null
+  owner: User | null
+  created_at: string
+  updated_at: string
+}
+
+export interface OutreachStats {
+  total: number
+  awaiting_reply: number
+  replied: number
+  due_today: number
+  overdue: number
+  no_response: number
+  not_interested: number
+  reply_rate: number
+  by_method: Record<string, number>
+}
+
+export interface ReplyAnalysis {
+  summary: string
+  suggested_status: OutreachStatus
+  suggested_action: string
+  model: string
+  ai_enabled: boolean
+}

@@ -1,12 +1,14 @@
 import {
   BarChart3,
   Bell,
+  ChevronLeft,
   Coffee,
   FileText,
   LayoutDashboard,
   LogOut,
   Menu,
   MessageSquare,
+  Send,
   Users,
   Users2,
   X,
@@ -15,9 +17,8 @@ import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 
 import { useAuth } from '../../lib/auth'
-import type { Role } from '../../lib/types'
 import { initials } from '../../lib/format'
-import { Steam } from '../coffee/Ambient'
+import type { Role } from '../../lib/types'
 import { cx } from '../ui'
 
 interface NavItem {
@@ -29,29 +30,47 @@ interface NavItem {
   roles?: Role[]
 }
 
-const NAV: NavItem[] = [
-  { to: '/app', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/app/pipeline', label: 'Pipeline', icon: BarChart3 },
-  { to: '/app/contacts', label: 'Customers', icon: Users },
-  { to: '/app/activities', label: 'Activity Log', icon: MessageSquare },
-  { to: '/app/documents', label: 'Documents', icon: FileText },
-  { to: '/app/reminders', label: 'Follow-ups', icon: Bell },
+/**
+ * Two workspaces, never shown at once.
+ *
+ * Inbound quoting and outbound prospecting are separate jobs. Listing all of
+ * both made a dozen sidebar links where a person only ever needs a handful, so
+ * the shell shows the section you are actually in and offers a way back.
+ */
+const TRADE_NAV: NavItem[] = [
+  { to: '/app/trade', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/app/trade/quotes', label: 'Quotes', icon: Users },
+  { to: '/app/trade/pipeline', label: 'Pipeline', icon: BarChart3 },
+  { to: '/app/trade/activity', label: 'Activity Log', icon: MessageSquare },
+  { to: '/app/trade/documents', label: 'Documents', icon: FileText },
+  { to: '/app/trade/follow-ups', label: 'Follow-ups', icon: Bell },
+]
+
+const OUTREACH_NAV: NavItem[] = [{ to: '/app/outreach', label: 'Outreach', icon: Send, end: true }]
+
+const SHARED_NAV: NavItem[] = [
   { to: '/app/team', label: 'Team', icon: Users2, roles: ['admin', 'manager'] },
 ]
 
 export function AppShell() {
   const { user, logout } = useAuth()
-  // Hide links the current role cannot use, so nobody is sent to a dead end.
-  const visibleNav = NAV.filter((item) => !item.roles || (user && item.roles.includes(user.role)))
   const [open, setOpen] = useState(false)
   const location = useLocation()
 
   // Close the mobile drawer whenever the route changes.
   useEffect(() => setOpen(false), [location.pathname])
 
+  const inOutreach = location.pathname.startsWith('/app/outreach')
+  const inTrade = location.pathname.startsWith('/app/trade')
+  const section = inOutreach ? 'Outreach' : inTrade ? 'Trade Desk' : null
+
+  const items = inOutreach ? OUTREACH_NAV : inTrade ? TRADE_NAV : []
+  const visible = [...items, ...SHARED_NAV].filter(
+    (item) => !item.roles || (user && item.roles.includes(user.role)),
+  )
+
   return (
     <div className="relative min-h-screen">
-      {/* Mobile overlay */}
       {open && (
         <div
           className="fixed inset-0 z-30 bg-bean/70 backdrop-blur-sm lg:hidden"
@@ -59,7 +78,6 @@ export function AppShell() {
         />
       )}
 
-      {/* Sidebar */}
       <aside
         className={cx(
           'fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-caramel/15 bg-darkroast/95 backdrop-blur-xl transition-transform duration-300 lg:translate-x-0',
@@ -67,18 +85,17 @@ export function AppShell() {
         )}
       >
         <div className="flex items-center justify-between px-5 py-6">
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gold-gradient shadow-lift">
-                <Coffee size={20} className="text-bean" />
-              </div>
-              <Steam count={2} className="absolute -top-4 left-2.5 opacity-60" />
+          <NavLink to="/app" className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gold-gradient shadow-lift">
+              <Coffee size={20} className="text-bean" />
             </div>
             <div>
               <p className="font-display text-lg leading-none text-latte">BeviGrow</p>
-              <p className="mt-1 text-[10px] uppercase tracking-[0.2em] text-gold/70">Trade Tracker</p>
+              <p className="mt-1 text-[10px] uppercase tracking-[0.2em] text-gold/70">
+                {section ?? 'Trade Tracker'}
+              </p>
             </div>
-          </div>
+          </NavLink>
           <button
             onClick={() => setOpen(false)}
             className="rounded-lg p-1.5 text-latte/50 hover:bg-latte/10 lg:hidden"
@@ -89,7 +106,37 @@ export function AppShell() {
         </div>
 
         <nav className="flex-1 space-y-1 px-3">
-          {visibleNav.map(({ to, label, icon: Icon, end }) => (
+          {section && (
+            <NavLink
+              to="/app"
+              className="mb-2 flex min-h-[44px] items-center gap-2 rounded-xl px-3.5 text-[11px] uppercase tracking-wider text-latte/40 transition hover:text-latte/75"
+            >
+              <ChevronLeft size={14} />
+              All sections
+            </NavLink>
+          )}
+
+          {/* From the hub, offer both doors before anything shared. */}
+          {!section && (
+            <>
+              <NavLink
+                to="/app/trade"
+                className="flex min-h-[44px] items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium text-latte/55 transition hover:bg-latte/5 hover:text-latte/85"
+              >
+                <LayoutDashboard size={17} />
+                Trade Desk
+              </NavLink>
+              <NavLink
+                to="/app/outreach"
+                className="flex min-h-[44px] items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium text-latte/55 transition hover:bg-latte/5 hover:text-latte/85"
+              >
+                <Send size={17} />
+                Outreach
+              </NavLink>
+            </>
+          )}
+
+          {visible.map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
               to={to}
@@ -155,7 +202,6 @@ export function AppShell() {
         </div>
       </aside>
 
-      {/* Main column */}
       <div className="relative z-10 lg:pl-64">
         <header className="sticky top-0 z-20 flex items-center gap-4 border-b border-caramel/15 bg-darkroast/80 px-5 py-3.5 backdrop-blur-xl lg:px-8">
           <button
@@ -165,11 +211,9 @@ export function AppShell() {
           >
             <Menu size={19} />
           </button>
-          <div className="flex-1">
-            <p className="text-[11px] uppercase tracking-[0.22em] text-gold/60">
-              Export &amp; Import Operations
-            </p>
-          </div>
+          <p className="flex-1 text-[11px] uppercase tracking-[0.22em] text-gold/60">
+            {section ?? 'BeviGrow'}
+          </p>
         </header>
 
         <main className="px-5 py-6 lg:px-8 lg:py-8">

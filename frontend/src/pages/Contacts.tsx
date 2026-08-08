@@ -217,7 +217,7 @@ export function Contacts() {
                       className="border-b border-caramel/8 transition hover:bg-gold/[0.04]"
                     >
                       <td className="table-cell">
-                        <Link to={`/app/contacts/${c.id}`} className="group block">
+                        <Link to={`/app/trade/quotes/${c.id}`} className="group block">
                           <p className="font-medium text-latte group-hover:text-gold">
                             {c.company_name}
                           </p>
@@ -275,7 +275,7 @@ export function Contacts() {
             {contacts.map((c) => (
               <Card key={c.id} ripple>
                 <div className="flex items-start justify-between gap-3">
-                  <Link to={`/app/contacts/${c.id}`} className="min-w-0 flex-1">
+                  <Link to={`/app/trade/quotes/${c.id}`} className="min-w-0 flex-1">
                     <p className="truncate font-medium text-latte">{c.company_name}</p>
                     <p className="text-[11px] text-latte/45">{c.country}</p>
                   </Link>

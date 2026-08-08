@@ -9,6 +9,9 @@ import type {
   DocumentFile,
   Insight,
   LeaderboardRow,
+  Outreach,
+  OutreachStats,
+  ReplyAnalysis,
   Reminder,
   Suggestion,
   User,
@@ -249,6 +252,26 @@ export const api = {
   updateReminder: (id: number, body: Record<string, unknown>) =>
     request<Reminder>(`/api/reminders/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteReminder: (id: number) => request<void>(`/api/reminders/${id}`, { method: 'DELETE' }),
+
+  // ---- outreach
+  listOutreach: (f: Record<string, unknown> = {}) => request<Outreach[]>(`/api/outreach${qs(f)}`),
+  outreachStats: () => request<OutreachStats>('/api/outreach/stats'),
+  createOutreach: (body: Record<string, unknown>) =>
+    request<Outreach>('/api/outreach', { method: 'POST', body: JSON.stringify(body) }),
+  updateOutreach: (id: number, body: Record<string, unknown>) =>
+    request<Outreach>(`/api/outreach/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteOutreach: (id: number) => request<void>(`/api/outreach/${id}`, { method: 'DELETE' }),
+  logFollowUp: (id: number, days = 7) =>
+    request<Outreach>(`/api/outreach/${id}/follow-up${qs({ days_until_next: days })}`, {
+      method: 'POST',
+    }),
+  draftMessage: (body: Record<string, unknown>) =>
+    request<{ message: string; model: string; ai_enabled: boolean }>('/api/outreach/draft', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  analyseReply: (id: number) =>
+    request<ReplyAnalysis>(`/api/outreach/${id}/analyse-reply`, { method: 'POST' }),
 
   // ---- dashboard
   dashboard: () => request<Dashboard>('/api/dashboard'),

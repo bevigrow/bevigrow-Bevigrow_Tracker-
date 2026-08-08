@@ -92,7 +92,7 @@ export function Pipeline() {
           title="No deals in the pipeline"
           hint="Add an account to see it appear here."
           action={
-            <Link to="/app/contacts" className="btn-primary">
+            <Link to="/app/trade/quotes" className="btn-primary">
               Go to accounts
             </Link>
           }
@@ -131,7 +131,7 @@ export function Pipeline() {
                   <div className="space-y-2.5">
                     {list.map((c) => (
                       <Card key={c.id} ripple className="!p-3.5">
-                        <Link to={`/app/contacts/${c.id}`}>
+                        <Link to={`/app/trade/quotes/${c.id}`}>
                           <p className="truncate text-sm font-medium text-latte hover:text-gold">
                             {c.company_name}
                           </p>

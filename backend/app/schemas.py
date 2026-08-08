@@ -5,7 +5,16 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from .models import AuthProvider, Channel, DealStatus, DocType, Role, TradeType
+from .models import (
+    AuthProvider,
+    Channel,
+    ContactMethod,
+    DealStatus,
+    DocType,
+    OutreachStatus,
+    Role,
+    TradeType,
+)
 
 
 class ORMModel(BaseModel):
@@ -388,3 +397,114 @@ class SuggestionsResponse(BaseModel):
 
 ContactDetail.model_rebuild()
 Token.model_rebuild()
+
+
+# ------------------------------------------------------------------ outreach
+
+
+class OutreachBase(BaseModel):
+    """Cold-outreach record. Nothing mandatory but a name to file it under."""
+
+    company_name: str | None = Field(default=None, max_length=200)
+    contact_person: str | None = None
+    website: str | None = Field(default=None, max_length=300)
+    email: str | None = Field(default=None, max_length=255)
+    country: str | None = Field(default=None, max_length=100)
+
+    contact_method: ContactMethod = ContactMethod.email
+    contact_point: str | None = Field(default=None, max_length=300)
+
+    contacted_on: date | None = None
+    message_sent: str | None = None
+
+    status: OutreachStatus = OutreachStatus.follow_up_needed
+    their_reply: str | None = None
+    replied_on: date | None = None
+
+    next_action: str | None = None
+    next_follow_up: date | None = None
+    notes: str | None = None
+
+
+class OutreachCreate(OutreachBase):
+    owner_id: int | None = None
+
+
+class OutreachUpdate(BaseModel):
+    company_name: str | None = None
+    contact_person: str | None = None
+    website: str | None = None
+    email: str | None = None
+    country: str | None = None
+    contact_method: ContactMethod | None = None
+    contact_point: str | None = None
+    contacted_on: date | None = None
+    message_sent: str | None = None
+    status: OutreachStatus | None = None
+    their_reply: str | None = None
+    replied_on: date | None = None
+    next_action: str | None = None
+    next_follow_up: date | None = None
+    follow_ups_sent: int | None = None
+    notes: str | None = None
+    owner_id: int | None = None
+
+
+class OutreachOut(ORMModel):
+    id: int
+    company_name: str
+    contact_person: str | None
+    website: str | None
+    email: str | None
+    country: str | None
+    contact_method: ContactMethod
+    contact_point: str | None
+    contacted_on: date | None
+    message_sent: str | None
+    status: OutreachStatus
+    their_reply: str | None
+    reply_summary: str | None
+    replied_on: date | None
+    next_action: str | None
+    next_follow_up: date | None
+    follow_ups_sent: int
+    notes: str | None
+    owner_id: int | None
+    owner: UserOut | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class OutreachStats(BaseModel):
+    total: int
+    awaiting_reply: int
+    replied: int
+    due_today: int
+    overdue: int
+    no_response: int
+    not_interested: int
+    reply_rate: float
+    by_method: dict[str, int]
+
+
+class DraftMessageRequest(BaseModel):
+    company_name: str | None = None
+    contact_person: str | None = None
+    country: str | None = None
+    contact_method: ContactMethod = ContactMethod.email
+    # What we know about them, in our own words.
+    context: str | None = Field(default=None, max_length=2000)
+
+
+class DraftMessageResponse(BaseModel):
+    message: str
+    model: str
+    ai_enabled: bool
+
+
+class ReplyAnalysisResponse(BaseModel):
+    summary: str
+    suggested_status: OutreachStatus
+    suggested_action: str
+    model: str
+    ai_enabled: bool

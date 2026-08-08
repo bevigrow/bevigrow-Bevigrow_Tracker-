@@ -11,7 +11,16 @@ from sqlalchemy import text
 from . import seed
 from .config import settings
 from .database import engine
-from .routers import activities, ai_routes, auth, contacts, dashboard, documents, reminders
+from .routers import (
+    activities,
+    ai_routes,
+    auth,
+    contacts,
+    dashboard,
+    documents,
+    outreach,
+    reminders,
+)
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s %(levelname)-8s %(name)s: %(message)s"
@@ -54,6 +63,7 @@ app.include_router(activities.router)
 app.include_router(documents.router)
 app.include_router(reminders.router)
 app.include_router(dashboard.router)
+app.include_router(outreach.router)
 app.include_router(ai_routes.router)
 
 

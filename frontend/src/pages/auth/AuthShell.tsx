@@ -2,7 +2,6 @@ import { ArrowLeft, Coffee } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
-import { Steam } from '../../components/coffee/Ambient'
 
 /** Shared frame for every unauthenticated page, so they read as one product. */
 export function AuthShell({
@@ -38,7 +37,6 @@ export function AuthShell({
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gold-gradient shadow-cup">
               <Coffee size={30} className="text-bean" />
             </div>
-            <Steam count={3} className="absolute -top-6 left-4" />
           </div>
           <h1 className="font-display text-4xl text-latte">{title}</h1>
           {subtitle && <p className="mt-2 text-sm text-latte/50">{subtitle}</p>}

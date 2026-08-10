@@ -463,7 +463,6 @@ class OutreachOut(ORMModel):
     message_sent: str | None
     status: OutreachStatus
     their_reply: str | None
-    reply_summary: str | None
     replied_on: date | None
     next_action: str | None
     next_follow_up: date | None
@@ -487,24 +486,26 @@ class OutreachStats(BaseModel):
     by_method: dict[str, int]
 
 
-class DraftMessageRequest(BaseModel):
-    company_name: str | None = None
-    contact_person: str | None = None
-    country: str | None = None
-    contact_method: ContactMethod = ContactMethod.email
-    # What we know about them, in our own words.
-    context: str | None = Field(default=None, max_length=2000)
+class OutreachGroup(BaseModel):
+    """One country or company, with how the conversations there have gone."""
+
+    label: str
+    total: int
+    replied: int
+    awaiting: int
+    # Messages chased after the first one. For companies this is the whole
+    # point of the breakdown: record counts are all 1 when every company is a
+    # single row, whereas effort spent varies and is worth seeing.
+    follow_ups: int
+    # Share of this group we heard back from, 0-100. Only meaningful once a
+    # few messages have gone out, so the UI hides it below a threshold.
+    reply_rate: float
 
 
-class DraftMessageResponse(BaseModel):
-    message: str
-    model: str
-    ai_enabled: bool
+class OutreachInsights(BaseModel):
+    by_country: list[OutreachGroup]
+    by_company: list[OutreachGroup]
+    countries_tracked: int
+    companies_tracked: int
 
 
-class ReplyAnalysisResponse(BaseModel):
-    summary: str
-    suggested_status: OutreachStatus
-    suggested_action: str
-    model: str
-    ai_enabled: bool

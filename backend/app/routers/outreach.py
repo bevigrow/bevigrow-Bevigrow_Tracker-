@@ -16,15 +16,13 @@ from ..database import get_db
 from ..deps import get_current_user
 from ..models import OUTREACH_CLOSED, ContactMethod, Outreach, OutreachStatus, User
 from ..schemas import (
-    DraftMessageRequest,
-    DraftMessageResponse,
     OutreachCreate,
+    OutreachGroup,
+    OutreachInsights,
     OutreachOut,
     OutreachStats,
     OutreachUpdate,
-    ReplyAnalysisResponse,
 )
-from ..services import ai
 
 router = APIRouter(prefix="/api/outreach", tags=["outreach"])
 
@@ -63,10 +61,18 @@ def list_outreach(
             Outreach.status.not_in(list(OUTREACH_CLOSED)),
         )
 
-    # Anything with a due date first, oldest due date at the top.
+    # Alphabetical by company. A prospecting log is something you scan looking
+    # for a name you half-remember, so the order has to be predictable — a list
+    # sorted by due date reshuffles itself every time a follow-up is logged,
+    # and the row you were reading moves. Urgency is already visible per row
+    # and available through the "due now" filter, so it does not also need to
+    # drive the sort. NULLS LAST keeps unnamed records from heading the list.
     return db.scalars(
-        stmt.order_by(Outreach.next_follow_up.is_(None), Outreach.next_follow_up.asc(),
-                      Outreach.updated_at.desc()).limit(limit)
+        stmt.order_by(
+            Outreach.company_name.is_(None),
+            func.lower(Outreach.company_name).asc(),
+            Outreach.id.asc(),
+        ).limit(limit)
     ).all()
 
 
@@ -122,6 +128,67 @@ def outreach_stats(db: Session = Depends(get_db), _: User = Depends(get_current_
     )
 
 
+@router.get("/insights", response_model=OutreachInsights)
+def outreach_insights(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+    limit: int = Query(default=8, ge=3, le=20, description="Rows per breakdown"),
+):
+    """Where the prospecting is concentrated, and where it is actually landing.
+
+    Volume alone flatters a country you have written to forty times and never
+    heard from, so each row carries its reply count too — the interesting
+    reading is the gap between the two.
+
+    Grouped in SQL rather than in Python: the whole table would otherwise cross
+    the wire on every page load, and this endpoint is on the critical path for
+    the Outreach view.
+    """
+
+    def _grouped(column, *, by_effort: bool = False) -> list[OutreachGroup]:
+        replied = func.count(Outreach.id).filter(Outreach.status == OutreachStatus.replied)
+        awaiting = func.count(Outreach.id).filter(
+            Outreach.status.not_in(list(OUTREACH_CLOSED)),
+            Outreach.status != OutreachStatus.replied,
+        )
+        chases = func.coalesce(func.sum(Outreach.follow_ups_sent), 0)
+        # Countries rank by how many prospects are there; companies rank by how
+        # hard each has been chased, because their record counts are all 1.
+        lead = chases.desc() if by_effort else func.count(Outreach.id).desc()
+        rows = db.execute(
+            select(column, func.count(Outreach.id), replied, awaiting, chases)
+            .where(column.is_not(None), func.trim(column) != "")
+            .group_by(column)
+            .order_by(lead, func.lower(column).asc())
+            .limit(limit)
+        ).all()
+        return [
+            OutreachGroup(
+                label=label,
+                total=total,
+                replied=n_replied,
+                awaiting=n_awaiting,
+                reply_rate=round(n_replied / total * 100, 1) if total else 0.0,
+                follow_ups=int(n_chases or 0),
+            )
+            for label, total, n_replied, n_awaiting, n_chases in rows
+        ]
+
+    distinct = lambda col: db.scalar(  # noqa: E731
+        select(func.count(func.distinct(col))).where(col.is_not(None), func.trim(col) != "")
+    ) or 0
+
+    return OutreachInsights(
+        by_country=_grouped(Outreach.country),
+        by_company=_grouped(Outreach.company_name, by_effort=True),
+        countries_tracked=distinct(Outreach.country),
+        companies_tracked=distinct(Outreach.company_name),
+    )
+
+
+# Declared above /{outreach_id}: FastAPI matches routes in definition order,
+# so a literal path registered after a path parameter is never reached —
+# /api/outreach/insights would be read as an id and 422 on the int parse.
 @router.get("/{outreach_id}", response_model=OutreachOut)
 def get_outreach(
     outreach_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)
@@ -205,61 +272,3 @@ def delete_outreach(
         raise HTTPException(status_code=404, detail="Outreach record not found")
     db.delete(row)
     db.commit()
-
-
-# ------------------------------------------------------------------------ ai
-
-
-@router.post("/draft", response_model=DraftMessageResponse)
-def draft_message(payload: DraftMessageRequest, _: User = Depends(get_current_user)):
-    """Write a first-contact message, styled for the channel."""
-    message, used_ai = ai.draft_outreach(
-        payload.company_name,
-        payload.contact_person,
-        payload.country,
-        payload.contact_method.value,
-        payload.context,
-    )
-    return DraftMessageResponse(
-        message=message, model=ai.active_model() if used_ai else "template", ai_enabled=used_ai
-    )
-
-
-@router.post("/{outreach_id}/analyse-reply", response_model=ReplyAnalysisResponse)
-def analyse_their_reply(
-    outreach_id: int,
-    db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
-    apply: bool = Query(default=True, description="Save the summary and status onto the record"),
-):
-    """Read their reply: summarise it, set the status, propose the next move."""
-    row = db.get(Outreach, outreach_id)
-    if not row:
-        raise HTTPException(status_code=404, detail="Outreach record not found")
-    if not (row.their_reply or "").strip():
-        raise HTTPException(status_code=400, detail="There is no reply recorded to read")
-
-    summary, suggested, action, used_ai = ai.analyse_reply(
-        row.company_name, row.their_reply, row.message_sent
-    )
-    try:
-        status_enum = OutreachStatus(suggested)
-    except ValueError:
-        status_enum = OutreachStatus.replied
-
-    if apply:
-        row.reply_summary = summary
-        row.status = status_enum
-        if not row.replied_on:
-            row.replied_on = date.today()
-        if not (row.next_action or "").strip():
-            row.next_action = action
-        db.commit()
-
-    return ReplyAnalysisResponse(
-        summary=summary,
-        suggested_status=status_enum,
-        suggested_action=action,
-        model=ai.active_model() if used_ai else "rule-based",
-        ai_enabled=used_ai,
-    )

@@ -44,13 +44,22 @@ export function Dashboard() {
   const [refreshingAi, setRefreshingAi] = useState(false)
 
   const load = useCallback(async () => {
+    // The AI insight is deliberately NOT awaited alongside the numbers.
+    //
+    // These two calls used to share a Promise.all, so the whole dashboard
+    // waited on whichever was slower — and the insight is a round trip to
+    // Gemini, routinely two seconds on its own. The figures a person actually
+    // came for sat behind a spinner waiting for a commentary panel.
+    //
+    // Now the numbers render as soon as they arrive and the insight drops into
+    // its own panel afterwards. Its failure stays non-fatal, as before.
+    api
+      .insights()
+      .then(setInsight)
+      .catch(() => setInsight(null))
+
     try {
-      const [dash, ins] = await Promise.all([
-        api.dashboard(),
-        api.insights().catch(() => null),
-      ])
-      setData(dash)
-      setInsight(ins)
+      setData(await api.dashboard())
     } catch {
       toast.error('Could not load the dashboard.')
     } finally {

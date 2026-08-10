@@ -29,30 +29,23 @@ export default {
         'gold-gradient': 'linear-gradient(120deg, #D9A05B 0%, #C68B59 55%, #A5713F 100%)',
         'crema-gradient': 'linear-gradient(180deg, #F5E6D3 0%, #E8D5BC 100%)',
       },
+      /*
+        Every animation here runs once and stops.
+
+        There is no `infinite` in this file any more, and that is the rule
+        worth keeping. The three that were removed — steam, float, shimmer —
+        never finished, so a page that looked completely still was repainting
+        forever. On WebKit two floating emoji on the trade dashboard cost
+        393 ms per frame while idle; Chromium composited the same markup for
+        free, which is why it only ever showed up on iPhones.
+
+        Entrances are safe because they end. If a perpetual animation is ever
+        added back, animate only `opacity` and `transform` — those the
+        compositor can run without repainting. `background-position` (what
+        shimmer used) and `filter` (what steam used, via blur) both force a
+        repaint every single frame.
+      */
       keyframes: {
-        steam: {
-          '0%': { transform: 'translateY(0) scaleX(1)', opacity: '0' },
-          '15%': { opacity: '0.55' },
-          '100%': { transform: 'translateY(-42px) scaleX(1.7)', opacity: '0' },
-        },
-        float: {
-          '0%, 100%': { transform: 'translateY(0)' },
-          '50%': { transform: 'translateY(-10px)' },
-        },
-        ripple: {
-          '0%': { transform: 'scale(0)', opacity: '0.45' },
-          '100%': { transform: 'scale(3.2)', opacity: '0' },
-        },
-        shimmer: {
-          '0%': { backgroundPosition: '-480px 0' },
-          '100%': { backgroundPosition: '480px 0' },
-        },
-        pourfill: {
-          '0%': { height: '0%' },
-          '100%': { height: '100%' },
-        },
-        /* Replacements for the framer-motion entrances. CSS does these on the
-           compositor without 122 kB of JavaScript in the critical path. */
         fadeIn: {
           from: { opacity: '0' },
           to: { opacity: '1' },
@@ -80,10 +73,6 @@ export default {
         'fade-in-up-sm': 'fadeInUpSm .4s ease-out both',
         'scale-in': 'scaleIn .28s cubic-bezier(.16,1,.3,1) both',
         'slide-in-right': 'slideInRight .32s cubic-bezier(.16,1,.3,1) both',
-        steam: 'steam 3.6s ease-out infinite',
-        float: 'float 6s ease-in-out infinite',
-        ripple: 'ripple 700ms ease-out forwards',
-        shimmer: 'shimmer 1.6s linear infinite',
       },
     },
   },

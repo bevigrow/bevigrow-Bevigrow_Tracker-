@@ -239,7 +239,15 @@ export function EmptyState({
 }) {
   return (
     <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-caramel/25 bg-espresso/25 px-6 py-14 text-center">
-      <div className="mb-3 text-4xl animate-float">{emoji}</div>
+      {/*
+        This emoji used to float up and down forever. Two of them render on the
+        trade dashboard, and on WebKit that alone cost 393 ms per frame with the
+        page otherwise idle — about 2 fps, on a screen where nothing was
+        happening. Chromium composited it for free, which is why it only ever
+        showed up on iPhones. It is decoration on an empty placeholder, so it
+        simply sits still now.
+      */}
+      <div className="mb-3 text-4xl">{emoji}</div>
       <p className="font-display text-lg text-latte/85">{title}</p>
       {hint && <p className="mt-1.5 max-w-sm text-sm text-latte/45">{hint}</p>}
       {action && <div className="mt-5">{action}</div>}
@@ -248,16 +256,12 @@ export function EmptyState({
 }
 
 export function Skeleton({ className }: { className?: string }) {
-  return (
-    <div
-      className={cx('animate-shimmer rounded-lg', className)}
-      style={{
-        background:
-          'linear-gradient(90deg, rgba(111,78,55,0.18) 25%, rgba(198,139,89,0.3) 50%, rgba(111,78,55,0.18) 75%)',
-        backgroundSize: '480px 100%',
-      }}
-    />
-  )
+  // Pulsing opacity rather than a sliding gradient. The old version animated
+  // `background-position`, which the compositor cannot handle on its own, so
+  // every skeleton repainted 60 times a second — during loading, which is
+  // exactly when the device has least to spare. Opacity animates on the
+  // compositor and costs nothing.
+  return <div className={cx('animate-pulse rounded-lg bg-caramel/15', className)} />
 }
 
 export function Spinner({ label = 'Brewing…' }: { label?: string }) {

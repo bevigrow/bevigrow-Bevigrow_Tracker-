@@ -10,8 +10,8 @@ import type {
   Insight,
   LeaderboardRow,
   Outreach,
+  OutreachInsights,
   OutreachStats,
-  ReplyAnalysis,
   Reminder,
   Suggestion,
   User,
@@ -265,13 +265,8 @@ export const api = {
     request<Outreach>(`/api/outreach/${id}/follow-up${qs({ days_until_next: days })}`, {
       method: 'POST',
     }),
-  draftMessage: (body: Record<string, unknown>) =>
-    request<{ message: string; model: string; ai_enabled: boolean }>('/api/outreach/draft', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-  analyseReply: (id: number) =>
-    request<ReplyAnalysis>(`/api/outreach/${id}/analyse-reply`, { method: 'POST' }),
+
+  outreachInsights: () => request<OutreachInsights>('/api/outreach/insights'),
 
   // ---- dashboard
   dashboard: () => request<Dashboard>('/api/dashboard'),

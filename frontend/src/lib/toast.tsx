@@ -56,10 +56,6 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             className={`animate-slide-in-right pointer-events-auto relative overflow-hidden rounded-xl border ${STYLES[t.kind].border} bg-espresso/95 p-4 pl-5 shadow-cup backdrop-blur`}
           >
             <span className={`absolute inset-y-0 left-0 w-1 ${STYLES[t.kind].accent}`} />
-            {/* Steam wisps drifting off the notification */}
-            {t.kind === 'success' && (
-              <span className="pointer-events-none absolute -top-1 left-8 h-6 w-1.5 rounded-full bg-latte/25 blur-[2px] animate-steam" />
-            )}
             <div className="flex items-start gap-2.5">
               <span className="text-base leading-none">{STYLES[t.kind].icon}</span>
               <p className="text-sm leading-snug text-latte/90">{t.message}</p>

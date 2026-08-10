@@ -231,7 +231,6 @@ export interface Outreach {
   message_sent: string | null
   status: OutreachStatus
   their_reply: string | null
-  reply_summary: string | null
   replied_on: string | null
   next_action: string | null
   next_follow_up: string | null
@@ -255,10 +254,18 @@ export interface OutreachStats {
   by_method: Record<string, number>
 }
 
-export interface ReplyAnalysis {
-  summary: string
-  suggested_status: OutreachStatus
-  suggested_action: string
-  model: string
-  ai_enabled: boolean
+export interface OutreachGroup {
+  label: string
+  total: number
+  replied: number
+  awaiting: number
+  reply_rate: number
+  follow_ups: number
+}
+
+export interface OutreachInsights {
+  by_country: OutreachGroup[]
+  by_company: OutreachGroup[]
+  countries_tracked: number
+  companies_tracked: number
 }

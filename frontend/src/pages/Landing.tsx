@@ -1,7 +1,6 @@
 import { ArrowRight, Coffee } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
-import { Steam } from '../components/coffee/Ambient'
 
 /** A single screen: the mark, the name, and the way in. Nothing else. */
 export function Landing() {
@@ -17,7 +16,6 @@ export function Landing() {
           <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-gold-gradient shadow-cup">
             <Coffee size={38} className="text-bean" />
           </div>
-          <Steam count={3} className="absolute -top-7 left-6" />
         </div>
 
         <p className="mb-4 text-xs uppercase tracking-[0.42em] text-gold">Trade Tracker</p>

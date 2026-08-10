@@ -338,7 +338,6 @@ class Outreach(Base):
         index=True,
     )
     their_reply: Mapped[str | None] = mapped_column(Text)
-    reply_summary: Mapped[str | None] = mapped_column(Text)
     replied_on: Mapped[date | None] = mapped_column(Date)
 
     next_action: Mapped[str | None] = mapped_column(Text)

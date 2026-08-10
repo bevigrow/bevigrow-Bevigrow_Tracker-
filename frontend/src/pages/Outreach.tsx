@@ -1,4 +1,4 @@
-import { Clock, Globe, Plus, Search, Send, Sparkles, Trash2 } from 'lucide-react'
+import { Clock, Globe, Plus, Search, Send, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import {
@@ -13,6 +13,7 @@ import {
   Skeleton,
   Textarea,
 } from '../components/ui'
+import { OutreachInsights } from '../components/OutreachInsights'
 import { ApiError, api } from '../lib/api'
 import {
   METHOD_META,
@@ -24,7 +25,13 @@ import {
   relativeDays,
 } from '../lib/format'
 import { useToast } from '../lib/toast'
-import type { ContactMethod, Outreach as Row, OutreachStats, OutreachStatus } from '../lib/types'
+import type {
+  ContactMethod,
+  Outreach as Row,
+  OutreachInsights as Insights,
+  OutreachStats,
+  OutreachStatus,
+} from '../lib/types'
 
 /** Status pill. Colour always ships with the label, never alone. */
 function StatusPill({ status }: { status: OutreachStatus }) {
@@ -44,6 +51,7 @@ export function Outreach() {
   const toast = useToast()
   const [rows, setRows] = useState<Row[]>([])
   const [stats, setStats] = useState<OutreachStats | null>(null)
+  const [insights, setInsights] = useState<Insights | null>(null)
   const [loading, setLoading] = useState(true)
 
   const [search, setSearch] = useState('')
@@ -76,6 +84,16 @@ export function Outreach() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, method, status, dueOnly])
+
+  useEffect(() => {
+    // Not part of `load`: these summarise the whole log, so re-fetching them
+    // on every keystroke would be wasted work and would make the panels
+    // flicker while you type.
+    api
+      .outreachInsights()
+      .then(setInsights)
+      .catch(() => setInsights(null))
+  }, [rows.length])
 
   useEffect(() => {
     const id = window.setTimeout(() => void load(), 300)
@@ -134,6 +152,15 @@ export function Outreach() {
             accent={stats.due_today + stats.overdue > 0 ? '#E0A458' : undefined}
           />
         </div>
+      )}
+
+      {stats && stats.total > 0 && (
+        <OutreachInsights
+          data={insights}
+          loading={loading && !insights}
+          active={search}
+          onPick={(label) => setSearch((cur) => (cur === label ? '' : label))}
+        />
       )}
 
       <Card className="!p-4">
@@ -253,9 +280,9 @@ export function Outreach() {
                         </span>
                       )}
                     </div>
-                    {(r.reply_summary || r.their_reply) && (
+                    {r.their_reply && (
                       <p className="mt-2 line-clamp-2 rounded-lg border border-emerald-400/20 bg-emerald-400/[0.06] px-3 py-2 text-[12px] leading-relaxed text-latte/75">
-                        {r.reply_summary || r.their_reply}
+                        {r.their_reply}
                       </p>
                     )}
                     {r.next_action && (
@@ -379,8 +406,6 @@ function OutreachModal({
   const toast = useToast()
   const [form, setForm] = useState(EMPTY)
   const [busy, setBusy] = useState(false)
-  const [drafting, setDrafting] = useState(false)
-  const [reading, setReading] = useState(false)
 
   useEffect(() => {
     const str = (v: string | null | undefined) => v ?? ''
@@ -409,57 +434,6 @@ function OutreachModal({
 
   const set = (k: keyof typeof EMPTY) => (v: string) => setForm((f) => ({ ...f, [k]: v }))
   const text = (v: string) => (v.trim() ? v.trim() : null)
-
-  /** Ask the AI for a first-contact message written for this channel. */
-  const draft = async () => {
-    setDrafting(true)
-    try {
-      const res = await api.draftMessage({
-        company_name: text(form.company_name),
-        contact_person: text(form.contact_person),
-        country: text(form.country),
-        contact_method: form.contact_method,
-        context: text(form.notes),
-      })
-      setForm((f) => ({ ...f, message_sent: res.message }))
-      toast[res.ai_enabled ? 'success' : 'info'](
-        res.ai_enabled ? 'Draft written — edit it before sending.' : 'AI is off; inserted a template.',
-      )
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not draft a message.')
-    } finally {
-      setDrafting(false)
-    }
-  }
-
-  /** Save first (the reply must exist server-side), then have the AI read it. */
-  const readReply = async () => {
-    if (!row) {
-      toast.info('Save the record first, then the AI can read the reply.')
-      return
-    }
-    if (!form.their_reply.trim()) {
-      toast.error('Paste their reply first.')
-      return
-    }
-    setReading(true)
-    try {
-      await api.updateOutreach(row.id, { their_reply: form.their_reply.trim() })
-      const res = await api.analyseReply(row.id)
-      setForm((f) => ({
-        ...f,
-        status: res.suggested_status,
-        next_action: f.next_action.trim() || res.suggested_action,
-      }))
-      toast[res.ai_enabled ? 'success' : 'info'](
-        res.ai_enabled ? 'Reply read and summarised.' : 'AI is off; saved the reply as written.',
-      )
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not read the reply.')
-    } finally {
-      setReading(false)
-    }
-  }
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -579,41 +553,17 @@ function OutreachModal({
 
         {/* what we sent */}
         <Field label="Message we sent">
-          <div className="mb-2 flex justify-end">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={draft}
-              loading={drafting}
-              icon={<Sparkles size={13} />}
-              className="px-3 py-1.5 text-xs"
-            >
-              Draft with AI
-            </Button>
-          </div>
           <Textarea
             rows={5}
             value={form.message_sent}
             onChange={(e) => set('message_sent')(e.target.value)}
-            placeholder="Paste what you sent, or let the AI draft it for this channel."
+            placeholder="Paste what you sent."
           />
         </Field>
 
         {/* what came back */}
         <div className="rounded-xl border border-caramel/15 bg-bean/25 p-4">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-[11px] uppercase tracking-wider text-gold/70">What came back</p>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={readReply}
-              loading={reading}
-              icon={<Sparkles size={13} />}
-              className="px-3 py-1.5 text-xs"
-            >
-              Read reply with AI
-            </Button>
-          </div>
+          <p className="mb-3 text-[11px] uppercase tracking-wider text-gold/70">What came back</p>
 
           <Field label="Their reply" className="mb-4">
             <Textarea
@@ -623,15 +573,6 @@ function OutreachModal({
               placeholder="Paste exactly what they wrote back."
             />
           </Field>
-
-          {row?.reply_summary && (
-            <p className="mb-4 rounded-lg border border-emerald-400/25 bg-emerald-400/[0.07] p-3 text-[12px] leading-relaxed text-latte/80">
-              <span className="mb-1 block text-[10px] uppercase tracking-wider text-emerald-300/70">
-                AI summary
-              </span>
-              {row.reply_summary}
-            </p>
-          )}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Status">

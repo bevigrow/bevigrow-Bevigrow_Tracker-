@@ -470,6 +470,7 @@ class OutreachOut(ORMModel):
     notes: str | None
     owner_id: int | None
     owner: UserOut | None = None
+    quote_id: int | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -504,7 +505,6 @@ class OutreachGroup(BaseModel):
 
 class OutreachInsights(BaseModel):
     by_country: list[OutreachGroup]
-    by_company: list[OutreachGroup]
     countries_tracked: int
     companies_tracked: int
 

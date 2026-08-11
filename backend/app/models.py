@@ -350,6 +350,14 @@ class Outreach(Base):
     owner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     owner: Mapped["User | None"] = relationship()
 
+    # Set once this prospect turns into a real enquiry. The outreach row is
+    # kept rather than moved: how a buyer was found is worth remembering, and
+    # deleting it would lose the reply that started the conversation.
+    # SET NULL, not CASCADE — deleting the quote must not erase the history.
+    quote_id: Mapped[int | None] = mapped_column(
+        ForeignKey("contacts.id", ondelete="SET NULL"), index=True
+    )
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow

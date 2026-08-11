@@ -238,6 +238,7 @@ export interface Outreach {
   notes: string | null
   owner_id: number | null
   owner: User | null
+  quote_id: number | null
   created_at: string
   updated_at: string
 }
@@ -265,7 +266,6 @@ export interface OutreachGroup {
 
 export interface OutreachInsights {
   by_country: OutreachGroup[]
-  by_company: OutreachGroup[]
   countries_tracked: number
   companies_tracked: number
 }

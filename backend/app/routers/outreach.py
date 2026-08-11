@@ -14,8 +14,17 @@ from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
 from ..deps import get_current_user
-from ..models import OUTREACH_CLOSED, ContactMethod, Outreach, OutreachStatus, User
+from ..models import (
+    OUTREACH_CLOSED,
+    Contact,
+    ContactMethod,
+    DealStatus,
+    Outreach,
+    OutreachStatus,
+    User,
+)
 from ..schemas import (
+    ContactOut,
     OutreachCreate,
     OutreachGroup,
     OutreachInsights,
@@ -145,16 +154,14 @@ def outreach_insights(
     the Outreach view.
     """
 
-    def _grouped(column, *, by_effort: bool = False) -> list[OutreachGroup]:
+    def _grouped(column) -> list[OutreachGroup]:
         replied = func.count(Outreach.id).filter(Outreach.status == OutreachStatus.replied)
         awaiting = func.count(Outreach.id).filter(
             Outreach.status.not_in(list(OUTREACH_CLOSED)),
             Outreach.status != OutreachStatus.replied,
         )
         chases = func.coalesce(func.sum(Outreach.follow_ups_sent), 0)
-        # Countries rank by how many prospects are there; companies rank by how
-        # hard each has been chased, because their record counts are all 1.
-        lead = chases.desc() if by_effort else func.count(Outreach.id).desc()
+        lead = func.count(Outreach.id).desc()
         rows = db.execute(
             select(column, func.count(Outreach.id), replied, awaiting, chases)
             .where(column.is_not(None), func.trim(column) != "")
@@ -180,7 +187,6 @@ def outreach_insights(
 
     return OutreachInsights(
         by_country=_grouped(Outreach.country),
-        by_company=_grouped(Outreach.company_name, by_effort=True),
         countries_tracked=distinct(Outreach.country),
         companies_tracked=distinct(Outreach.company_name),
     )
@@ -261,6 +267,71 @@ def log_follow_up(
     db.commit()
     db.refresh(row)
     return row
+
+
+@router.post("/{outreach_id}/convert", response_model=ContactOut, status_code=201)
+def convert_to_quote(
+    outreach_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Turn a prospect who answered into a quote on the trade desk.
+
+    The bridge between the two workspaces. Cold outreach that lands becomes a
+    real enquiry, and re-typing the company, person, country and address by
+    hand is both tedious and how details get lost.
+
+    The outreach row is kept and linked, not moved. How a buyer was found —
+    which channel, what we said, what they wrote back — is worth having later,
+    and it is exactly what would be thrown away by turning the record into a
+    quote in place. Converting twice is refused rather than silently making a
+    duplicate customer.
+    """
+    row = db.get(Outreach, outreach_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Outreach record not found")
+    if row.quote_id and db.get(Contact, row.quote_id):
+        raise HTTPException(
+            status_code=409,
+            detail="This prospect already has a quote. Open it from the trade desk.",
+        )
+
+    # Carry across only what an outreach row actually knows. Everything else on
+    # a quote — volumes, terms, ports — is answered by the buyer later, and
+    # guessing values here would put invented trade terms in front of them.
+    quote = Contact(
+        company_name=row.company_name or "Untitled quote",
+        contact_person=row.contact_person,
+        email=row.email,
+        country=row.country,
+        status=DealStatus.contacted,
+        owner_id=row.owner_id or user.id,
+        rfq_source=f"Outreach · {row.contact_method.value}",
+        notes=_carry_over_notes(row),
+    )
+    db.add(quote)
+    db.flush()  # need the id before linking
+
+    row.quote_id = quote.id
+    db.commit()
+    db.refresh(quote)
+    return quote
+
+
+def _carry_over_notes(row: Outreach) -> str:
+    """Everything the prospect told us, as the quote's opening context."""
+    parts: list[str] = [f"Came from outreach via {row.contact_method.value}."]
+    if row.contact_point:
+        parts.append(f"Found at: {row.contact_point}")
+    if row.website:
+        parts.append(f"Website: {row.website}")
+    if row.contacted_on:
+        parts.append(f"First contacted {row.contacted_on:%d %b %Y}.")
+    if row.their_reply:
+        parts.append(f"\nTheir reply:\n{row.their_reply}")
+    if row.notes:
+        parts.append(f"\nNotes from outreach:\n{row.notes}")
+    return "\n".join(parts)
 
 
 @router.delete("/{outreach_id}", status_code=status.HTTP_204_NO_CONTENT)

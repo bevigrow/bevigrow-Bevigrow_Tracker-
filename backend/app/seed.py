@@ -51,6 +51,10 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("contacts", "rfq_reference", "VARCHAR(120)"),
     # File bytes moved off the ephemeral container filesystem.
     ("documents", "content", "BYTEA"),
+    # Links a prospect to the quote it became.
+    # The foreign key is added separately below — ADD COLUMN alone would
+    # not create one, and ON DELETE SET NULL is the point of it.
+    ("outreach", "quote_id", "INTEGER"),
 ]
 
 
@@ -80,6 +84,45 @@ def migrate_columns() -> None:
             col_type = ddl.replace("TIMESTAMP WITH TIME ZONE", "TIMESTAMP") if settings.is_sqlite else ddl
             conn.execute(text(f"ALTER TABLE {prefix}{table} ADD COLUMN {column} {col_type}"))
             log.info("Added column %s.%s", table, column)
+
+        # A column added by ALTER TABLE carries no foreign key, however the
+        # model declares one: `create_all` never alters an existing table, and
+        # the DDL above is only a type. Without the constraint the database
+        # will not apply ON DELETE SET NULL, so deleting a quote leaves the
+        # outreach row pointing at an id that no longer exists — and the UI
+        # then offers to open a quote that is gone.
+        #
+        # Adding it separately also repairs deployments that already ran the
+        # plain ADD COLUMN. Stale references are cleared first, because
+        # Postgres validates existing rows before accepting the constraint.
+        if not settings.is_sqlite:
+            has_fk = conn.execute(
+                text(
+                    "SELECT 1 FROM information_schema.table_constraints tc "
+                    "JOIN information_schema.key_column_usage kcu "
+                    "  ON tc.constraint_name = kcu.constraint_name "
+                    "WHERE tc.table_name = 'outreach' AND tc.table_schema = :s "
+                    "  AND tc.constraint_type = 'FOREIGN KEY' "
+                    "  AND kcu.column_name = 'quote_id'"
+                ),
+                {"s": settings.schema or "public"},
+            ).first()
+            if not has_fk:
+                conn.execute(
+                    text(
+                        f"UPDATE {prefix}outreach SET quote_id = NULL WHERE quote_id IS NOT NULL "
+                        f"AND quote_id NOT IN (SELECT id FROM {prefix}contacts)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        f"ALTER TABLE {prefix}outreach "
+                        f"ADD CONSTRAINT outreach_quote_id_fkey "
+                        f"FOREIGN KEY (quote_id) REFERENCES {prefix}contacts (id) "
+                        f"ON DELETE SET NULL"
+                    )
+                )
+                log.info("Added foreign key outreach.quote_id -> contacts.id")
 
         # `country` started out NOT NULL. Marketplace RFQs often omit it, and
         # rejecting the row would lose the enquiry, so the constraint is

@@ -266,6 +266,9 @@ export const api = {
       method: 'POST',
     }),
 
+  convertToQuote: (id: number) =>
+    request<Contact>(`/api/outreach/${id}/convert`, { method: 'POST' }),
+
   outreachInsights: () => request<OutreachInsights>('/api/outreach/insights'),
 
   // ---- dashboard

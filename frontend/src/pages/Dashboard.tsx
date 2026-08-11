@@ -1,11 +1,8 @@
 import {
-  CheckCircle2,
   Clock,
-  Coffee,
   Download,
   Globe2,
   RefreshCw,
-  Ship,
   Sparkles,
   TrendingUp,
 } from 'lucide-react'
@@ -15,13 +12,12 @@ import { Link } from 'react-router-dom'
 import {
   BarTable,
   ChartFrame,
-  CupMeter,
   LegendItem,
   RoastBarChart,
   TrendChart,
   TrendTable,
 } from '../components/charts'
-import { Button, Card, EmptyState, Spinner, StatusBadge } from '../components/ui'
+import { Button, Card, EmptyState, Spinner } from '../components/ui'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import {
@@ -33,7 +29,7 @@ import {
 } from '../lib/format'
 import { useToast } from '../lib/toast'
 import type { Dashboard as DashboardData, Insight } from '../lib/types'
-import { CATEGORICAL, ROAST_RAMP } from '../lib/viz'
+import { CATEGORICAL } from '../lib/viz'
 
 export function Dashboard() {
   const { user } = useAuth()
@@ -98,12 +94,15 @@ export function Dashboard() {
   const k = data.kpis
   const firstName = user?.name?.split(' ')[0] ?? 'there'
 
+  // Three tiles, not six. "New leads", "Shipments in progress" and
+  // "Completed orders" were each the count of a single pipeline stage, and the
+  // Pipeline by Stage chart immediately below plots every stage — so they
+  // restated a chart the eye had not reached yet. What survives is what that
+  // chart cannot say: the export/import split, which is a different dimension
+  // entirely, and follow-ups due, which is about time rather than stage.
   const KPI_CARDS = [
-    { icon: Coffee, label: 'New Coffee Leads', value: k.new_leads, tint: ROAST_RAMP[4], to: '/app/trade/quotes?status=new_lead' },
     { icon: Globe2, label: 'Export Orders', value: k.export_orders, tint: CATEGORICAL[0], to: '/app/trade/quotes?trade_type=export' },
     { icon: Download, label: 'Import Orders', value: k.import_orders, tint: CATEGORICAL[1], to: '/app/trade/quotes?trade_type=import' },
-    { icon: Ship, label: 'Shipments in Progress', value: k.shipments_in_progress, tint: ROAST_RAMP[2], to: '/app/trade/pipeline' },
-    { icon: CheckCircle2, label: 'Completed Orders', value: k.completed_orders, tint: CATEGORICAL[2], to: '/app/trade/quotes?status=completed' },
     { icon: Clock, label: 'Pending Follow-ups', value: k.pending_follow_ups, tint: '#D9705B', to: '/app/trade/follow-ups' },
   ]
 
@@ -145,7 +144,7 @@ export function Dashboard() {
       </div>
 
       {/* ----------------------------------------------------------- kpis */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {KPI_CARDS.map((card, i) => (
           <div key={card.label} className="animate-fade-in-up-sm" style={{ animationDelay: `${i * 50}ms` }}>
             <Link to={card.to}>
@@ -220,24 +219,13 @@ export function Dashboard() {
           )}
         </Card>
 
-        <Card>
-          <h3 className="mb-1 font-display text-lg text-latte">Conversion</h3>
-          <p className="mb-4 text-[11px] text-latte/40">Completed vs closed deals</p>
-          {/* Export share is already two of the KPI cards above. */}
-          <div className="flex items-center justify-center">
-            <CupMeter
-              value={k.conversion_rate}
-              max={100}
-              label="Win rate"
-              caption={`${k.completed_orders} completed`}
-              size={136}
-            />
-          </div>
-        </Card>
       </div>
 
       {/* --------------------------------------------------------- charts */}
-      <div className="grid gap-5 lg:grid-cols-2">
+      {/* items-start: a grid row stretches its cells to the tallest by
+          default, so a pipeline with two stages was drawn in a card sized for
+          the fourteen-day trend beside it — mostly empty space. */}
+      <div className="grid items-start gap-5 lg:grid-cols-2">
         <ChartFrame
           title="Pipeline by Stage"
           subtitle="Accounts at each stage of the coffee trade cycle"
@@ -358,23 +346,6 @@ export function Dashboard() {
         </Card>
       </div>
 
-      {/* ---------------------------------------------------- status mix */}
-      <Card>
-        <h3 className="mb-4 font-display text-lg text-latte">Status Overview</h3>
-        <div className="flex flex-wrap gap-2.5">
-          {data.by_status.map((s) => (
-            <div
-              key={s.status}
-              className="flex items-center gap-2 rounded-xl border border-caramel/15 bg-bean/30 px-3 py-2"
-            >
-              <StatusBadge status={s.status} />
-              <span className="font-body text-sm font-semibold tabular-nums text-latte">
-                {s.count}
-              </span>
-            </div>
-          ))}
-        </div>
-      </Card>
     </div>
   )
 }

@@ -1,5 +1,6 @@
-import { Clock, Globe, Plus, Search, Send, Trash2 } from 'lucide-react'
+import { Clock, FilePlus2, Globe, Plus, Search, Send, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 import {
   Button,
@@ -49,6 +50,7 @@ function StatusPill({ status }: { status: OutreachStatus }) {
 
 export function Outreach() {
   const toast = useToast()
+  const navigate = useNavigate()
   const [rows, setRows] = useState<Row[]>([])
   const [stats, setStats] = useState<OutreachStats | null>(null)
   const [insights, setInsights] = useState<Insights | null>(null)
@@ -107,6 +109,17 @@ export function Outreach() {
       toast.success(`Follow-up logged. Next one ${relativeDays(updated.next_follow_up)}.`)
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not log the follow-up.')
+    }
+  }
+
+  /** A prospect who answered becomes a quote on the trade desk. */
+  const convert = async (row: Row) => {
+    try {
+      const quote = await api.convertToQuote(row.id)
+      toast.success(`${quote.company_name} is now a quote.`)
+      navigate(`/app/trade/quotes/${quote.id}`)
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not create the quote.')
     }
   }
 
@@ -321,6 +334,25 @@ export function Outreach() {
                     >
                       <Clock size={15} />
                     </button>
+                    {r.quote_id ? (
+                      <button
+                        onClick={() => navigate(`/app/trade/quotes/${r.quote_id}`)}
+                        className="rounded-lg p-2 text-gold/70 transition hover:bg-gold/15 hover:text-gold"
+                        aria-label={`Open the quote for ${r.company_name}`}
+                        title="Open its quote on the trade desk"
+                      >
+                        <FilePlus2 size={15} />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => convert(r)}
+                        className="rounded-lg p-2 text-latte/40 transition hover:bg-gold/15 hover:text-gold"
+                        aria-label={`Turn ${r.company_name} into a quote`}
+                        title="Turn into a quote on the trade desk"
+                      >
+                        <FilePlus2 size={15} />
+                      </button>
+                    )}
                     <button
                       onClick={() => setDeleting(r)}
                       className="rounded-lg p-2 text-latte/40 transition hover:bg-red-500/15 hover:text-red-300"

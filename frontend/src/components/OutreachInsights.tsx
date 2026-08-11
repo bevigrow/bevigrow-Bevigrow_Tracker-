@@ -1,21 +1,16 @@
 /**
- * Where the prospecting is concentrated, and where it is actually landing.
+ * Where the prospecting is concentrated, and where it is landing.
  *
- * Two panels, two deliberately different forms:
+ * One chart, deliberately. There was a companies table beside this, and it
+ * had to go for two reasons. It did not respond when a country was clicked,
+ * so two panels sat side by side disagreeing about what was selected — the
+ * left one filtered, the right one carried on showing everything. And the
+ * list below is already the companies, in full, searchable: the table was a
+ * shorter copy of it wearing a chart's clothes.
  *
- *   Countries get a bar chart. Volume varies between them, so length carries
- *   real meaning and the eye ranks them instantly.
- *
- *   Companies get a table. In a prospecting log each company is usually a
- *   single row, so a bar chart of company counts is a column of identical
- *   bars — a chart that looks like analysis while saying nothing. The useful
- *   company question is "where does each one stand and who is owed a chase",
- *   which is a table's job. It becomes a ranking as soon as follow-ups
- *   accumulate, because the rows sort by effort spent.
- *
- * Both are clickable: picking a country or a company filters the list below,
- * so the summary is a way into the records rather than a separate read-only
- * screen.
+ * Countries earn a chart because their volumes genuinely differ, so bar
+ * length ranks them at a glance. Clicking one filters the list, which is what
+ * makes this a way into the records rather than a second screen to read.
  */
 import { useMemo } from 'react'
 
@@ -177,57 +172,6 @@ function CountryChart({
   )
 }
 
-/* ------------------------------------------------------------- companies */
-
-function CompanyTable({
-  rows,
-  active,
-  onPick,
-}: {
-  rows: OutreachGroup[]
-  active: string
-  onPick: (label: string) => void
-}) {
-  return (
-    <div className="-mx-2 overflow-x-auto">
-      <table className="w-full min-w-[340px] border-collapse text-sm">
-        <thead>
-          <tr className="border-b border-caramel/15">
-            <th className="table-head">Company</th>
-            <th className="table-head text-right">Chases</th>
-            <th className="table-head text-right">Replied</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr
-              key={r.label}
-              onClick={() => onPick(r.label)}
-              className={`cursor-pointer border-b border-caramel/10 transition last:border-0 hover:bg-latte/[0.04] ${
-                active === r.label ? 'bg-gold/[0.10]' : ''
-              }`}
-            >
-              <td className="px-3 py-2.5 text-latte/85">{r.label}</td>
-              <td className="px-3 py-2.5 text-right tabular-nums text-latte/70">
-                {r.follow_ups || '—'}
-              </td>
-              <td className="px-3 py-2.5 text-right">
-                {r.replied ? (
-                  <span className="font-semibold" style={{ color: GOOD }}>
-                    yes
-                  </span>
-                ) : (
-                  <span className="text-latte/35">—</span>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
 /* ------------------------------------------------------------------ shell */
 
 export function OutreachInsights({
@@ -243,32 +187,17 @@ export function OutreachInsights({
 }) {
   if (loading) {
     return (
-      <div className="grid items-start gap-4 lg:grid-cols-2">
-        <Skeleton className="h-64" />
-        <Skeleton className="h-64" />
-      </div>
+<Skeleton className="h-64" />
     )
   }
-  if (!data || (!data.by_country.length && !data.by_company.length)) return null
+  if (!data || !data.by_country.length) return null
 
   return (
-    <div className="grid items-start gap-4 lg:grid-cols-2">
-      {data.by_country.length > 0 && (
-        <Panel
-          title="Countries"
-          subtitle={`${data.countries_tracked} tracked · tap a country to filter the list`}
-        >
-          <CountryChart rows={data.by_country} active={active} onPick={onPick} />
-        </Panel>
-      )}
-      {data.by_company.length > 0 && (
-        <Panel
-          title="Companies"
-          subtitle={`${data.companies_tracked} tracked · most-chased first · tap to filter`}
-        >
-          <CompanyTable rows={data.by_company} active={active} onPick={onPick} />
-        </Panel>
-      )}
-    </div>
+    <Panel
+      title="Countries"
+      subtitle={`${data.countries_tracked} tracked · ${data.companies_tracked} companies · tap a country to filter the list`}
+    >
+      <CountryChart rows={data.by_country} active={active} onPick={onPick} />
+    </Panel>
   )
 }

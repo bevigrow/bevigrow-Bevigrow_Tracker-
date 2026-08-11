@@ -20,7 +20,7 @@ export function Pipeline() {
     try {
       setBoard(await api.pipeline(tradeType || undefined))
     } catch {
-      toast.error('Could not load the pipeline.')
+      toast.error('Could not load the deal stages.')
     } finally {
       setLoading(false)
     }
@@ -59,8 +59,8 @@ export function Pipeline() {
     }
   }
 
-  if (loading) return <Spinner label="Arranging the pipeline…" />
-  if (!board) return <EmptyState emoji="☕" title="The pipeline could not be loaded" />
+  if (loading) return <Spinner label="Sorting your deals…" />
+  if (!board) return <EmptyState emoji="☕" title="Could not load your deals" />
 
   const total = Object.values(board).reduce((n, list) => n + list.length, 0)
 
@@ -68,7 +68,7 @@ export function Pipeline() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-3xl text-latte">Trade Pipeline</h1>
+          <h1 className="font-display text-3xl text-latte">Deal Stages</h1>
           <p className="mt-1 text-sm text-latte/50">
             {total} account{total === 1 ? '' : 's'} across {STATUS_ORDER.length} stages
           </p>
@@ -89,7 +89,7 @@ export function Pipeline() {
       {total === 0 ? (
         <EmptyState
           emoji="🌱"
-          title="No deals in the pipeline"
+          title="No deals yet"
           hint="Add an account to see it appear here."
           action={
             <Link to="/app/trade/quotes" className="btn-primary">

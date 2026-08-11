@@ -10,6 +10,7 @@ and nothing 500s because an AI was unavailable.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -84,20 +85,52 @@ def _fallback_summary(notes: str, company_name: str | None, country: str | None)
 # ---------------------------------------------------------- dashboard insights
 
 
+# Capped at two lines, and told to skip anything sitting at zero.
+#
+# The previous version asked for "3 to 5 bullets" covering four fixed topics,
+# so it filled the template whichever way the numbers went: on an empty desk it
+# produced four sentences whose entire content was that everything was zero.
+# The reader can already see the desk is empty. Saying it four times in
+# business language is worse than silence, because it buries the one line that
+# might have mattered.
+#
+# Kept at module level so `prompt_fingerprint()` can hash it — see below.
+_DASHBOARD_RULES = (
+    "Here is today's snapshot of a coffee trading desk as JSON. "
+    "Write the briefing a colleague would actually say out loud.\n\n"
+    "Rules:\n"
+    "- At most 2 bullets, each starting with '- '. Fewer is better.\n"
+    "- One short sentence per bullet. Plain words.\n"
+    "- Only mention something if it needs a decision or an action. Never "
+    "state that a number is zero, and never list several zeros.\n"
+    "- If nothing needs attention, reply with exactly one bullet saying "
+    "so in a few words.\n"
+    "- Use real figures from the data; never invent any.\n"
+    "- Avoid the words pipeline, momentum, leverage, robust, operational "
+    "and synergy.\n"
+    "- Output only the bullets.\n\n"
+)
+
+
+def prompt_fingerprint() -> str:
+    """Short hash of the instruction text, used as part of the cache key.
+
+    Insights are cached for half an hour so a page refresh does not re-bill the
+    API. That cache was keyed on the kind alone, so editing a prompt changed
+    nothing a reader could see until the old entry aged out — the app kept
+    serving text written to instructions that no longer existed.
+
+    Hashing only the rules, never the data, means a reworded prompt is a
+    different key and supersedes its own cache immediately, while identical
+    instructions over changing figures still hit it.
+    """
+    return hashlib.sha1(_DASHBOARD_RULES.encode()).hexdigest()[:8]
+
+
 def dashboard_insight(stats: dict) -> tuple[str, bool]:
     """A short narrative readout of today's numbers for the dashboard."""
-    prompt = (
-        "Below is today's snapshot of BeviGrow's coffee trading pipeline as "
-        "JSON. Write a concise briefing for the team.\n\n"
-        "Rules:\n"
-        "- 3 to 5 short bullet points, each starting with '- '.\n"
-        "- Reference actual numbers from the data; never invent figures.\n"
-        "- Cover: today's activity, pipeline health, strongest markets, and "
-        "the single most urgent risk or opportunity.\n"
-        "- Output only the bullets.\n\n"
-        f"Data: {json.dumps(stats, default=str)}"
-    )
-    result = _complete(prompt, max_tokens=500)
+    prompt = _DASHBOARD_RULES + f"Data: {json.dumps(stats, default=str)}"
+    result = _complete(prompt, max_tokens=220)
     if result:
         return result, True
     return _fallback_dashboard(stats), False
@@ -107,17 +140,20 @@ def _fallback_dashboard(stats: dict) -> str:
     k = stats.get("kpis", {})
     top = stats.get("top_countries") or []
     top_txt = ", ".join(f"{c['country']} ({c['count']})" for c in top[:3]) or "no markets yet"
-    lines = [
-        f"- {k.get('activities_today', 0)} interactions logged today across "
-        f"{k.get('total_contacts', 0)} tracked accounts.",
-        f"- Pipeline holds {k.get('new_leads', 0)} new leads and "
-        f"{k.get('shipments_in_progress', 0)} shipments in progress.",
-        f"- Export vs import split: {k.get('export_orders', 0)} export / "
-        f"{k.get('import_orders', 0)} import.",
-        f"- Strongest markets: {top_txt}.",
-        f"- {k.get('pending_follow_ups', 0)} follow-ups are due — clear these first.",
-    ]
-    return "\n".join(lines)
+    # Same rule as the prompt: only say what is worth acting on. A line
+    # reporting a count of zero is one the reader must read before discarding.
+    lines: list[str] = []
+    if k.get("pending_follow_ups"):
+        lines.append(f"- {k['pending_follow_ups']} follow-ups are due — clear these first.")
+    if k.get("new_leads"):
+        lines.append(f"- {k['new_leads']} new leads still waiting on a first reply.")
+    if not lines and k.get("activities_today"):
+        lines.append(f"- {k['activities_today']} interactions logged today.")
+    if not lines and top:
+        lines.append(f"- Busiest market: {top_txt}.")
+    if not lines:
+        lines.append("- Nothing needs attention today.")
+    return "\n".join(lines[:2])
 
 
 def weekly_highlights(stats: dict) -> tuple[str, bool]:

@@ -40,7 +40,7 @@ interface NavItem {
 const TRADE_NAV: NavItem[] = [
   { to: '/app/trade', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/app/trade/quotes', label: 'Quotes', icon: Users },
-  { to: '/app/trade/pipeline', label: 'Pipeline', icon: BarChart3 },
+  { to: '/app/trade/pipeline', label: 'Deal Stages', icon: BarChart3 },
   { to: '/app/trade/activity', label: 'Activity Log', icon: MessageSquare },
   { to: '/app/trade/documents', label: 'Documents', icon: FileText },
   { to: '/app/trade/follow-ups', label: 'Follow-ups', icon: Bell },

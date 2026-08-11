@@ -56,7 +56,7 @@ export function Hub() {
           to="/app/trade"
           icon={<Briefcase size={24} />}
           title="Trade Desk"
-          blurb="Quotes and RFQs, the deal pipeline, documents and shipment follow-ups."
+          blurb="Quotes and RFQs, how far each deal has got, documents and shipment follow-ups."
           stat={counts ? `${counts.quotes} quote${counts.quotes === 1 ? '' : 's'}` : ' '}
           delay={0}
         />

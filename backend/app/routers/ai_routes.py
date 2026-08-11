@@ -143,7 +143,12 @@ def dashboard_insights(
     refresh: bool = Query(default=False, description="Bypass the 30-minute cache"),
 ):
     payload = _stats_payload(db)
-    return _cached_insight(db, "dashboard", refresh, lambda: ai.dashboard_insight(payload))
+    return _cached_insight(
+        db,
+        f"dashboard:{ai.prompt_fingerprint()}",
+        refresh,
+        lambda: ai.dashboard_insight(payload),
+    )
 
 
 @router.get("/weekly", response_model=InsightResponse)

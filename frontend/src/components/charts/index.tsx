@@ -122,7 +122,7 @@ export function RoastBarChart({ data, unit = '' }: { data: BarDatum[]; unit?: st
   const height = data.length * rowH
 
   if (!data.length) {
-    return <p className="py-10 text-center text-sm text-latte/40">No pipeline data yet.</p>
+    return <p className="py-10 text-center text-sm text-latte/40">Nothing to show yet.</p>
   }
 
   return (
@@ -132,7 +132,7 @@ export function RoastBarChart({ data, unit = '' }: { data: BarDatum[]; unit?: st
         className="w-full"
         style={{ height: Math.max(height, 80) }}
         role="img"
-        aria-label="Pipeline volume by stage"
+        aria-label="Number of deals at each stage"
       >
         {/* Recessive gridlines */}
         {[0.25, 0.5, 0.75, 1].map((f) => (

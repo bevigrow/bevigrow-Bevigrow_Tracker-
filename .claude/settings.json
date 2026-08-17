@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx vite *)",
+      "Bash(./.venv/Scripts/python.exe -c ' *)",
+      "Bash(./.venv/Scripts/python.exe \"C:/Users/Thebest/AppData/Local/Temp/claude/c--Users-Thebest-OneDrive-Desktop-BEVI-GROW-APPLICATION/e630d91d-ea2a-4b25-9d82-3b702d39b13e/scratchpad/smoke.py\")",
+      "Bash(PYTHONPATH=. ./.venv/Scripts/python.exe \"C:/Users/Thebest/AppData/Local/Temp/claude/c--Users-Thebest-OneDrive-Desktop-BEVI-GROW-APPLICATION/e630d91d-ea2a-4b25-9d82-3b702d39b13e/scratchpad/smoke.py\")",
+      "Bash(curl -s -m 20 http://127.0.0.1:8011/api/health)",
+      "PowerShell(Get-NetTCPConnection -State Listen -LocalPort 8000,8011,5183 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { try { Stop-Process -Id $_ -Force -ErrorAction Stop; \"stopped $_\" } catch { \"skip $_\" } })"
+    ]
+  }
+}

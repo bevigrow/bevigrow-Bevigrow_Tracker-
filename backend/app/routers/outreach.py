@@ -32,6 +32,7 @@ from ..schemas import (
     OutreachStats,
     OutreachUpdate,
 )
+from ..services.geo import CountryTally, canon
 
 router = APIRouter(prefix="/api/outreach", tags=["outreach"])
 
@@ -42,6 +43,7 @@ def list_outreach(
     search: str | None = Query(default=None, description="Company, person, website or notes"),
     contact_method: ContactMethod | None = None,
     outreach_status: OutreachStatus | None = Query(default=None, alias="status"),
+    country: str | None = None,
     due: bool = Query(default=False, description="Only rows whose follow-up is due"),
     limit: int = Query(default=300, ge=1, le=500),
 ):
@@ -63,6 +65,9 @@ def list_outreach(
         stmt = stmt.where(Outreach.contact_method == contact_method)
     if outreach_status:
         stmt = stmt.where(Outreach.status == outreach_status)
+    if country:
+        # Case-insensitive, to match every spelling behind one picker option.
+        stmt = stmt.where(func.lower(func.trim(Outreach.country)) == canon(country))
     if due:
         stmt = stmt.where(
             Outreach.next_follow_up.is_not(None),
@@ -151,8 +156,25 @@ def outreach_insights(
 
     Grouped in SQL rather than in Python: the whole table would otherwise cross
     the wire on every page load, and this endpoint is on the critical path for
-    the Outreach view.
+    the Outreach view. What does come back per spelling is the label map — one
+    row per way a country has been written, which is a handful of strings.
     """
+
+    def _labels(column) -> dict[str, str]:
+        """Canonical key → the spelling most records use.
+
+        The chart's labels are what a click sends to the country filter, so
+        they have to be the same strings the picker offers. Deriving them the
+        same way as /api/countries is what keeps the two agreeing; a min() over
+        the spellings would quietly hand back "JAPAN" where the picker said
+        "Japan", and the dropdown would then look empty while filtered.
+        """
+        tally = CountryTally()
+        for value, count in db.execute(
+            select(column, func.count(Outreach.id)).group_by(column)
+        ).all():
+            tally.add(value, prospects=count)
+        return {canon(row.label): row.label for row in tally.rows(include_unknown=False)}
 
     def _grouped(column) -> list[OutreachGroup]:
         replied = func.count(Outreach.id).filter(Outreach.status == OutreachStatus.replied)
@@ -162,27 +184,34 @@ def outreach_insights(
         )
         chases = func.coalesce(func.sum(Outreach.follow_ups_sent), 0)
         lead = func.count(Outreach.id).desc()
+        # Grouped on the canonical name, not the raw one: "Norway", "norway"
+        # and "Norway " are one country and must not each get a row with a
+        # third of the messages.
+        key = func.lower(func.trim(column))
+        labels = _labels(column)
         rows = db.execute(
-            select(column, func.count(Outreach.id), replied, awaiting, chases)
+            select(key, func.count(Outreach.id), replied, awaiting, chases)
             .where(column.is_not(None), func.trim(column) != "")
-            .group_by(column)
-            .order_by(lead, func.lower(column).asc())
+            .group_by(key)
+            .order_by(lead, key.asc())
             .limit(limit)
         ).all()
         return [
             OutreachGroup(
-                label=label,
+                label=labels.get(name, name),
                 total=total,
                 replied=n_replied,
                 awaiting=n_awaiting,
                 reply_rate=round(n_replied / total * 100, 1) if total else 0.0,
                 follow_ups=int(n_chases or 0),
             )
-            for label, total, n_replied, n_awaiting, n_chases in rows
+            for name, total, n_replied, n_awaiting, n_chases in rows
         ]
 
     distinct = lambda col: db.scalar(  # noqa: E731
-        select(func.count(func.distinct(col))).where(col.is_not(None), func.trim(col) != "")
+        select(func.count(func.distinct(func.lower(func.trim(col))))).where(
+            col.is_not(None), func.trim(col) != ""
+        )
     ) or 0
 
     return OutreachInsights(

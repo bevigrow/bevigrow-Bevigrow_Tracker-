@@ -235,6 +235,267 @@ export function BarTable({ data, unit = 'Count' }: { data: BarDatum[]; unit?: st
   )
 }
 
+/* -------------------------------------------------- split bar chart (H) */
+
+/** Square at the baseline, 4px rounded at the data end — the house bar shape. */
+function capRight(x: number, y: number, w: number, h: number): string {
+  const width = Math.max(w, 2)
+  if (width < 5) return `M${x} ${y} h${width} v${h} h-${width} Z`
+  return `M${x} ${y} h${width - 4} a4 4 0 0 1 4 4 v${h - 8} a4 4 0 0 1 -4 4 h-${width - 4} Z`
+}
+
+export interface SplitDatum {
+  label: string
+  /** Left segment — the primary measure. */
+  primary: number
+  /** Right segment — a second measure of the same unit, stacked, never summed. */
+  secondary: number
+  meta?: string
+  /** False for rows that exist but cannot be filtered on, e.g. "Unknown". */
+  selectable?: boolean
+}
+
+/**
+ * Two measures of the same unit per row, stacked.
+ *
+ * Used for countries, where quotes and cold prospects are both "records here"
+ * but mean different things: a country with nine prospects and no quotes is
+ * worth seeing, and a chart of quotes alone drew it as nothing at all. Stacked
+ * rather than side-by-side because the total — how much of the desk sits in
+ * that country — is the first thing you read, and the split is the second.
+ */
+export function SplitBarChart({
+  data,
+  primaryLabel,
+  secondaryLabel,
+  primaryColor = CATEGORICAL[0],
+  secondaryColor = CATEGORICAL[1],
+  selected,
+  onSelect,
+  maxRows,
+  rowNoun = 'rows',
+}: {
+  data: SplitDatum[]
+  primaryLabel: string
+  secondaryLabel: string
+  /** Both default to the categorical pair; pass a validated colour or neither. */
+  primaryColor?: string
+  secondaryColor?: string
+  selected?: string | null
+  onSelect?: (label: string) => void
+  /** Draw only the biggest N, with the rest behind a toggle. */
+  maxRows?: number
+  rowNoun?: string
+}) {
+  const [tip, setTip] = useState<TipState | null>(null)
+  const [expanded, setExpanded] = useState(false)
+
+  // A ranked bar chart has no natural end: countries only accumulate, and a
+  // chart tall enough to need scrolling has stopped ranking anything. The
+  // long tail stays one click — or one Table press — away rather than gone.
+  // The selected row is always drawn, however far down it sits, so filtering
+  // by a small country never hides the bar that says so.
+  const rows = useMemo(() => {
+    if (!maxRows || expanded || data.length <= maxRows) return data
+    const head = data.slice(0, maxRows)
+    const chosen = selected ? data.find((d) => d.label === selected) : undefined
+    return chosen && !head.includes(chosen) ? [...head, chosen] : head
+  }, [data, maxRows, expanded, selected])
+
+  const totals = data.map((d) => d.primary + d.secondary)
+  const max = Math.max(1, ...totals)
+  const rowH = 34
+  const barH = 18
+  const labelW = 148
+  const trackW = 620 - labelW - 60
+  const height = rows.length * rowH
+
+  if (!data.length) {
+    return <p className="py-10 text-center text-sm text-latte/40">Nothing to show yet.</p>
+  }
+
+  return (
+    <div className="relative">
+      <svg
+        viewBox={`0 0 620 ${height}`}
+        className="w-full"
+        style={{ height: Math.max(height, 80) }}
+        role="img"
+        aria-label={`${primaryLabel} and ${secondaryLabel} across ${data.length} ${rowNoun}`}
+      >
+        {[0.25, 0.5, 0.75, 1].map((f) => (
+          <line
+            key={f}
+            x1={labelW + trackW * f}
+            y1={0}
+            x2={labelW + trackW * f}
+            y2={height}
+            stroke={GRID}
+            strokeWidth={1}
+          />
+        ))}
+
+        {rows.map((d, i) => {
+          const total = d.primary + d.secondary
+          const y = i * rowH + (rowH - barH) / 2
+          const full = (trackW * total) / max
+          // 2px of surface between the two touching marks, taken out of the
+          // first segment so the total still reads to scale.
+          const gap = d.primary > 0 && d.secondary > 0 ? 2 : 0
+          const firstW = total > 0 ? Math.max(0, (full * d.primary) / total - gap) : 0
+          const secondW = total > 0 ? (full * d.secondary) / total : 0
+          const dim = selected != null && selected !== d.label
+          const chosen = selected === d.label
+          const pick = onSelect && d.selectable !== false ? () => onSelect(d.label) : undefined
+
+          return (
+            <g
+              key={d.label}
+              opacity={dim ? 0.4 : 1}
+              style={pick ? { cursor: 'pointer' } : undefined}
+              role={pick ? 'button' : undefined}
+              tabIndex={pick ? 0 : undefined}
+              aria-pressed={pick ? chosen : undefined}
+              onClick={pick}
+              onKeyDown={(e) => {
+                if (pick && (e.key === 'Enter' || e.key === ' ')) {
+                  e.preventDefault()
+                  pick()
+                }
+              }}
+              onMouseMove={(e) => {
+                const rect = (
+                  e.currentTarget.ownerSVGElement as SVGSVGElement
+                ).getBoundingClientRect()
+                setTip({
+                  x: e.clientX - rect.left,
+                  y: e.clientY - rect.top,
+                  content: (
+                    <>
+                      <div className="font-semibold text-latte">{d.label}</div>
+                      <div className="text-latte/65">
+                        {d.primary.toLocaleString()} {primaryLabel.toLowerCase()}
+                      </div>
+                      <div className="text-latte/65">
+                        {d.secondary.toLocaleString()} {secondaryLabel.toLowerCase()}
+                      </div>
+                      {d.meta && <div className="text-latte/45">{d.meta}</div>}
+                      {pick && (
+                        <div className="mt-1 text-[10px] text-gold/80">
+                          {chosen ? 'Click to clear the filter' : 'Click to filter'}
+                        </div>
+                      )}
+                    </>
+                  ),
+                })
+              }}
+              onMouseLeave={() => setTip(null)}
+            >
+              <rect x={0} y={i * rowH} width={620} height={rowH} fill="transparent" />
+              <text
+                x={labelW - 12}
+                y={i * rowH + rowH / 2 + 4}
+                textAnchor="end"
+                fontSize={11.5}
+                fontWeight={chosen ? 700 : 400}
+                fill={chosen ? 'rgba(245,230,211,0.95)' : AXIS_TEXT}
+              >
+                {d.label}
+              </text>
+
+              {/* Square at the baseline; only the segment that ends the bar
+                  gets the 4px data-end radius. */}
+              {d.primary > 0 &&
+                (d.secondary > 0 ? (
+                  <rect
+                    x={labelW}
+                    y={y}
+                    width={Math.max(firstW, 2)}
+                    height={barH}
+                    fill={primaryColor}
+                  />
+                ) : (
+                  <path d={capRight(labelW, y, firstW, barH)} fill={primaryColor} />
+                ))}
+              {d.secondary > 0 && (
+                <path
+                  d={capRight(labelW + firstW + gap, y, secondW, barH)}
+                  fill={secondaryColor}
+                />
+              )}
+
+              {total > 0 && (
+                <text
+                  x={labelW + full + 10}
+                  y={i * rowH + rowH / 2 + 4}
+                  fontSize={12}
+                  fontWeight={600}
+                  fill="rgba(245,230,211,0.85)"
+                >
+                  {total.toLocaleString()}
+                </text>
+              )}
+            </g>
+          )
+        })}
+      </svg>
+
+      {maxRows != null && data.length > maxRows && (
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-2 text-[11px] text-gold hover:underline"
+          aria-expanded={expanded}
+        >
+          {expanded
+            ? `Show the top ${maxRows}`
+            : `Show all ${data.length} ${rowNoun} (${data.length - maxRows} more)`}
+        </button>
+      )}
+
+      <Tooltip tip={tip} />
+    </div>
+  )
+}
+
+export function SplitBarTable({
+  data,
+  head,
+  primaryLabel,
+  secondaryLabel,
+}: {
+  data: SplitDatum[]
+  head: string
+  primaryLabel: string
+  secondaryLabel: string
+}) {
+  return (
+    <div className="max-h-72 overflow-y-auto">
+      <table className="w-full text-sm">
+        <thead className="sticky top-0 bg-espresso">
+          <tr>
+            <th className="table-head">{head}</th>
+            <th className="table-head text-right">{primaryLabel}</th>
+            <th className="table-head text-right">{secondaryLabel}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((d) => (
+            <tr key={d.label} className="border-t border-caramel/10">
+              <td className="table-cell">{d.label}</td>
+              <td className="table-cell text-right tabular-nums">
+                {d.primary.toLocaleString()}
+              </td>
+              <td className="table-cell text-right tabular-nums">
+                {d.secondary.toLocaleString()}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 /* ------------------------------------------------------------ line chart */
 
 export interface Series {
@@ -257,6 +518,11 @@ export function TrendChart({ labels, series }: { labels: string[]; series: Serie
   const rawMax = Math.max(1, ...series.flatMap((s) => s.values))
   const max = niceMax(rawMax)
   const ticks = ticksFor(max)
+  // Roughly eight dates across, whatever the window length. A fixed
+  // every-third-day stride was fine for a fortnight and prints ninety labels
+  // on top of each other at ninety days. The last date always shows, and any
+  // strided label that would crowd it is dropped instead.
+  const labelStride = Math.max(1, Math.ceil(labels.length / 8))
 
   const px = (i: number) =>
     pad.l + (i * (W - pad.l - pad.r)) / Math.max(1, labels.length - 1)
@@ -312,7 +578,8 @@ export function TrendChart({ labels, series }: { labels: string[]; series: Serie
         ))}
 
         {labels.map((l, i) =>
-          i % 3 === 0 || i === labels.length - 1 ? (
+          i === labels.length - 1 ||
+          (i % labelStride === 0 && labels.length - 1 - i >= labelStride / 2) ? (
             <text key={`lab-${i}`} x={px(i)} y={H - 8} textAnchor="middle" fontSize={10} fill={AXIS_TEXT}>
               {l}
             </text>

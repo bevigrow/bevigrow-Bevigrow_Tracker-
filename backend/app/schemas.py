@@ -329,8 +329,20 @@ class KpiSet(BaseModel):
 
 class CountryStat(BaseModel):
     country: str
+    # Quotes and cold-outreach prospects are counted side by side rather than
+    # summed: a country you have quoted nine times is not the same place as one
+    # you have written to nine times and never heard back from.
     count: int
+    prospects: int = 0
     value_usd: float
+
+
+class CountryOption(BaseModel):
+    """One entry in the shared country picker / suggestion list."""
+
+    name: str
+    quotes: int = 0
+    prospects: int = 0
 
 
 class StatusStat(BaseModel):
@@ -344,15 +356,32 @@ class TrendPoint(BaseModel):
     new_leads: int
 
 
+class DashboardFilterState(BaseModel):
+    """What the figures below were narrowed to, echoed back.
+
+    The client sends these as query parameters; having the server say what it
+    actually applied means the filter bar can be rebuilt from a shared URL
+    without guessing.
+    """
+
+    country: str | None = None
+    trade_type: TradeType | None = None
+    days: int = 14
+
+
 class DashboardOut(BaseModel):
     greeting: str
     kpis: KpiSet
+    # Deliberately NOT narrowed by the country filter — this is the chart you
+    # pick a country from, so it has to keep showing the ones you are not
+    # currently looking at.
     by_country: list[CountryStat]
     by_status: list[StatusStat]
     trend: list[TrendPoint]
     export_vs_import: dict[str, int]
     recent_activities: list[ActivityOut]
     upcoming_follow_ups: list[ReminderOut]
+    filters: DashboardFilterState = DashboardFilterState()
 
 
 # -------------------------------------------------------------------------- ai

@@ -14,6 +14,7 @@ import {
   Skeleton,
   Textarea,
 } from '../components/ui'
+import { CountryInput, forgetCountries, knownCountries } from '../components/CountryInput'
 import { OutreachInsights } from '../components/OutreachInsights'
 import { ApiError, api } from '../lib/api'
 import {
@@ -28,6 +29,7 @@ import {
 import { useToast } from '../lib/toast'
 import type {
   ContactMethod,
+  CountryOption,
   Outreach as Row,
   OutreachInsights as Insights,
   OutreachStats,
@@ -59,7 +61,9 @@ export function Outreach() {
   const [search, setSearch] = useState('')
   const [method, setMethod] = useState('')
   const [status, setStatus] = useState('')
+  const [country, setCountry] = useState('')
   const [dueOnly, setDueOnly] = useState(false)
+  const [countries, setCountries] = useState<CountryOption[]>([])
 
   const [editing, setEditing] = useState<Row | null>(null)
   const [creating, setCreating] = useState(false)
@@ -73,6 +77,7 @@ export function Outreach() {
           search: search.trim() || undefined,
           contact_method: method || undefined,
           status: status || undefined,
+          country: country || undefined,
           due: dueOnly || undefined,
         }),
         api.outreachStats().catch(() => null),
@@ -85,14 +90,17 @@ export function Outreach() {
       setLoading(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, method, status, dueOnly])
+  }, [search, method, status, country, dueOnly])
 
   useEffect(() => {
     // Not part of `load`: these summarise the whole log, so re-fetching them
     // on every keystroke would be wasted work and would make the panels
     // flicker while you type.
+    // Twenty, not the default eight. Eight was enough while the log was small;
+    // with more countries than that, the tail was silently missing from the
+    // one panel that is supposed to say where the prospecting has gone.
     api
-      .outreachInsights()
+      .outreachInsights(20)
       .then(setInsights)
       .catch(() => setInsights(null))
   }, [rows.length])
@@ -101,6 +109,12 @@ export function Outreach() {
     const id = window.setTimeout(() => void load(), 300)
     return () => window.clearTimeout(id)
   }, [load])
+
+  useEffect(() => {
+    // Every country the app knows, so the picker still offers one whose only
+    // rows are closed or filtered out of the current list.
+    void knownCountries().then((list) => setCountries(list.filter((c) => c.prospects > 0)))
+  }, [rows.length])
 
   const followUp = async (row: Row) => {
     try {
@@ -136,7 +150,7 @@ export function Outreach() {
     }
   }
 
-  const filtered = search || method || status || dueOnly
+  const filtered = search || method || status || country || dueOnly
 
   return (
     <div className="space-y-6">
@@ -171,13 +185,13 @@ export function Outreach() {
         <OutreachInsights
           data={insights}
           loading={loading && !insights}
-          active={search}
-          onPick={(label) => setSearch((cur) => (cur === label ? '' : label))}
+          active={country}
+          onPick={(label) => setCountry((cur) => (cur === label ? '' : label))}
         />
       )}
 
       <Card className="!p-4">
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="relative">
             <Search
               size={15}
@@ -209,6 +223,15 @@ export function Outreach() {
               ...OUTREACH_ORDER.map((s) => ({ value: s, label: outreachLabel(s) })),
             ]}
           />
+          <Select
+            value={country}
+            onChange={(e) => setCountry(e.target.value)}
+            aria-label="Filter by country"
+            options={[
+              { value: '', label: 'All countries' },
+              ...countries.map((c) => ({ value: c.name, label: `${c.name} · ${c.prospects}` })),
+            ]}
+          />
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-4">
           <label className="flex cursor-pointer items-center gap-2 text-xs text-latte/55">
@@ -226,6 +249,7 @@ export function Outreach() {
                 setSearch('')
                 setMethod('')
                 setStatus('')
+                setCountry('')
                 setDueOnly(false)
               }}
               className="text-xs text-gold hover:underline"
@@ -490,6 +514,8 @@ function OutreachModal({
     try {
       if (row) await api.updateOutreach(row.id, payload)
       else await api.createOutreach(payload)
+      // A country typed here belongs in the next form's suggestions.
+      forgetCountries()
       toast.success(row ? 'Record updated.' : '📮 Outreach logged.')
       onSaved()
     } catch (err) {
@@ -532,11 +558,7 @@ function OutreachModal({
             />
           </Field>
           <Field label="Country">
-            <Input
-              value={form.country}
-              onChange={(e) => set('country')(e.target.value)}
-              placeholder="Norway"
-            />
+            <CountryInput value={form.country} onChange={set('country')} placeholder="Norway" />
           </Field>
         </div>
 

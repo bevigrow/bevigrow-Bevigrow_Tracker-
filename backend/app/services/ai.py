@@ -139,7 +139,12 @@ def dashboard_insight(stats: dict) -> tuple[str, bool]:
 def _fallback_dashboard(stats: dict) -> str:
     k = stats.get("kpis", {})
     top = stats.get("top_countries") or []
-    top_txt = ", ".join(f"{c['country']} ({c['count']})" for c in top[:3]) or "no markets yet"
+    # Records, not quotes: a country can be entirely cold outreach, and
+    # printing its quote count would report every one of them as "(0)".
+    top_txt = (
+        ", ".join(f"{c['country']} ({c['count'] + c.get('prospects', 0)})" for c in top[:3])
+        or "no markets yet"
+    )
     # Same rule as the prompt: only say what is worth acting on. A line
     # reporting a count of zero is one the reader must read before discarding.
     lines: list[str] = []

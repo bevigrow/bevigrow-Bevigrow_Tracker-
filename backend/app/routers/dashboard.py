@@ -22,12 +22,15 @@ from ..models import (
 from ..schemas import (
     ActivityOut,
     CountryStat,
+    DashboardFilterState,
     DashboardOut,
     KpiSet,
     ReminderOut,
     StatusStat,
     TrendPoint,
 )
+from ..services.geo import canon
+from .countries import tally_countries
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
@@ -38,6 +41,8 @@ EXPORT_ORDER_STATUSES = {
     DealStatus.delivered,
     DealStatus.completed,
 }
+
+DEFAULT_TREND_DAYS = 14
 
 
 def _greeting(now: datetime) -> str:
@@ -54,38 +59,82 @@ def _day_bounds(day: date) -> tuple[datetime, datetime]:
     return start, start + timedelta(days=1)
 
 
-def compute_stats(db: Session) -> dict:
-    """Raw numbers, reused by both the dashboard endpoint and the AI prompts."""
+def quote_scope(country: str | None, trade_type: TradeType | None) -> list:
+    """Conditions that narrow every quote-derived figure to the current filter.
+
+    Country is matched case- and padding-insensitively, because that is how it
+    was stored: free text, typed by hand, sometimes pasted with a trailing
+    space. (A doubled space inside a name is the one variation this misses —
+    the tally in services.geo collapses those, SQL here does not.)
+    """
+    conds = []
+    if trade_type:
+        conds.append(Contact.trade_type == trade_type)
+    if country and country.strip():
+        conds.append(func.lower(func.trim(Contact.country)) == canon(country))
+    return conds
+
+
+def compute_stats(
+    db: Session,
+    *,
+    country: str | None = None,
+    trade_type: TradeType | None = None,
+    days: int = DEFAULT_TREND_DAYS,
+) -> dict:
+    """Raw numbers, reused by both the dashboard endpoint and the AI prompts.
+
+    With no arguments this is the whole desk, as it always was. Passing a
+    country or trade type narrows every quote-derived figure — KPIs, stages,
+    open value, and the activity trend through the quote each activity hangs
+    off — so the page reads as one filtered view rather than a filtered chart
+    surrounded by unfiltered totals.
+    """
     now = datetime.now(timezone.utc)
     today = now.date()
     today_start, today_end = _day_bounds(today)
 
-    total_contacts = db.scalar(select(func.count(Contact.id))) or 0
+    scope = quote_scope(country, trade_type)
+
+    def quotes(stmt):
+        return stmt.where(*scope) if scope else stmt
+
+    def via_quote(stmt, foreign_key):
+        """The same narrowing for rows that hang off a quote."""
+        if not scope:
+            return stmt
+        return stmt.join(Contact, foreign_key == Contact.id).where(*scope)
+
+    total_contacts = db.scalar(quotes(select(func.count(Contact.id)))) or 0
 
     status_rows = db.execute(
-        select(Contact.status, func.count(Contact.id)).group_by(Contact.status)
+        quotes(select(Contact.status, func.count(Contact.id))).group_by(Contact.status)
     ).all()
     status_counts = {status: count for status, count in status_rows}
 
     trade_rows = db.execute(
-        select(Contact.trade_type, func.count(Contact.id)).group_by(Contact.trade_type)
+        quotes(select(Contact.trade_type, func.count(Contact.id))).group_by(Contact.trade_type)
     ).all()
     trade_counts = {t: c for t, c in trade_rows}
 
     export_orders = (
         db.scalar(
-            select(func.count(Contact.id)).where(
-                Contact.trade_type == TradeType.export,
-                Contact.status.in_(EXPORT_ORDER_STATUSES),
+            quotes(
+                select(func.count(Contact.id)).where(
+                    Contact.trade_type == TradeType.export,
+                    Contact.status.in_(EXPORT_ORDER_STATUSES),
+                )
             )
         )
         or 0
     )
     import_orders = (
         db.scalar(
-            select(func.count(Contact.id)).where(
-                Contact.trade_type == TradeType.import_,
-                Contact.status.in_(EXPORT_ORDER_STATUSES),
+            quotes(
+                select(func.count(Contact.id)).where(
+                    Contact.trade_type == TradeType.import_,
+                    Contact.status.in_(EXPORT_ORDER_STATUSES),
+                )
             )
         )
         or 0
@@ -93,7 +142,7 @@ def compute_stats(db: Session) -> dict:
 
     activities_today = (
         db.scalar(
-            select(func.count(Activity.id)).where(
+            via_quote(select(func.count(Activity.id)), Activity.contact_id).where(
                 Activity.occurred_at >= today_start, Activity.occurred_at < today_end
             )
         )
@@ -102,7 +151,7 @@ def compute_stats(db: Session) -> dict:
 
     pending_follow_ups = (
         db.scalar(
-            select(func.count(Reminder.id)).where(
+            via_quote(select(func.count(Reminder.id)), Reminder.contact_id).where(
                 Reminder.is_done.is_(False), Reminder.due_date <= today
             )
         )
@@ -117,22 +166,14 @@ def compute_stats(db: Session) -> dict:
 
     pipeline_value = (
         db.scalar(
-            select(func.coalesce(func.sum(Contact.estimated_value_usd), 0.0)).where(
-                Contact.status.in_(OPEN_PIPELINE)
+            quotes(
+                select(func.coalesce(func.sum(Contact.estimated_value_usd), 0.0)).where(
+                    Contact.status.in_(OPEN_PIPELINE)
+                )
             )
         )
         or 0.0
     )
-
-    country_rows = db.execute(
-        select(
-            Contact.country,
-            func.count(Contact.id),
-            func.coalesce(func.sum(Contact.estimated_value_usd), 0.0),
-        )
-        .group_by(Contact.country)
-        .order_by(func.count(Contact.id).desc())
-    ).all()
 
     kpis = KpiSet(
         new_leads=status_counts.get(DealStatus.new_lead, 0),
@@ -147,13 +188,23 @@ def compute_stats(db: Session) -> dict:
         pipeline_value_usd=round(float(pipeline_value), 2),
     )
 
+    # The country breakdown covers cold outreach as well as quotes, and merges
+    # spellings. Both matter: a country you have only prospected has no quote
+    # rows at all, so grouping the quotes table alone showed nothing and the
+    # name looked like it had been dropped on the way in. Filters are not
+    # applied — this is the chart you choose a country from.
     by_country = [
-        CountryStat(country=c or "Unknown", count=n, value_usd=round(float(v or 0), 2))
-        for c, n, v in country_rows
+        CountryStat(
+            country=row.label,
+            count=row.quotes,
+            prospects=row.prospects,
+            value_usd=round(row.value_usd, 2),
+        )
+        for row in tally_countries(db).rows()
     ]
     by_status = [StatusStat(status=s, count=status_counts.get(s, 0)) for s in DealStatus]
 
-    # 14-day trend of activities and new leads.
+    # Trend of activities and new leads over the requested window.
     #
     # This used to ask the database two questions per day inside a loop: 28
     # round trips to build a sparkline. Every one of them was fast to execute
@@ -161,15 +212,19 @@ def compute_stats(db: Session) -> dict:
     # trip pays the latency whether it counts a million rows or none. Grouping
     # by day asks the same two questions once each, and the wall-clock cost of
     # the dashboard drops by roughly two thirds.
-    window_start, _ = _day_bounds(today - timedelta(days=13))
+    span = max(1, days)
+    window_start, _ = _day_bounds(today - timedelta(days=span - 1))
     window_end = today_end
 
-    def _per_day(column, timestamp) -> dict[date, int]:
+    def _per_day(column, timestamp, foreign_key=None) -> dict[date, int]:
         day = func.date(timestamp)
+        stmt = select(day, func.count(column))
+        if foreign_key is not None:
+            stmt = via_quote(stmt, foreign_key)
+        elif scope:
+            stmt = stmt.where(*scope)
         rows = db.execute(
-            select(day, func.count(column))
-            .where(timestamp >= window_start, timestamp < window_end)
-            .group_by(day)
+            stmt.where(timestamp >= window_start, timestamp < window_end).group_by(day)
         ).all()
         # func.date() comes back as a date on PostgreSQL and a string on
         # SQLite, so normalise before the lookup below.
@@ -177,13 +232,13 @@ def compute_stats(db: Session) -> dict:
             (d if isinstance(d, date) else date.fromisoformat(str(d))): n for d, n in rows
         }
 
-    acts_by_day = _per_day(Activity.id, Activity.occurred_at)
+    acts_by_day = _per_day(Activity.id, Activity.occurred_at, Activity.contact_id)
     leads_by_day = _per_day(Contact.id, Contact.created_at)
 
     # Days with no rows are absent from a GROUP BY, so build the axis from the
     # calendar rather than from the results — a quiet day must still show 0.
     trend: list[TrendPoint] = []
-    for offset in range(13, -1, -1):
+    for offset in range(span - 1, -1, -1):
         day = today - timedelta(days=offset)
         trend.append(
             TrendPoint(
@@ -203,29 +258,40 @@ def compute_stats(db: Session) -> dict:
             "export": trade_counts.get(TradeType.export, 0),
             "import": trade_counts.get(TradeType.import_, 0),
         },
+        "filters": DashboardFilterState(
+            country=(country or "").strip() or None, trade_type=trade_type, days=span
+        ),
     }
 
 
 @router.get("", response_model=DashboardOut)
-def get_dashboard(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    stats = compute_stats(db)
+def get_dashboard(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+    country: str | None = Query(default=None, max_length=100),
+    trade_type: TradeType | None = None,
+    days: int = Query(default=DEFAULT_TREND_DAYS, ge=7, le=180),
+):
+    stats = compute_stats(db, country=country, trade_type=trade_type, days=days)
+    scope = quote_scope(country, trade_type)
 
-    recent = db.scalars(
-        select(Activity)
-        .options(selectinload(Activity.user), selectinload(Activity.contact))
-        .order_by(Activity.occurred_at.desc())
-        .limit(8)
-    ).all()
+    recent_stmt = select(Activity).options(
+        selectinload(Activity.user), selectinload(Activity.contact)
+    )
+    if scope:
+        recent_stmt = recent_stmt.join(Contact, Activity.contact_id == Contact.id).where(*scope)
+    recent = db.scalars(recent_stmt.order_by(Activity.occurred_at.desc()).limit(8)).all()
     recent_out = []
     for a in recent:
         item = ActivityOut.model_validate(a)
         item.contact_company = a.contact.company_name if a.contact else None
         recent_out.append(item)
 
+    upcoming_stmt = select(Reminder).options(selectinload(Reminder.contact))
+    if scope:
+        upcoming_stmt = upcoming_stmt.join(Contact, Reminder.contact_id == Contact.id).where(*scope)
     upcoming = db.scalars(
-        select(Reminder)
-        .options(selectinload(Reminder.contact))
-        .where(Reminder.is_done.is_(False))
+        upcoming_stmt.where(Reminder.is_done.is_(False))
         .order_by(Reminder.due_date.asc())
         .limit(8)
     ).all()

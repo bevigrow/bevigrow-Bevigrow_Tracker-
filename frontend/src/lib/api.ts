@@ -4,6 +4,7 @@ import type {
   AuthConfig,
   Contact,
   ContactDetail,
+  CountryOption,
   Dashboard,
   DealStatus,
   DocumentFile,
@@ -148,6 +149,13 @@ export interface ContactFilters {
   owner_id?: number
 }
 
+export interface DashboardFilters {
+  country?: string
+  trade_type?: string
+  /** Length of the activity trend window, in days. */
+  days?: number
+}
+
 export const api = {
   // ---- auth
   authConfig: () => request<AuthConfig>('/api/auth/config'),
@@ -208,6 +216,8 @@ export const api = {
     request<Contact>(`/api/contacts/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteContact: (id: number) => request<void>(`/api/contacts/${id}`, { method: 'DELETE' }),
   countries: () => request<string[]>('/api/contacts/countries'),
+  /** Every country known to the app — quotes and cold outreach alike. */
+  countryOptions: () => request<CountryOption[]>('/api/countries'),
   pipeline: (trade_type?: string) =>
     request<Record<DealStatus, Contact[]>>(`/api/contacts/board/pipeline${qs({ trade_type })}`),
 
@@ -269,10 +279,11 @@ export const api = {
   convertToQuote: (id: number) =>
     request<Contact>(`/api/outreach/${id}/convert`, { method: 'POST' }),
 
-  outreachInsights: () => request<OutreachInsights>('/api/outreach/insights'),
+  outreachInsights: (limit?: number) =>
+    request<OutreachInsights>(`/api/outreach/insights${qs({ limit })}`),
 
   // ---- dashboard
-  dashboard: () => request<Dashboard>('/api/dashboard'),
+  dashboard: (f: DashboardFilters = {}) => request<Dashboard>(`/api/dashboard${qs({ ...f })}`),
   leaderboard: (days = 30) => request<LeaderboardRow[]>(`/api/dashboard/leaderboard${qs({ days })}`),
 
   // ---- ai (Claude Haiku)

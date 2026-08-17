@@ -5,19 +5,22 @@ import {
   RefreshCw,
   Sparkles,
   TrendingUp,
+  X,
 } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 
 import {
   BarTable,
   ChartFrame,
   LegendItem,
   RoastBarChart,
+  SplitBarChart,
+  SplitBarTable,
   TrendChart,
   TrendTable,
 } from '../components/charts'
-import { Button, Card, EmptyState, Spinner } from '../components/ui'
+import { Button, Card, EmptyState, Select, Spinner } from '../components/ui'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import {
@@ -31,41 +34,79 @@ import { useToast } from '../lib/toast'
 import type { Dashboard as DashboardData, Insight } from '../lib/types'
 import { CATEGORICAL } from '../lib/viz'
 
+/** Windows offered for the activity trend. */
+const WINDOWS = [
+  { value: '14', label: 'Last 14 days' },
+  { value: '30', label: 'Last 30 days' },
+  { value: '90', label: 'Last 90 days' },
+]
+
+const same = (a: string, b: string) =>
+  a.trim().replace(/\s+/g, ' ').toLowerCase() === b.trim().replace(/\s+/g, ' ').toLowerCase()
+
 export function Dashboard() {
   const { user } = useAuth()
   const toast = useToast()
+  const [params, setParams] = useSearchParams()
   const [data, setData] = useState<DashboardData | null>(null)
   const [insight, setInsight] = useState<Insight | null>(null)
   const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
   const [refreshingAi, setRefreshingAi] = useState(false)
 
-  const load = useCallback(async () => {
-    // The AI insight is deliberately NOT awaited alongside the numbers.
-    //
-    // These two calls used to share a Promise.all, so the whole dashboard
-    // waited on whichever was slower — and the insight is a round trip to
-    // Gemini, routinely two seconds on its own. The figures a person actually
-    // came for sat behind a spinner waiting for a commentary panel.
-    //
-    // Now the numbers render as soon as they arrive and the insight drops into
-    // its own panel afterwards. Its failure stays non-fatal, as before.
+  // The filters live in the URL, so a filtered dashboard can be reloaded,
+  // bookmarked or pasted to a colleague and still say the same thing.
+  const country = params.get('country') ?? ''
+  const tradeType = params.get('trade_type') ?? ''
+  const days = params.get('days') ?? '14'
+  const query = params.toString()
+
+  const setFilter = (key: string, value: string) => {
+    const next = new URLSearchParams(params)
+    if (value) next.set(key, value)
+    else next.delete(key)
+    setParams(next, { replace: true })
+  }
+
+  // The AI insight is deliberately NOT awaited alongside the numbers.
+  //
+  // These two calls used to share a Promise.all, so the whole dashboard waited
+  // on whichever was slower — and the insight is a round trip to an LLM,
+  // routinely two seconds on its own. The figures a person actually came for
+  // sat behind a spinner waiting for a commentary panel.
+  //
+  // It is also outside the filter effect: the briefing summarises the whole
+  // desk, so re-billing a model every time a country is picked would buy
+  // nothing. Its failure stays non-fatal.
+  useEffect(() => {
     api
       .insights()
       .then(setInsight)
       .catch(() => setInsight(null))
-
-    try {
-      setData(await api.dashboard())
-    } catch {
-      toast.error('Could not load the dashboard.')
-    } finally {
-      setLoading(false)
-    }
-  }, [toast])
+  }, [])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    let live = true
+    setBusy(true)
+    const filters = new URLSearchParams(query)
+    api
+      .dashboard({
+        country: filters.get('country') ?? undefined,
+        trade_type: filters.get('trade_type') ?? undefined,
+        days: Number(filters.get('days')) || undefined,
+      })
+      .then((d) => live && setData(d))
+      .catch(() => live && toast.error('Could not load the dashboard.'))
+      .finally(() => {
+        if (!live) return
+        setLoading(false)
+        setBusy(false)
+      })
+    return () => {
+      live = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query])
 
   const refreshInsight = async () => {
     setRefreshingAi(true)
@@ -94,6 +135,26 @@ export function Dashboard() {
   const k = data.kpis
   const firstName = user?.name?.split(' ')[0] ?? 'there'
 
+  // The row the country filter currently points at. Matched loosely, because
+  // the value can arrive from a hand-edited URL in any capitalisation, and the
+  // highlight should still land on the right bar.
+  const selected = country ? data.by_country.find((c) => same(c.country, country)) : undefined
+  const countryOptions = [
+    { value: '', label: 'All countries' },
+    // A country from a shared link that no longer has records still has to be
+    // selectable, or the dropdown would silently disagree with the figures.
+    ...(country && !selected ? [{ value: country, label: country }] : []),
+    ...data.by_country
+      .filter((c) => c.country !== 'Unknown')
+      .map((c) => ({ value: c.country, label: `${c.country} · ${c.count + c.prospects}` })),
+  ]
+  const activeFilters = [country, tradeType].filter(Boolean).length
+
+  /** Carry the country through to the quotes list, so the drill-down agrees. */
+  const quotesLink = (trade: string) =>
+    `/app/trade/quotes?trade_type=${trade}` +
+    (country ? `&country=${encodeURIComponent(selected?.country ?? country)}` : '')
+
   // Three tiles, not six. "New leads", "Shipments in progress" and
   // "Completed orders" were each the count of a single pipeline stage, and the
   // Pipeline by Stage chart immediately below plots every stage — so they
@@ -101,8 +162,8 @@ export function Dashboard() {
   // chart cannot say: the export/import split, which is a different dimension
   // entirely, and follow-ups due, which is about time rather than stage.
   const KPI_CARDS = [
-    { icon: Globe2, label: 'Export Orders', value: k.export_orders, tint: CATEGORICAL[0], to: '/app/trade/quotes?trade_type=export' },
-    { icon: Download, label: 'Import Orders', value: k.import_orders, tint: CATEGORICAL[1], to: '/app/trade/quotes?trade_type=import' },
+    { icon: Globe2, label: 'Export Orders', value: k.export_orders, tint: CATEGORICAL[0], to: quotesLink('export') },
+    { icon: Download, label: 'Import Orders', value: k.import_orders, tint: CATEGORICAL[1], to: quotesLink('import') },
     { icon: Clock, label: 'Pending Follow-ups', value: k.pending_follow_ups, tint: '#D9705B', to: '/app/trade/follow-ups' },
   ]
 
@@ -114,6 +175,16 @@ export function Dashboard() {
     { name: 'Interactions', values: data.trend.map((t) => t.activities), color: CATEGORICAL[0] },
     { name: 'New leads', values: data.trend.map((t) => t.new_leads), color: CATEGORICAL[1] },
   ]
+
+  const countryBars = data.by_country.map((c) => ({
+    label: c.country,
+    primary: c.count,
+    secondary: c.prospects,
+    meta: c.value_usd > 0 ? `${compactMoney(c.value_usd)} in deals` : undefined,
+    // Records with no country cannot be filtered to — there is nothing to
+    // match on — so the row stays visible but inert.
+    selectable: c.country !== 'Unknown',
+  }))
 
   return (
     <div className="space-y-6">
@@ -130,7 +201,17 @@ export function Dashboard() {
               <span className="font-semibold text-gold">{k.pending_follow_ups}</span> follow-up
               {k.pending_follow_ups === 1 ? '' : 's'} due and{' '}
               <span className="font-semibold text-gold">{k.activities_today}</span> interaction
-              {k.activities_today === 1 ? '' : 's'} logged today.
+              {k.activities_today === 1 ? '' : 's'} logged today
+              {activeFilters > 0 && (
+                <>
+                  {' '}
+                  in{' '}
+                  <span className="font-semibold text-gold">
+                    {[selected?.country ?? country, tradeType].filter(Boolean).join(' · ')}
+                  </span>
+                </>
+              )}
+              .
             </p>
           </div>
           {/* Hero figure — exactly one per view */}
@@ -142,6 +223,68 @@ export function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* --------------------------------------------------------- filters */}
+      {/* One row, above everything it changes. Country and trade type narrow
+          every figure on the page — not just the chart they came from — so a
+          filtered dashboard reads as one view rather than a filtered chart
+          surrounded by unfiltered totals. */}
+      <Card className="!p-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <Select
+            value={tradeType}
+            onChange={(e) => setFilter('trade_type', e.target.value)}
+            aria-label="Filter by trade type"
+            options={[
+              { value: '', label: 'All trade types' },
+              { value: 'export', label: 'Export' },
+              { value: 'import', label: 'Import' },
+            ]}
+          />
+          <Select
+            value={selected?.country ?? country}
+            onChange={(e) => setFilter('country', e.target.value)}
+            aria-label="Filter by country"
+            options={countryOptions}
+          />
+          <Select
+            value={days}
+            onChange={(e) => setFilter('days', e.target.value === '14' ? '' : e.target.value)}
+            aria-label="Trend window"
+            options={WINDOWS}
+          />
+        </div>
+        {(activeFilters > 0 || busy) && (
+          <div className="mt-3 flex flex-wrap items-center gap-4 text-xs">
+            {selected && (
+              <span className="text-latte/55">
+                {selected.country}:{' '}
+                <span className="text-latte/80">{selected.count.toLocaleString()}</span> quote
+                {selected.count === 1 ? '' : 's'} ·{' '}
+                <span className="text-latte/80">{selected.prospects.toLocaleString()}</span> prospect
+                {selected.prospects === 1 ? '' : 's'}
+              </span>
+            )}
+            {activeFilters > 0 && (
+              <button
+                onClick={() => {
+                  // The trend window survives: it is how you are reading the
+                  // page, not what you are looking at.
+                  const next = new URLSearchParams(params)
+                  next.delete('country')
+                  next.delete('trade_type')
+                  setParams(next, { replace: true })
+                }}
+                className="inline-flex items-center gap-1.5 text-gold hover:underline"
+              >
+                <X size={12} />
+                Clear {activeFilters} filter{activeFilters === 1 ? '' : 's'}
+              </button>
+            )}
+            {busy && <span className="text-latte/40">Updating…</span>}
+          </div>
+        )}
+      </Card>
 
       {/* ----------------------------------------------------------- kpis */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -251,23 +394,35 @@ export function Dashboard() {
         </ChartFrame>
       </div>
 
+      {/* Quotes AND prospects. Counting quotes alone drew a country you had
+          only ever prospected as nothing at all, so a name typed on the
+          outreach form looked like it had been dropped on the way in. */}
       <ChartFrame
         title="Accounts by Country"
-        subtitle="Where your coffee buyers and suppliers are"
+        subtitle="Quotes and cold prospects — tap a country to filter the page"
+        legend={
+          <>
+            <LegendItem color={CATEGORICAL[0]} label="Quotes" />
+            <LegendItem color={CATEGORICAL[1]} label="Prospects" />
+          </>
+        }
         table={
-          <BarTable
-            data={data.by_country.map((c) => ({ label: c.country, value: c.count }))}
-            unit="Accounts"
+          <SplitBarTable
+            data={countryBars}
+            head="Country"
+            primaryLabel="Quotes"
+            secondaryLabel="Prospects"
           />
         }
       >
-        <RoastBarChart
-          data={data.by_country.map((c) => ({
-            label: c.country,
-            value: c.count,
-            meta: compactMoney(c.value_usd) + ' in deals',
-          }))}
-          unit="accounts"
+        <SplitBarChart
+          data={countryBars}
+          primaryLabel="Quotes"
+          secondaryLabel="Prospects"
+          selected={selected?.country ?? (country || null)}
+          onSelect={(label) => setFilter('country', same(label, country) ? '' : label)}
+          maxRows={10}
+          rowNoun="countries"
         />
       </ChartFrame>
 

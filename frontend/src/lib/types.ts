@@ -145,8 +145,18 @@ export interface Kpis {
 
 export interface CountryStat {
   country: string
+  /** Quotes / enquiries filed under this country. */
   count: number
+  /** Cold-outreach prospects — counted separately, never summed into `count`. */
+  prospects: number
   value_usd: number
+}
+
+/** One entry in the shared country picker, merged across quotes and outreach. */
+export interface CountryOption {
+  name: string
+  quotes: number
+  prospects: number
 }
 
 export interface StatusStat {
@@ -160,15 +170,23 @@ export interface TrendPoint {
   new_leads: number
 }
 
+export interface DashboardFilterState {
+  country: string | null
+  trade_type: 'export' | 'import' | null
+  days: number
+}
+
 export interface Dashboard {
   greeting: string
   kpis: Kpis
+  /** Never narrowed by the country filter — it is the chart you pick from. */
   by_country: CountryStat[]
   by_status: StatusStat[]
   trend: TrendPoint[]
   export_vs_import: { export: number; import: number }
   recent_activities: Activity[]
   upcoming_follow_ups: Reminder[]
+  filters: DashboardFilterState
 }
 
 export interface Insight {

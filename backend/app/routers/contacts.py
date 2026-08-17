@@ -17,6 +17,7 @@ from ..schemas import (
     DocumentOut,
     ReminderOut,
 )
+from ..services.geo import CountryTally, canon
 
 router = APIRouter(prefix="/api/contacts", tags=["contacts"])
 
@@ -81,7 +82,8 @@ def list_contacts(
     if contact_status:
         stmt = stmt.where(Contact.status == contact_status)
     if country:
-        stmt = stmt.where(func.lower(Contact.country) == country.strip().lower())
+        # Matches every spelling the country list merged into this one option.
+        stmt = stmt.where(func.lower(func.trim(Contact.country)) == canon(country))
     if owner_id:
         stmt = stmt.where(Contact.owner_id == owner_id)
 
@@ -93,10 +95,21 @@ def list_contacts(
 
 @router.get("/countries", response_model=list[str])
 def list_countries(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    rows = db.execute(
-        select(Contact.country).distinct().order_by(Contact.country)
-    ).scalars().all()
-    return [r for r in rows if r]
+    """Countries that appear on a quote, one entry per country.
+
+    DISTINCT on the raw column listed "Japan", "japan" and "Japan " as three
+    separate choices, each filtering to a third of the rows. Grouping by the
+    canonical name gives one option that matches all of them — the filter
+    itself compares case-insensitively.
+    """
+    tally = CountryTally()
+    for country, count in db.execute(
+        select(Contact.country, func.count(Contact.id)).group_by(Contact.country)
+    ).all():
+        tally.add(country, quotes=count)
+    return sorted(
+        (row.label for row in tally.rows(include_unknown=False)), key=str.casefold
+    )
 
 
 @router.get("/{contact_id}", response_model=ContactDetail)

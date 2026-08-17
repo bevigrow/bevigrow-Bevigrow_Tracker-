@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 
+import { CountryInput, forgetCountries } from './CountryInput'
 import { Button, Field, Input, Select, Textarea } from './ui'
 import { ApiError, api } from '../lib/api'
 import { STATUS_ORDER, statusLabel } from '../lib/format'
@@ -144,6 +145,8 @@ export function ContactForm({
       const saved = contact
         ? await api.updateContact(contact.id, payload)
         : await api.createContact(payload)
+      // A country typed here belongs in the next form's suggestions.
+      forgetCountries()
       toast.success(contact ? 'Quote updated.' : `🌍 ${saved.company_name} saved.`)
       onSaved(saved)
     } catch (err) {
@@ -170,9 +173,9 @@ export function ContactForm({
           />
         </Field>
         <Field label="Country">
-          <Input
+          <CountryInput
             value={form.country}
-            onChange={(e) => set('country')(e.target.value)}
+            onChange={set('country')}
             placeholder="Saudi Arabia"
           />
         </Field>

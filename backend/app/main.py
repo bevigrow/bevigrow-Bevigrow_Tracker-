@@ -16,6 +16,7 @@ from .routers import (
     ai_routes,
     auth,
     contacts,
+    countries,
     dashboard,
     documents,
     outreach,
@@ -59,6 +60,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(auth.users_router)
 app.include_router(contacts.router)
+app.include_router(countries.router)
 app.include_router(activities.router)
 app.include_router(documents.router)
 app.include_router(reminders.router)

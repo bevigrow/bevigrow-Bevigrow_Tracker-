@@ -148,6 +148,7 @@ function CampaignRow({ campaign, onChanged }: { campaign: Campaign; onChanged: (
   const [status, setStatus] = useState<Awaited<ReturnType<typeof api.campaignStatus>> | null>(null)
   const [running, setRunning] = useState(false)
   const [note, setNote] = useState<string | null>(null)
+  const [switching, setSwitching] = useState(false)
   // A ref, not state: the interval closure reads it, and a stale copy would
   // keep sending after Pause was pressed.
   const shouldRun = useRef(false)
@@ -178,9 +179,11 @@ function CampaignRow({ campaign, onChanged }: { campaign: Campaign; onChanged: (
           onChanged()
           break
         }
-        // A breath between sends. Fifty messages fired in five seconds looks
-        // like a machine to a spam filter, because it is one.
-        await new Promise((r) => setTimeout(r, 1200))
+        // A breath between sends, jittered. Fifty messages fired off in a
+        // minute, evenly spaced to the millisecond, is a pattern — and the
+        // account being throttled or flagged costs far more than the two
+        // minutes this adds. Fifty sends land in roughly three minutes.
+        await new Promise((r) => setTimeout(r, 2500 + Math.random() * 2000))
       } catch (err) {
         shouldRun.current = false
         setRunning(false)
@@ -189,6 +192,24 @@ function CampaignRow({ campaign, onChanged }: { campaign: Campaign; onChanged: (
       }
     }
   }, [campaign.id, onChanged, toast])
+
+  const switchMode = async () => {
+    const next = mode === 'manual' ? 'automatic' : 'manual'
+    setSwitching(true)
+    try {
+      setStatus(await api.updateCampaign(campaign.id, { mode: next }))
+      toast.success(
+        next === 'automatic'
+          ? 'Sending automatically now, up to 50 a day.'
+          : 'Each email will wait for your approval.',
+      )
+      onChanged()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not change that.')
+    } finally {
+      setSwitching(false)
+    }
+  }
 
   const start = async () => {
     try {
@@ -232,6 +253,7 @@ function CampaignRow({ campaign, onChanged }: { campaign: Campaign; onChanged: (
     shouldRun.current = false
   }, [])
 
+  const mode = status?.mode ?? campaign.mode
   const meta = STATE_META[status?.status ?? campaign.status] ?? STATE_META.draft
   const percent = status?.percent ?? 0
   const canStart = ['draft', 'paused', 'daily_limit'].includes(status?.status ?? campaign.status)
@@ -256,11 +278,24 @@ function CampaignRow({ campaign, onChanged }: { campaign: Campaign; onChanged: (
               <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: meta.hex }} />
               {meta.label}
             </span>
-            {campaign.mode === 'manual' && (
-              <span className="chip border-caramel/25 bg-bean/40 text-latte/55">
-                Approval required
-              </span>
-            )}
+            {/* Clickable, because the point of starting in manual is to read
+                the first few and then stop reading them. */}
+            <button
+              onClick={switchMode}
+              disabled={switching}
+              title={
+                mode === 'manual'
+                  ? 'Currently showing you each email first — click to send automatically'
+                  : 'Currently sending automatically — click to approve each email first'
+              }
+              className={`chip transition ${
+                mode === 'manual'
+                  ? 'border-caramel/25 bg-bean/40 text-latte/55 hover:border-gold/40'
+                  : 'border-emerald-400/35 bg-emerald-400/10 text-emerald-300 hover:border-emerald-400/60'
+              }`}
+            >
+              {mode === 'manual' ? 'Approve each' : 'Automatic'}
+            </button>
           </div>
 
           {status && (

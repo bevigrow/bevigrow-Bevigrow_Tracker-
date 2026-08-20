@@ -314,6 +314,8 @@ export const api = {
       body: form,
     }),
   campaignStatus: (id: number) => request<CampaignStatus>(`/api/campaigns/${id}`),
+  updateCampaign: (id: number, f: { mode?: string; daily_limit?: number }) =>
+    request<CampaignStatus>(`/api/campaigns/${id}${qs({ ...f })}`, { method: 'PATCH' }),
   startCampaign: (id: number) =>
     request<CampaignStatus>(`/api/campaigns/${id}/start`, { method: 'POST' }),
   pauseCampaign: (id: number) =>

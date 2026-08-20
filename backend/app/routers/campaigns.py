@@ -311,6 +311,50 @@ def campaign_status(
     return _status(db, _get(db, campaign_id))
 
 
+@router.patch("/{campaign_id}", response_model=CampaignStatusOut)
+def update_campaign(
+    campaign_id: int,
+    mode: str | None = Query(default=None, pattern="^(manual|automatic)$"),
+    daily_limit: int | None = Query(default=None, ge=1, le=50),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Switch between approving each email and sending automatically.
+
+    Changeable mid-campaign on purpose: the point of starting in manual is to
+    read the first few and then stop reading them. Drafts already prepared and
+    waiting are released back into the queue when the switch is to automatic,
+    so they are sent rather than stranded waiting for an approval that is no
+    longer part of the flow.
+    """
+    campaign = _get(db, campaign_id)
+    if mode:
+        campaign.mode = SendMode.automatic if mode == "automatic" else SendMode.manual
+        if campaign.mode == SendMode.automatic:
+            released = (
+                db.query(CampaignTarget)
+                .filter(
+                    CampaignTarget.campaign_id == campaign.id,
+                    CampaignTarget.state == TargetState.awaiting_approval,
+                )
+                .update({CampaignTarget.state: TargetState.pending}, synchronize_session=False)
+            )
+            if released:
+                cm.record(
+                    db,
+                    campaign.id,
+                    "mode",
+                    f"Switched to automatic; {released} waiting draft(s) returned to the queue.",
+                )
+        else:
+            cm.record(db, campaign.id, "mode", "Switched to approving each email first.")
+    if daily_limit is not None:
+        campaign.daily_limit = min(daily_limit, cm.HARD_DAILY_CAP)
+        cm.record(db, campaign.id, "limit", f"Daily limit set to {campaign.daily_limit}.")
+    db.commit()
+    return _status(db, campaign)
+
+
 @router.post("/{campaign_id}/start", response_model=CampaignStatusOut)
 def start_campaign(
     campaign_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)

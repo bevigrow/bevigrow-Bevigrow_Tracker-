@@ -18,11 +18,12 @@ duplicate check believes it.
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..config import settings
 from ..models import (
     AttemptStatus,
     Campaign,
@@ -273,10 +274,21 @@ def _log_outreach(
 ) -> Outreach:
     """Write the Log Outreach row, immediately, with the message as sent.
 
+    One row per *address*, so three mailboxes at one company produce three
+    records, each with its own sent status, time, subject and reply — asking
+    "did the buying office ever answer?" is a different question from "did
+    reception?", and one merged row cannot answer either.
+
     The exact personalised text, not the template: six months from now the
-    question is "what did we actually say to them", and a template with
-    placeholders cannot answer it.
+    question is "what did we actually say to them", and a template full of
+    placeholders cannot answer it. The subject line rides along at the top,
+    because an email is its subject plus its body and a record holding only
+    half of it is a record you cannot reconstruct.
     """
+    sent_at = datetime.now(timezone.utc)
+    local = sent_at + timedelta(minutes=settings.OUTREACH_DAY_OFFSET_MINUTES)
+    body = target.prepared_body or ""
+    subject = target.prepared_subject or ""
     row = Outreach(
         company_name=target.company_name,
         contact_person=target.contact_person,
@@ -286,11 +298,18 @@ def _log_outreach(
         contact_method=ContactMethod.email,
         contact_point=target.email,
         contacted_on=cm.sending_day(),
-        message_sent=target.prepared_body,
+        message_sent=f"Subject: {subject}\n\n{body}" if subject else body,
         status=OutreachStatus.waiting_reply,
         next_action="Wait for reply",
         next_follow_up=_in_a_week(),
-        notes=f"Sent automatically by campaign “{campaign.name}”.",
+        # `contacted_on` is a date, so the clock time goes here — a campaign
+        # that sends fifty in an afternoon otherwise leaves fifty rows that all
+        # claim to have happened at no particular moment.
+        notes=(
+            f"Sent automatically by campaign “{campaign.name}” "
+            f"at {local.strftime('%H:%M')} on {local.strftime('%d %b %Y')} (IST), "
+            f"to {target.email}."
+        ),
         owner_id=campaign.owner_id,
     )
     db.add(row)
@@ -299,8 +318,6 @@ def _log_outreach(
 
 
 def _in_a_week() -> date:
-    from datetime import timedelta
-
     return cm.sending_day() + timedelta(days=7)
 
 
@@ -314,8 +331,6 @@ def recover_stuck(db: Session, older_than_minutes: int = 10) -> int:
     of the queue, in front of a person, with the Message-ID recorded so the
     Sent folder can settle it.
     """
-    from datetime import timedelta
-
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=older_than_minutes)
     stuck = db.scalars(
         select(SendAttempt).where(

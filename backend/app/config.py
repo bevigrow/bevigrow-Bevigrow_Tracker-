@@ -89,6 +89,16 @@ class Settings(BaseSettings):
     # Default 330 = IST.
     OUTREACH_DAY_OFFSET_MINUTES: int = 330
 
+    # The in-process sender. On by default: it is what makes a campaign carry
+    # on after the browser is closed. Turn it off to run the app as a pure API
+    # with an external cron driving /api/campaigns/tick instead.
+    OUTREACH_SCHEDULER_ENABLED: bool = True
+    # Roughly the gap between two emails, jittered per send.
+    OUTREACH_PACE_SECONDS: float = 3.0
+    # Shared secret for the heartbeat endpoint, so a cron can advance the queue
+    # without a login. Blank disables that endpoint entirely.
+    OUTREACH_TICK_TOKEN: str = ""
+
     @property
     def google_enabled(self) -> bool:
         return bool(self.GOOGLE_CLIENT_ID.strip())

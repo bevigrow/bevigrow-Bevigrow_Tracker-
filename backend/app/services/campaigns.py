@@ -177,7 +177,11 @@ def release_slot(db: Session, *, account_id: int, failed: bool = True) -> None:
 
 
 def next_target(db: Session, campaign: Campaign) -> CampaignTarget | None:
-    """The company the campaign would work on next. Pure read."""
+    """The company the campaign would work on next. Pure read, no lock.
+
+    For display and for answering "what's next?". The sender uses
+    `claim_next_target` instead, which is the same query with teeth.
+    """
     return db.scalar(
         select(CampaignTarget)
         .where(
@@ -187,6 +191,33 @@ def next_target(db: Session, campaign: Campaign) -> CampaignTarget | None:
         .order_by(CampaignTarget.position.asc())
         .limit(1)
     )
+
+
+def claim_next_target(db: Session, campaign: Campaign) -> CampaignTarget | None:
+    """Take the next address, locking it against anyone else taking it too.
+
+    The background scheduler and a person pressing Send can both reach for the
+    same row within milliseconds of each other, and two claims on one row is
+    two identical emails to one buyer. Postgres hands the row to whichever
+    transaction arrives first and gives the other the row after it —
+    SKIP LOCKED rather than a wait, because the second caller wants the next
+    company, not this one a moment later.
+
+    SQLite has neither, and also no concurrency: one process, one thread at a
+    time, so the plain read is already exclusive.
+    """
+    stmt = (
+        select(CampaignTarget)
+        .where(
+            CampaignTarget.campaign_id == campaign.id,
+            CampaignTarget.state == TargetState.pending,
+        )
+        .order_by(CampaignTarget.position.asc())
+        .limit(1)
+    )
+    if not settings.is_sqlite:
+        stmt = stmt.with_for_update(skip_locked=True)
+    return db.scalar(stmt)
 
 
 def company_counts(db: Session, campaign: Campaign) -> dict:
@@ -385,6 +416,7 @@ __all__ = [
     "effective_limit",
     "is_workable",
     "mark_limit_reached",
+    "claim_next_target",
     "next_target",
     "pause",
     "quota_state",

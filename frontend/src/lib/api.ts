@@ -314,6 +314,21 @@ export const api = {
       body: form,
     }),
   campaignStatus: (id: number) => request<CampaignStatus>(`/api/campaigns/${id}`),
+  outreachChat: (message: string, campaign_id?: number) =>
+    request<{ reply: string; action: string; acted: boolean; campaign_id: number | null }>(
+      '/api/campaigns/chat',
+      { method: 'POST', body: JSON.stringify({ message, campaign_id }) },
+    ),
+  outreachHealth: () =>
+    request<{
+      scheduler_running: boolean
+      heartbeat_configured: boolean
+      mailbox_connected: boolean
+      mailbox_verified: boolean
+      campaigns_active: number
+      sent_today: number
+      daily_limit: number
+    }>('/api/campaigns/system/health'),
   updateCampaign: (id: number, f: { mode?: string; daily_limit?: number }) =>
     request<CampaignStatus>(`/api/campaigns/${id}${qs({ ...f })}`, { method: 'PATCH' }),
   startCampaign: (id: number) =>

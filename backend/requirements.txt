@@ -12,3 +12,5 @@ anthropic==0.42.0
 python-dateutil==2.9.0.post0
 cryptography==44.0.0   # RS256 verification of Google ID tokens (PyJWT backend)
 openpyxl==3.1.5   # reads .xlsx company uploads; CSV needs no dependency
+xlrd==2.0.1        # legacy .xls company uploads
+odfpy==1.4.1       # .ods (LibreOffice / Google Sheets export)

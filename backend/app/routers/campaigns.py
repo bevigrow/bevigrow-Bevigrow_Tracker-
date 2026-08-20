@@ -44,8 +44,9 @@ from ..schemas import (
     TemplateIn,
     TemplateOut,
 )
+from ..services import assistant
 from ..services import campaigns as cm
-from ..services import engine, importer, sender, templating
+from ..services import engine, importer, scheduler, sender, templating
 
 log = logging.getLogger("bevigrow.campaigns.api")
 
@@ -559,3 +560,85 @@ def retry(
         steps=[{"action": "queued", "message": "Back in the queue.", "company": target.company_name}],
         status=_status(db, campaign),
     )
+
+
+@router.post("/chat")
+def chat(
+    payload: dict,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Run the campaign by typing at it.
+
+    The model only classifies the instruction; every number in the answer is
+    read from the database by the same functions the status panel uses. It can
+    start, pause and stop, and it can report — it cannot send, because the
+    sending is driven a company at a time by the page, which is what makes
+    closing the tab a reliable way to stop.
+    """
+    message = str(payload.get("message", "")).strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="Say something.")
+    campaign_id = payload.get("campaign_id")
+    reply = assistant.respond(db, message, int(campaign_id) if campaign_id else None)
+    out = {
+        "reply": reply.text,
+        "action": reply.action,
+        "acted": reply.acted,
+        "campaign_id": reply.campaign_id,
+    }
+    if reply.campaign_id:
+        campaign = db.get(Campaign, reply.campaign_id)
+        if campaign is not None:
+            out["status"] = _status(db, campaign).model_dump()
+    return out
+
+
+@router.post("/tick")
+def heartbeat(token: str = Query(default=""), steps: int = Query(default=12, ge=1, le=25)):
+    """Advance the queue without a login — for an external cron.
+
+    Deliberately unauthenticated-but-secret. A cron cannot hold a session, and
+    giving a scheduler a password that never expires is worse than a token that
+    does exactly one thing and cannot read anything.
+
+    Two jobs at once: it moves the campaign along, and the request itself keeps
+    the instance awake. A host that sleeps an idle process is the whole reason
+    a heartbeat exists.
+    """
+    expected = settings.OUTREACH_TICK_TOKEN.strip()
+    if not expected:
+        raise HTTPException(
+            status_code=404,
+            detail="The heartbeat is disabled. Set OUTREACH_TICK_TOKEN to enable it.",
+        )
+    # Compared in constant time: this endpoint is public, and a token that can
+    # be guessed a character at a time is not a secret.
+    import hmac
+
+    if not hmac.compare_digest(token.strip(), expected):
+        raise HTTPException(status_code=403, detail="Bad token.")
+    return scheduler.tick(steps)
+
+
+@router.get("/system/health")
+def outreach_health(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Is the sender actually running, and does it have what it needs?"""
+    account = engine.active_account(db)
+    active = db.scalars(
+        select(Campaign).where(
+            Campaign.status.in_([CampaignStatus.running, CampaignStatus.daily_limit])
+        )
+    ).all()
+    quota = cm.quota_state(db)
+    return {
+        "scheduler_running": scheduler.is_alive(),
+        "scheduler_enabled": settings.OUTREACH_SCHEDULER_ENABLED,
+        "heartbeat_configured": bool(settings.OUTREACH_TICK_TOKEN.strip()),
+        "mailbox_connected": bool(account and account.smtp_password_enc),
+        "mailbox_verified": bool(account and account.last_verified_at),
+        "campaigns_active": len(active),
+        "sent_today": quota["sent"],
+        "daily_limit": quota["limit"],
+        "pace_seconds": settings.OUTREACH_PACE_SECONDS,
+    }

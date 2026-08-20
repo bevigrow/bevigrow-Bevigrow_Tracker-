@@ -1,18 +1,16 @@
 /**
  * The outreach agent: upload a list, press Start, watch it work.
  *
- * The Start button drives the queue from here rather than from a background
- * worker, which is a deliberate consequence of where this runs: the free
- * instance sleeps after fifteen minutes, and a loop inside a sleeping process
- * is a loop that stops halfway through a campaign without telling anyone. So
- * the page asks the server to advance one company, shows what happened, and
- * asks again — meaning closing the tab stops the sending, and nothing carries
- * on behind your back.
+ * Start hands the campaign to the server and this page becomes a window onto
+ * it. The sending runs in the backend scheduler, so closing the browser — or
+ * the laptop — does not stop it; the queue, the daily count and the position
+ * all live in the database, and the campaign carries on from wherever it was.
  */
 import { FileUp, Pause, Play, Square } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import { OutreachChat } from '../components/OutreachChat'
 import { Button, Card, EmptyState, Field, Input, Modal, Select, Skeleton } from '../components/ui'
 import { ApiError, api } from '../lib/api'
 import { relativeDays } from '../lib/format'
@@ -119,6 +117,8 @@ export function Campaigns() {
         </div>
       )}
 
+      <OutreachChat onActed={load} />
+
       <ImportModal
         open={creating}
         templates={templates}
@@ -146,12 +146,7 @@ const STATE_META: Record<string, { label: string; hex: string }> = {
 function CampaignRow({ campaign, onChanged }: { campaign: Campaign; onChanged: () => void }) {
   const toast = useToast()
   const [status, setStatus] = useState<Awaited<ReturnType<typeof api.campaignStatus>> | null>(null)
-  const [running, setRunning] = useState(false)
-  const [note, setNote] = useState<string | null>(null)
   const [switching, setSwitching] = useState(false)
-  // A ref, not state: the interval closure reads it, and a stale copy would
-  // keep sending after Pause was pressed.
-  const shouldRun = useRef(false)
 
   const refresh = useCallback(async () => {
     try {
@@ -165,33 +160,25 @@ function CampaignRow({ campaign, onChanged }: { campaign: Campaign; onChanged: (
     void refresh()
   }, [refresh])
 
-  /** Walk the queue one company at a time until told to stop. */
-  const pump = useCallback(async () => {
-    while (shouldRun.current) {
-      try {
-        const result = await api.stepCampaign(campaign.id, 1)
-        setStatus(result.status)
-        const last = result.steps[result.steps.length - 1]
-        if (last) setNote(last.message)
-        if (!last || last.action === 'idle' || result.status.status !== 'running') {
-          shouldRun.current = false
-          setRunning(false)
-          onChanged()
-          break
-        }
-        // A breath between sends, jittered. Fifty messages fired off in a
-        // minute, evenly spaced to the millisecond, is a pattern — and the
-        // account being throttled or flagged costs far more than the two
-        // minutes this adds. Fifty sends land in roughly three minutes.
-        await new Promise((r) => setTimeout(r, 2500 + Math.random() * 2000))
-      } catch (err) {
-        shouldRun.current = false
-        setRunning(false)
-        toast.error(err instanceof ApiError ? err.message : 'The campaign stopped unexpectedly.')
-        break
-      }
-    }
-  }, [campaign.id, onChanged, toast])
+  /* The page no longer sends anything.
+
+     It used to drive the queue itself, one request per company, which meant
+     closing the tab stopped the campaign. The sending now lives in the server,
+     so this only asks how it is going — and stops asking when it is over. */
+  useEffect(() => {
+    const live = status?.status === 'running'
+    if (!live) return
+    const id = window.setInterval(() => {
+      void api
+        .campaignStatus(campaign.id)
+        .then((s) => {
+          setStatus(s)
+          if (s.status !== 'running') onChanged()
+        })
+        .catch(() => undefined)
+    }, 4000)
+    return () => window.clearInterval(id)
+  }, [status?.status, campaign.id, onChanged])
 
   const switchMode = async () => {
     const next = mode === 'manual' ? 'automatic' : 'manual'
@@ -213,19 +200,15 @@ function CampaignRow({ campaign, onChanged }: { campaign: Campaign; onChanged: (
 
   const start = async () => {
     try {
-      const s = await api.startCampaign(campaign.id)
-      setStatus(s)
-      shouldRun.current = true
-      setRunning(true)
-      void pump()
+      setStatus(await api.startCampaign(campaign.id))
+      toast.success('Running. It keeps going even if you close this page.')
+      onChanged()
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not start.')
     }
   }
 
   const pause = async () => {
-    shouldRun.current = false
-    setRunning(false)
     try {
       setStatus(await api.pauseCampaign(campaign.id))
       toast.success('Paused. Nothing further will be sent.')
@@ -236,8 +219,6 @@ function CampaignRow({ campaign, onChanged }: { campaign: Campaign; onChanged: (
   }
 
   const stop = async () => {
-    shouldRun.current = false
-    setRunning(false)
     try {
       setStatus(await api.stopCampaign(campaign.id))
       toast.success('Campaign stopped. The record is kept.')
@@ -246,12 +227,6 @@ function CampaignRow({ campaign, onChanged }: { campaign: Campaign; onChanged: (
       toast.error(err instanceof ApiError ? err.message : 'Could not stop.')
     }
   }
-
-  // Stop pumping if the row unmounts — otherwise navigating away would keep
-  // sending from a component nobody is looking at.
-  useEffect(() => () => {
-    shouldRun.current = false
-  }, [])
 
   const mode = status?.mode ?? campaign.mode
   const meta = STATE_META[status?.status ?? campaign.status] ?? STATE_META.draft
@@ -339,8 +314,7 @@ function CampaignRow({ campaign, onChanged }: { campaign: Campaign; onChanged: (
             </>
           )}
 
-          {note && running && <p className="mt-2 text-[12px] text-latte/60">{note}</p>}
-        </div>
+            </div>
 
         {/* ------------------------------------------------ start / stop */}
         <div className="flex shrink-0 items-center gap-2">
@@ -489,11 +463,11 @@ function ImportModal({
 
           <Field
             label="Company file"
-            hint="Any column headings — Company, Email, Country, Website and the rest are matched automatically"
+            hint="Excel, CSV, TSV, .xls or .ods — column headings are matched automatically, and a file named wrongly is still read correctly"
           >
             <input
               type="file"
-              accept=".csv,.xlsx,.xlsm,text/csv"
+              accept=".csv,.tsv,.txt,.xlsx,.xlsm,.xls,.ods,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.oasis.opendocument.spreadsheet"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               className="input-field file:mr-3 file:rounded-lg file:border-0 file:bg-gold/15 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-gold"
             />

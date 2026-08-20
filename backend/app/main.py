@@ -47,7 +47,13 @@ async def lifespan(app: FastAPI):
             log.warning('%d interrupted send(s) marked unverified', recovered)
     except Exception as exc:  # noqa: BLE001 - never block startup
         log.error('Send recovery failed: %s', exc)
+    # The sender runs in here, so a campaign continues after the browser
+    # that started it has gone. State lives in the database, so the thread
+    # can stop at any moment without losing its place.
+    from .services import scheduler
+    scheduler.start()
     yield
+    scheduler.stop()
     engine.dispose()
 
 

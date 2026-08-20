@@ -103,6 +103,24 @@ services:
       # blueprint sync.
 
       # Belt and braces alongside backend/runtime.txt.
+      # --- automated outreach --------------------------------------------
+      # Shared secret for POST /api/campaigns/tick, which lets a scheduler
+      # advance the sending queue without a login. Set it to a long random
+      # string here and to the same value as a GitHub Actions secret named
+      # OUTREACH_TICK_TOKEN; the workflow in .github/workflows calls it every
+      # ten minutes so campaigns keep sending while nobody is watching.
+      # Leave it unset and that endpoint returns 404 — the in-process sender
+      # still runs whenever the instance is awake.
+      - key: OUTREACH_TICK_TOKEN
+        sync: false
+      # Minutes ahead of UTC for deciding which day a send counts against.
+      # 330 = IST, so "50 today" resets at midnight in India.
+      - key: OUTREACH_DAY_OFFSET_MINUTES
+        value: '330'
+      # Roughly the gap between two emails, in seconds, jittered per send.
+      - key: OUTREACH_PACE_SECONDS
+        value: '3'
+
       - key: PYTHON_VERSION
         value: 3.11.9
       - key: PYTHONUNBUFFERED

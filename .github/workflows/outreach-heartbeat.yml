@@ -1,0 +1,61 @@
+# Keeps the outreach campaign moving while nobody is looking at it.
+#
+# The API sends from a thread inside itself, which works whenever the process
+# is awake. On a free hosting plan the process is put to sleep when nothing has
+# called it for a while, and a sleeping process sends nothing. This job calls
+# it every ten minutes: the request wakes the instance, and the response is a
+# handful of emails going out.
+#
+# Nothing here is a queue or a worker — the queue is the database. This is an
+# alarm clock.
+#
+# To switch it on:
+#   1. In Render, set OUTREACH_TICK_TOKEN on the backend to a long random string
+#   2. In GitHub → Settings → Secrets and variables → Actions, add the same
+#      value as a secret named OUTREACH_TICK_TOKEN
+#   3. Add BACKEND_URL as a repository *variable* if the host ever changes
+#
+# GitHub's scheduler is best-effort and can run late under load. That is fine:
+# the campaign is paced at fifty a day, not fifty a minute, and a tick that
+# arrives at :13 instead of :10 changes nothing.
+
+name: Outreach heartbeat
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch: {}
+
+concurrency:
+  # Never two ticks at once. The database would cope — every send is claimed
+  # under a row lock — but there is no reason to make it prove that.
+  group: outreach-heartbeat
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Advance the sending queue
+        env:
+          BACKEND: ${{ vars.BACKEND_URL || 'https://bevigrow-backend-dkay.onrender.com' }}
+          TOKEN: ${{ secrets.OUTREACH_TICK_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "OUTREACH_TICK_TOKEN is not set as a repository secret — nothing to do."
+            exit 0
+          fi
+          # --max-time is generous: the first call of the day may be waking a
+          # sleeping instance, which takes considerably longer than a send.
+          code=$(curl -sS -o response.json -w '%{http_code}' --max-time 240 \
+            -X POST "$BACKEND/api/campaigns/tick?token=$TOKEN&steps=12")
+          echo "HTTP $code"
+          cat response.json
+          echo
+          case "$code" in
+            200) exit 0 ;;
+            404) echo "::notice::Heartbeat disabled on the server (no token configured)."; exit 0 ;;
+            403) echo "::error::Token rejected. The secret and OUTREACH_TICK_TOKEN differ."; exit 1 ;;
+            *)   echo "::error::Unexpected response $code"; exit 1 ;;
+          esac

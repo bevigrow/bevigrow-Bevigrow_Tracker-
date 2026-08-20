@@ -83,7 +83,9 @@ def step(db: Session, campaign: Campaign, *, account: EmailAccount | None = None
     if not cm.is_workable(campaign):
         return StepOutcome("idle", f"Campaign is {campaign.status.value}.")
 
-    target = cm.next_target(db, campaign)
+    # Claimed, not merely read: the scheduler and a person pressing Send
+    # can reach for the same row at the same moment.
+    target = cm.claim_next_target(db, campaign)
     if target is None:
         cm.refresh_completion(db, campaign)
         db.commit()

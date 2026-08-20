@@ -60,6 +60,31 @@ def normalize_email(raw: str | None) -> str:
     return tidy(raw).casefold()
 
 
+# What people write in a cell that has nothing in it. Left as-is, "N/A" becomes
+# a website, gets stored, and one day somebody clicks it.
+_BLANKS = {"n/a", "na", "n.a.", "-", "--", "—", "none", "null", "nil", "tbd", "?", "."}
+
+# A URL pasted out of a document arrives as markdown: [www.x.de](https://www.x.de)
+_MARKDOWN_LINK = re.compile(r"^\[([^\]]+)\]\((https?://[^)]+)\)$")
+
+
+def clean_cell(raw: str | None) -> str:
+    """One cell, as a person meant it.
+
+    Placeholders for "I don't have this" become empty, because empty is what
+    they mean and the template's fallbacks already handle empty properly.
+    """
+    value = tidy(raw)
+    if not value:
+        return ""
+    if value.casefold() in _BLANKS:
+        return ""
+    link = _MARKDOWN_LINK.match(value)
+    if link:
+        return link.group(2)
+    return value
+
+
 def domain_of(email: str | None, website: str | None = None) -> str | None:
     """The domain to compare on: from the address first, the website second."""
     if email and "@" in email:
@@ -198,50 +223,160 @@ class ImportReport:
     unmapped_columns: list[str] = field(default_factory=list)
 
 
-def _read_table(data: bytes, filename: str) -> tuple[list[str], list[list[str]]]:
-    """Headers and rows from CSV or XLSX, without touching the filesystem."""
-    name = (filename or "").lower()
+def _rows_from_xlsx(data: bytes) -> list[list[str]]:
+    from openpyxl import load_workbook
 
-    if name.endswith((".xlsx", ".xlsm")):
-        try:
-            from openpyxl import load_workbook
-        except ImportError as exc:  # pragma: no cover - dependency is declared
-            raise ValueError(
-                "This build cannot read .xlsx files. Save the sheet as CSV and upload that."
-            ) from exc
-        book = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+    book = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+    try:
         sheet = book.active
-        rows = [
+        return [
             ["" if cell is None else str(cell) for cell in row]
             for row in sheet.iter_rows(values_only=True)
         ]
+    finally:
         book.close()
-        if not rows:
-            return [], []
-        return rows[0], rows[1:]
 
-    # CSV, in whatever encoding a spreadsheet exported. utf-8-sig first because
-    # Excel writes a byte-order mark that otherwise becomes part of the first
-    # heading, and "﻿Company" matches no alias at all.
+
+def _rows_from_xls(data: bytes) -> list[list[str]]:
+    """Excel 97-2003. Still what a lot of exports and old address books are."""
+    import xlrd
+
+    book = xlrd.open_workbook(file_contents=data)
+    sheet = book.sheet_by_index(0)
+    return [
+        ["" if sheet.cell_value(r, c) is None else str(sheet.cell_value(r, c)).strip()
+         for c in range(sheet.ncols)]
+        for r in range(sheet.nrows)
+    ]
+
+
+def _rows_from_ods(data: bytes) -> list[list[str]]:
+    """LibreOffice / OpenOffice, which is what a Google Sheet download can be."""
+    from odf import table, text as odf_text
+    from odf.opendocument import load
+
+    doc = load(io.BytesIO(data))
+    sheet = doc.spreadsheet.getElementsByType(table.Table)[0]
+    rows: list[list[str]] = []
+    for row in sheet.getElementsByType(table.TableRow):
+        cells: list[str] = []
+        for cell in row.getElementsByType(table.TableCell):
+            value = "".join(
+                str(p) for p in cell.getElementsByType(odf_text.P)
+            ).strip()
+            repeat = int(cell.getAttribute("numbercolumnsrepeated") or 1)
+            # A run of identical cells is stored once with a repeat count;
+            # expanding it keeps the columns lined up with the header.
+            cells.extend([value] * min(repeat, 64))
+        if any(c for c in cells):
+            rows.append(cells)
+    return rows
+
+
+def _rows_from_text(data: bytes) -> list[list[str]]:
+    """CSV, TSV, semicolon-separated, pipe-separated — whatever it turns out to be."""
     text: str | None = None
-    for encoding in ("utf-8-sig", "utf-8", "cp1252", "latin-1"):
+    # utf-8-sig first: Excel writes a byte-order mark that otherwise becomes
+    # part of the first heading, and "﻿Company" matches no alias at all.
+    for encoding in ("utf-8-sig", "utf-8", "utf-16", "cp1252", "latin-1"):
         try:
             text = data.decode(encoding)
             break
         except UnicodeDecodeError:
             continue
     if text is None:
-        raise ValueError("Could not read that file as text. Save it as UTF-8 CSV.")
+        raise ValueError("Could not read that file as text.")
 
-    sample = text[:4096]
-    try:
-        dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
-    except csv.Error:
-        dialect = csv.excel
-    reader = list(csv.reader(io.StringIO(text), dialect))
-    if not reader:
+    lines = text.splitlines()
+    first = lines[0] if lines else ""
+
+    # The header line decides the delimiter, not csv.Sniffer.
+    #
+    # Sniffer gives up when rows have inconsistent field counts and raises —
+    # and inconsistent counts are exactly what a German export produces, where
+    # the file is semicolon-separated *and* an email cell holds
+    # "info@x.de; sales@x.de". Falling back to a comma then reads the whole
+    # line as one column and the import finds no addresses at all.
+    #
+    # A heading row almost never contains a delimiter that is not the
+    # delimiter, so counting them there is both simpler and more reliable.
+    counts = {d: first.count(d) for d in (",", ";", "\t", "|")}
+    delimiter = max(counts, key=lambda d: counts[d])
+    if counts[delimiter] == 0:
+        try:
+            delimiter = csv.Sniffer().sniff(text[:8192], delimiters=",;\t|").delimiter
+        except csv.Error:
+            delimiter = ","  # genuinely one column
+    return [
+        row
+        for row in csv.reader(io.StringIO(text), delimiter=delimiter)
+        if any(c.strip() for c in row)
+    ]
+
+
+def _read_table(data: bytes, filename: str) -> tuple[list[str], list[list[str]]]:
+    """Headers and rows from whatever was uploaded.
+
+    Decided by what the bytes *are*, not what the name claims. A spreadsheet
+    saved as "companies.csv" that is really an .xlsx is common enough — someone
+    renamed it, or the browser did — and reading it as text produces one row of
+    binary gibberish and a baffled user. The signature is unambiguous:
+
+        PK..            a zip: .xlsx, .xlsm, .ods
+        D0 CF 11 E0     OLE2:  .xls from Excel 97-2003
+        anything else   text:  csv, tsv, txt, whatever the separator
+    """
+    name = (filename or "").lower()
+    head = data[:8]
+
+    def fail(kind: str, exc: Exception) -> ValueError:
+        log.warning("Import failed for %s (%s): %s", filename, kind, exc)
+        return ValueError(
+            f"That file looked like {kind} but could not be read. "
+            "If it opens in Excel, use File → Save As → CSV and upload that."
+        )
+
+    rows: list[list[str]] = []
+    if head[:2] == b"PK":
+        # Zip container: an .ods declares itself in the first entry's name.
+        if b"opendocument.spreadsheet" in data[:4096] or name.endswith(".ods"):
+            try:
+                rows = _rows_from_ods(data)
+            except ImportError as exc:
+                raise ValueError(
+                    "This build cannot read .ods files. Save the sheet as .xlsx or CSV."
+                ) from exc
+            except Exception as exc:  # noqa: BLE001
+                raise fail("an OpenDocument sheet", exc) from exc
+        else:
+            try:
+                rows = _rows_from_xlsx(data)
+            except Exception as exc:  # noqa: BLE001
+                raise fail("an Excel workbook", exc) from exc
+    elif head[:4] == b"\xd0\xcf\x11\xe0":
+        try:
+            rows = _rows_from_xls(data)
+        except ImportError as exc:
+            raise ValueError(
+                "This build cannot read the old .xls format. Open it in Excel and "
+                "use File → Save As → .xlsx or CSV."
+            ) from exc
+        except Exception as exc:  # noqa: BLE001
+            raise fail("an old Excel file", exc) from exc
+    else:
+        try:
+            rows = _rows_from_text(data)
+        except Exception as exc:  # noqa: BLE001
+            raise fail("a text or CSV file", exc) from exc
+
+    if not rows:
         return [], []
-    return reader[0], reader[1:]
+    # Trailing blank columns are normal in exported sheets; a header row of
+    # ["Company", "Email", "", ""] would otherwise create two unnamed fields.
+    header = [h.strip() for h in rows[0]]
+    while header and not header[-1]:
+        header.pop()
+    return header, rows[1:]
 
 
 def _addresses_in(cell: str) -> list[str]:
@@ -288,7 +423,7 @@ def parse(data: bytes, filename: str) -> ImportReport:
             field_name = mapping.get(index)
             if not field_name:
                 continue
-            text = tidy(str(cell)) if cell is not None else ""
+            text = clean_cell(str(cell)) if cell is not None else ""
             if not text:
                 continue
             if field_name == "email":

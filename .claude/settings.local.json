@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($out=\"C:\\\\Users\\\\Thebest\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-Thebest-OneDrive-Desktop-BeviGrow-AI-Outreach-Automation\\\\e119a3d9-f5ef-494b-831a-76b590b76e9b\\\\scratchpad\"; New-Item -ItemType Directory -Force $out | Out-Null; Invoke-WebRequest -Uri \"https://bevigrow-frontend-dkay.onrender.com/assets/index-CuqxwsZ5.js\" -UseBasicParsing -OutFile \"$out\\\\bundle.js\" -TimeoutSec 120; \\(Get-Item \"$out\\\\bundle.js\"\\).Length)",
+      "PowerShell($b=\"https://bevigrow-backend-dkay.onrender.com\"; foreach\\($p in @\\(\"/openapi.json\",\"/api/openapi.json\",\"/docs\",\"/health\",\"/api/health\",\"/api/auth/config\"\\)\\){ try{ $r=Invoke-WebRequest -Uri \"$b$p\" -UseBasicParsing -TimeoutSec 120; \"$p => $\\($r.StatusCode\\) len=$\\($r.Content.Length\\)\" } catch { \"$p => ERR $\\($_.Exception.Response.StatusCode.value__\\) $\\($_.Exception.Message.Substring\\(0,[Math]::Min\\(60,$_.Exception.Message.Length\\)\\)\\)\" } })",
+      "PowerShell($out=\"C:\\\\Users\\\\Thebest\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-Thebest-OneDrive-Desktop-BeviGrow-AI-Outreach-Automation\\\\e119a3d9-f5ef-494b-831a-76b590b76e9b\\\\scratchpad\"; $j=Get-Content \"$out\\\\openapi.json\" -Raw | ConvertFrom-Json; \"=== SECURITY SCHEMES ===\"; $j.components.securitySchemes | ConvertTo-Json -Depth 6; \"=== POST /api/outreach ===\"; $j.paths.'/api/outreach'.post | ConvertTo-Json -Depth 8; \"=== GET /api/outreach params ===\"; $j.paths.'/api/outreach'.get.parameters | ConvertTo-Json -Depth 8)",
+      "Skill(claude-api)",
+      "Skill(claude-api:*)",
+      "PowerShell($out=\"C:\\\\Users\\\\Thebest\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-Thebest-OneDrive-Desktop-BeviGrow-AI-Outreach-Automation\\\\e119a3d9-f5ef-494b-831a-76b590b76e9b\\\\scratchpad\"; $j=Get-Content \"$out\\\\openapi.json\" -Raw | ConvertFrom-Json; \"PATCH body ref: \" + $j.paths.'/api/outreach/{outreach_id}'.patch.requestBody.content.'application/json'.schema.'$ref'; \"--- OutreachUpdate props ---\"; $j.components.schemas.OutreachUpdate.properties.PSObject.Properties.Name -join ', '; \"--- login body ---\"; $j.paths.'/api/auth/login'.post.requestBody.content | ConvertTo-Json -Depth 5; \"--- UserOut ---\"; $j.components.schemas.UserOut.properties.PSObject.Properties.Name -join ', ')"
+    ]
+  }
+}

@@ -1,0 +1,33 @@
+# BeviGrow AI Outreach Automation - Python dependencies
+# Install with:  pip install -r requirements.txt
+
+# --- Core ---
+python-dotenv==1.0.1
+requests==2.32.3
+beautifulsoup4==4.12.3
+lxml==5.3.0
+tenacity==9.0.0
+rich==13.9.4
+python-dateutil==2.9.0.post0
+
+# --- Input files (Excel / CSV) ---
+pandas==2.2.3
+openpyxl==3.1.5
+
+# --- Claude (research + personalisation). Optional but strongly recommended ---
+anthropic==0.75.0
+
+# --- Gmail sending via official Google API + OAuth (no password stored) ---
+google-api-python-client==2.151.0
+google-auth==2.36.0
+google-auth-oauthlib==1.2.1
+
+# --- Email validity checks ---
+dnspython==2.7.0
+
+# --- Website contact forms (Phase 8). Browser installed separately:
+#     python -m playwright install chromium
+playwright==1.49.0
+
+# --- Tests ---
+pytest==8.3.4

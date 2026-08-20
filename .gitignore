@@ -1,0 +1,31 @@
+# --- SECRETS: never commit these ---
+.env
+config/gmail_credentials.json
+config/gmail_token.json
+config/*_token.json
+config/*_credentials.json
+*.pem
+*.key
+
+# --- Generated data ---
+data/logs/
+data/results/
+data/cache/
+data/state/
+data/outbox/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+
+# --- OS / editor ---
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/

@@ -2,10 +2,19 @@
 import type {
   Activity,
   AuthConfig,
+  Campaign,
+  CampaignEvent,
+  CampaignStatus,
+  CampaignTarget,
   Contact,
   ContactDetail,
   CountryOption,
   Dashboard,
+  EmailAccount,
+  EmailTemplate,
+  ImportReport,
+  SendAttempt,
+  StepResult,
   DealStatus,
   DocumentFile,
   Insight,
@@ -284,6 +293,51 @@ export const api = {
 
   outreachInsights: (limit?: number) =>
     request<OutreachInsights>(`/api/outreach/insights${qs({ limit })}`),
+
+  // ---- automated outreach
+  emailAccount: () => request<EmailAccount | null>('/api/email-account'),
+  saveEmailAccount: (body: Record<string, unknown>) =>
+    request<EmailAccount>('/api/email-account', { method: 'PUT', body: JSON.stringify(body) }),
+  verifyEmailAccount: () =>
+    request<EmailAccount>('/api/email-account/verify', { method: 'POST' }),
+
+  listTemplates: () => request<EmailTemplate[]>('/api/templates'),
+  createTemplate: (body: Record<string, unknown>) =>
+    request<EmailTemplate>('/api/templates', { method: 'POST', body: JSON.stringify(body) }),
+  updateTemplate: (id: number, body: Record<string, unknown>) =>
+    request<EmailTemplate>(`/api/templates/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+
+  listCampaigns: () => request<Campaign[]>('/api/campaigns'),
+  importCampaign: (form: FormData) =>
+    request<{ campaign: Campaign; report: ImportReport }>('/api/campaigns/import', {
+      method: 'POST',
+      body: form,
+    }),
+  campaignStatus: (id: number) => request<CampaignStatus>(`/api/campaigns/${id}`),
+  startCampaign: (id: number) =>
+    request<CampaignStatus>(`/api/campaigns/${id}/start`, { method: 'POST' }),
+  pauseCampaign: (id: number) =>
+    request<CampaignStatus>(`/api/campaigns/${id}/pause`, { method: 'POST' }),
+  stopCampaign: (id: number) =>
+    request<CampaignStatus>(`/api/campaigns/${id}/stop`, { method: 'POST' }),
+  /** Advance the queue. The Start button calls this on a timer while running. */
+  stepCampaign: (id: number, count = 1) =>
+    request<StepResult>(`/api/campaigns/${id}/step${qs({ count })}`, { method: 'POST' }),
+  campaignQueue: (id: number, f: { state?: string; limit?: number; offset?: number } = {}) =>
+    request<CampaignTarget[]>(`/api/campaigns/${id}/queue${qs({ ...f })}`),
+  campaignAttempts: (id: number, limit = 100) =>
+    request<SendAttempt[]>(`/api/campaigns/${id}/attempts${qs({ limit })}`),
+  campaignEvents: (id: number, limit = 50) =>
+    request<CampaignEvent[]>(`/api/campaigns/${id}/events${qs({ limit })}`),
+  approveTarget: (id: number, targetId: number) =>
+    request<StepResult>(`/api/campaigns/${id}/targets/${targetId}/approve`, { method: 'POST' }),
+  skipTarget: (id: number, targetId: number, reason: string) =>
+    request<StepResult>(
+      `/api/campaigns/${id}/targets/${targetId}/skip${qs({ reason })}`,
+      { method: 'POST' },
+    ),
+  retryTarget: (id: number, targetId: number) =>
+    request<StepResult>(`/api/campaigns/${id}/targets/${targetId}/retry`, { method: 'POST' }),
 
   // ---- dashboard
   dashboard: (f: DashboardFilters = {}) => request<Dashboard>(`/api/dashboard${qs({ ...f })}`),

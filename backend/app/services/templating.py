@@ -58,6 +58,44 @@ def _normalise(token: str) -> str:
     return re.sub(r"[\s\-.]+", "_", token.strip().casefold())
 
 
+# What a category column tends to say, and how it reads inside a sentence.
+BUSINESS_AREAS: dict[str, str] = {
+    "importer": "coffee importing",
+    "import": "coffee importing",
+    "exporter": "coffee exporting",
+    "roaster": "coffee roasting",
+    "roastery": "coffee roasting",
+    "micro roaster": "speciality coffee roasting",
+    "specialty": "speciality coffee",
+    "speciality": "speciality coffee",
+    "distributor": "coffee distribution",
+    "wholesaler": "wholesale coffee",
+    "wholesale": "wholesale coffee",
+    "retailer": "coffee retail",
+    "cafe": "the café trade",
+    "coffee shop": "the café trade",
+    "restaurant": "hospitality",
+    "hotel": "hospitality",
+    "trader": "the coffee trade",
+    "supermarket": "grocery retail",
+}
+
+GENERIC_AREA = "the coffee trade"
+
+
+def _business_area(category: str | None) -> str:
+    label = tidy(category or "").casefold()
+    if not label:
+        return GENERIC_AREA
+    if label in BUSINESS_AREAS:
+        return BUSINESS_AREAS[label]
+    # "Specialty Coffee Importer" contains a word we know.
+    for needle, phrase in BUSINESS_AREAS.items():
+        if needle in label:
+            return phrase
+    return GENERIC_AREA
+
+
 def _value_for(token: str, target: CampaignTarget) -> str | None:
     """What this placeholder should become, or None if nothing sensible fits."""
     key = _normalise(token)
@@ -73,6 +111,24 @@ def _value_for(token: str, target: CampaignTarget) -> str | None:
     if key in ("greeting", "salutation", "dear"):
         person = tidy(target.contact_person or "")
         return person or f"{company} Team"
+
+    # "Given [Company Name]'s activities in [relevant business area], …"
+    #
+    # Not a column in any spreadsheet — it is a description of what the company
+    # does, and the sentence around it needs a phrase rather than a job title.
+    # A file's "Importer" would read as "activities in Importer", so the label
+    # is turned into language. Anything unrecognised falls back to a phrase
+    # that is true of every company on a coffee buyer list, because holding
+    # back the whole campaign over one adjective helps nobody.
+    if key in (
+        "relevant_business_area",
+        "business_area",
+        "relevant_area",
+        "business_activity",
+        "activity",
+        "sector",
+    ):
+        return _business_area(target.category)
 
     field = FIELDS.get(key)
     if field:

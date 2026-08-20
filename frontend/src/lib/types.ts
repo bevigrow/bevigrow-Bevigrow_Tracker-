@@ -289,6 +289,149 @@ export interface OutreachGroup {
  */
 export type OutreachRow = Omit<Outreach, 'message_sent' | 'notes' | 'owner'>
 
+/* ------------------------------------------------------ automated outreach */
+
+export interface EmailAccount {
+  id: number
+  from_email: string
+  from_name: string
+  smtp_host: string
+  smtp_port: number
+  smtp_user: string
+  use_starttls: boolean
+  daily_limit: number
+  /** Whether a password is stored. The password itself is never sent here. */
+  has_password: boolean
+  last_verified_at: string | null
+  last_error: string | null
+}
+
+export interface EmailTemplate {
+  id: number
+  name: string
+  subject: string
+  body: string
+  instructions: string | null
+  placeholders: string[]
+  created_at: string
+  updated_at: string
+}
+
+export interface ImportReport {
+  file_rows: number
+  addresses: number
+  companies: number
+  multi_address_companies: number
+  duplicate_addresses: number
+  without_email: number
+  invalid_emails: number
+  possible_duplicates: string[]
+  unmapped_columns: string[]
+}
+
+export type CampaignState =
+  | 'draft'
+  | 'running'
+  | 'paused'
+  | 'daily_limit'
+  | 'completed'
+  | 'stopped'
+
+export interface Campaign {
+  id: number
+  name: string
+  status: CampaignState
+  mode: 'manual' | 'automatic'
+  daily_limit: number
+  template_id: number | null
+  source_filename: string | null
+  created_at: string
+  last_activity_at: string | null
+}
+
+export interface CampaignStatus {
+  campaign_id: number
+  name: string
+  status: CampaignState
+  mode: 'manual' | 'automatic'
+  total: number
+  companies: number
+  companies_contacted: number
+  multi_address_companies: number
+  processed: number
+  sent: number
+  failed: number
+  duplicates: number
+  skipped: number
+  unverified: number
+  awaiting_approval: number
+  remaining: number
+  percent: number
+  daily_limit: number
+  sent_today: number
+  remaining_today: number
+  last_company: string | null
+  next_company: string | null
+  next_target_id: number | null
+  last_activity_at: string | null
+}
+
+export type TargetState =
+  | 'pending'
+  | 'processing'
+  | 'awaiting_approval'
+  | 'sent'
+  | 'failed'
+  | 'duplicate'
+  | 'skipped'
+  | 'cancelled'
+  | 'unverified'
+
+export interface CampaignTarget {
+  id: number
+  position: number
+  company_name: string
+  email: string | null
+  country: string | null
+  website: string | null
+  contact_person: string | null
+  state: TargetState
+  skip_reason: string | null
+  prepared_subject: string | null
+  prepared_body: string | null
+  attempts: number
+  last_error: string | null
+  sent_at: string | null
+  outreach_id: number | null
+}
+
+export interface SendAttempt {
+  id: number
+  target_id: number
+  attempt_no: number
+  to_email: string | null
+  subject: string | null
+  status: string
+  error: string | null
+  message_id: string | null
+  started_at: string
+  finished_at: string | null
+  company_name: string | null
+}
+
+export interface CampaignEvent {
+  id: number
+  kind: string
+  message: string
+  at: string
+  target_id: number | null
+}
+
+export interface StepResult {
+  steps: { action: string; message: string; company: string | null; email: string | null }[]
+  status: CampaignStatus
+}
+
 export interface OutreachInsights {
   by_country: OutreachGroup[]
   countries_tracked: number

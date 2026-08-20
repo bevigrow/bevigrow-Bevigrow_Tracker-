@@ -1,6 +1,7 @@
 import {
   BarChart3,
   Bell,
+  Bot,
   ChevronLeft,
   Coffee,
   FileText,
@@ -9,6 +10,7 @@ import {
   Menu,
   MessageSquare,
   Send,
+  SlidersHorizontal,
   Users,
   Users2,
   X,
@@ -46,7 +48,11 @@ const TRADE_NAV: NavItem[] = [
   { to: '/app/trade/follow-ups', label: 'Follow-ups', icon: Bell },
 ]
 
-const OUTREACH_NAV: NavItem[] = [{ to: '/app/outreach', label: 'Outreach', icon: Send, end: true }]
+const OUTREACH_NAV: NavItem[] = [
+  { to: '/app/outreach', label: 'Prospects', icon: Send, end: true },
+  { to: '/app/outreach/campaigns', label: 'Outreach Agent', icon: Bot },
+  { to: '/app/outreach/settings', label: 'Settings', icon: SlidersHorizontal },
+]
 
 const SHARED_NAV: NavItem[] = [
   { to: '/app/team', label: 'Team', icon: Users2, roles: ['admin', 'manager'] },

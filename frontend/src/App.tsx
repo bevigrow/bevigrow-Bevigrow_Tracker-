@@ -29,6 +29,9 @@ const ContactDetail = lazy(() =>
 const Activities = lazy(() => import('./pages/Activities').then((m) => ({ default: m.Activities })))
 const Documents = lazy(() => import('./pages/Documents').then((m) => ({ default: m.Documents })))
 const Reminders = lazy(() => import('./pages/Reminders').then((m) => ({ default: m.Reminders })))
+const Campaigns = lazy(() => import('./pages/Campaigns').then((m) => ({ default: m.Campaigns })))
+const CampaignDetail = lazy(() => import('./pages/CampaignDetail').then((m) => ({ default: m.CampaignDetail })))
+const OutreachSettings = lazy(() => import('./pages/OutreachSettings').then((m) => ({ default: m.OutreachSettings })))
 const Outreach = lazy(() => import('./pages/Outreach').then((m) => ({ default: m.Outreach })))
 const Team = lazy(() => import('./pages/Team').then((m) => ({ default: m.Team })))
 const Profile = lazy(() => import('./pages/Profile').then((m) => ({ default: m.Profile })))
@@ -96,6 +99,9 @@ export default function App() {
 
                 {/* workspace 2 — outbound prospecting */}
                 <Route path="outreach" element={<Outreach />} />
+                <Route path="outreach/campaigns" element={<Campaigns />} />
+                <Route path="outreach/campaigns/:id" element={<CampaignDetail />} />
+                <Route path="outreach/settings" element={<OutreachSettings />} />
 
                 {/* shared */}
                 <Route path="profile" element={<Profile />} />

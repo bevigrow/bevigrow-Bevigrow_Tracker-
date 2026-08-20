@@ -36,6 +36,7 @@ from ..models import (
     CampaignStatus,
     CampaignTarget,
     DailyQuota,
+    EmailAccount,
     SendMode,
     TargetState,
 )
@@ -103,8 +104,23 @@ def quota_row(db: Session, *, account_id: int, day: date | None = None, limit: i
     return row
 
 
-def quota_state(db: Session, *, account_id: int = 0, campaign: Campaign | None = None) -> dict:
+def default_account_id(db: Session) -> int:
+    """The mailbox quotas are counted against.
+
+    Resolved rather than defaulted to 0: the engine reserves slots against the
+    real account id, so a status panel reading account 0 would cheerfully
+    report "0 of 50 sent today" directly underneath fifty sent emails.
+    """
+    row = db.scalar(
+        select(EmailAccount.id).order_by(EmailAccount.is_default.desc(), EmailAccount.id.asc()).limit(1)
+    )
+    return row or 0
+
+
+def quota_state(db: Session, *, account_id: int | None = None, campaign: Campaign | None = None) -> dict:
     """Read-only view of today's allowance. Never mutates, never locks."""
+    if account_id is None:
+        account_id = default_account_id(db)
     when = sending_day()
     row = db.scalar(
         select(DailyQuota).where(DailyQuota.day == when, DailyQuota.account_id == account_id)

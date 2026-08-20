@@ -504,6 +504,157 @@ class OutreachOut(ORMModel):
     updated_at: datetime
 
 
+# ------------------------------------------------------------------ campaigns
+
+
+class EmailAccountIn(BaseModel):
+    from_email: str = Field(max_length=255)
+    from_name: str = Field(default="", max_length=120)
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_user: str = ""
+    # Write-only. It is never echoed back by any response model below.
+    password: str | None = Field(default=None, min_length=8, max_length=200)
+    use_starttls: bool = True
+    daily_limit: int = Field(default=50, ge=1, le=50)
+
+
+class EmailAccountOut(ORMModel):
+    """What the UI may know about the mailbox. Never the password."""
+
+    id: int
+    from_email: str
+    from_name: str
+    smtp_host: str
+    smtp_port: int
+    smtp_user: str
+    use_starttls: bool
+    daily_limit: int
+    has_password: bool = False
+    last_verified_at: datetime | None = None
+    last_error: str | None = None
+
+
+class TemplateIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    subject: str = Field(default="", max_length=300)
+    body: str = Field(min_length=1)
+    instructions: str | None = None
+
+
+class TemplateOut(ORMModel):
+    id: int
+    name: str
+    subject: str
+    body: str
+    instructions: str | None
+    created_at: datetime
+    updated_at: datetime
+    placeholders: list[str] = []
+
+
+class ImportReportOut(BaseModel):
+    """What the uploaded file turned into, in the summary's own words."""
+
+    file_rows: int
+    addresses: int
+    companies: int
+    multi_address_companies: int
+    duplicate_addresses: int
+    without_email: int
+    invalid_emails: int
+    possible_duplicates: list[str] = []
+    unmapped_columns: list[str] = []
+
+
+class CampaignOut(ORMModel):
+    id: int
+    name: str
+    status: str
+    mode: str
+    daily_limit: int
+    template_id: int | None
+    source_filename: str | None
+    created_at: datetime
+    last_activity_at: datetime | None
+
+
+class CampaignStatusOut(BaseModel):
+    """The one status shape — the panel and the assistant both read this."""
+
+    campaign_id: int
+    name: str
+    status: str
+    mode: str
+    total: int
+    companies: int
+    companies_contacted: int
+    multi_address_companies: int
+    processed: int
+    sent: int
+    failed: int
+    duplicates: int
+    skipped: int
+    unverified: int
+    awaiting_approval: int
+    remaining: int
+    percent: float
+    daily_limit: int
+    sent_today: int
+    remaining_today: int
+    last_company: str | None
+    next_company: str | None
+    next_target_id: int | None
+    last_activity_at: datetime | None
+
+
+class TargetOut(ORMModel):
+    id: int
+    position: int
+    company_name: str
+    email: str | None
+    country: str | None
+    website: str | None
+    contact_person: str | None
+    state: str
+    skip_reason: str | None
+    prepared_subject: str | None
+    prepared_body: str | None
+    attempts: int
+    last_error: str | None
+    sent_at: datetime | None
+    outreach_id: int | None
+
+
+class AttemptOut(ORMModel):
+    id: int
+    target_id: int
+    attempt_no: int
+    to_email: str | None
+    subject: str | None
+    status: str
+    error: str | None
+    message_id: str | None
+    started_at: datetime
+    finished_at: datetime | None
+    company_name: str | None = None
+
+
+class EventOut(ORMModel):
+    id: int
+    kind: str
+    message: str
+    at: datetime
+    target_id: int | None
+
+
+class StepResultOut(BaseModel):
+    """The result of advancing the queue, plus where that leaves things."""
+
+    steps: list[dict]
+    status: CampaignStatusOut
+
+
 class OutreachListOut(ORMModel):
     """A row as the list actually draws it — deliberately not the whole record.
 

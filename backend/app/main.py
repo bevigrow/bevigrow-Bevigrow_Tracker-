@@ -15,6 +15,7 @@ from .routers import (
     activities,
     ai_routes,
     auth,
+    campaigns,
     contacts,
     countries,
     dashboard,
@@ -35,6 +36,17 @@ async def lifespan(app: FastAPI):
     log.info("Database: %s", "PostgreSQL (Neon)" if not settings.is_sqlite else "SQLite (local dev)")
     log.info("AI model: %s", settings.AI_MODEL)
     seed.run()
+    # An attempt left mid-flight by a restart must be settled before any
+    # queue moves again, or it would be picked up and sent a second time.
+    try:
+        from .database import SessionLocal
+        from .services.engine import recover_stuck
+        with SessionLocal() as session:
+            recovered = recover_stuck(session)
+        if recovered:
+            log.warning('%d interrupted send(s) marked unverified', recovered)
+    except Exception as exc:  # noqa: BLE001 - never block startup
+        log.error('Send recovery failed: %s', exc)
     yield
     engine.dispose()
 
@@ -61,6 +73,9 @@ app.include_router(auth.router)
 app.include_router(auth.users_router)
 app.include_router(contacts.router)
 app.include_router(countries.router)
+app.include_router(campaigns.router)
+app.include_router(campaigns.accounts_router)
+app.include_router(campaigns.templates_router)
 app.include_router(activities.router)
 app.include_router(documents.router)
 app.include_router(reminders.router)

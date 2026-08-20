@@ -429,12 +429,31 @@ class CampaignEvent(Base):
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
 
+class MailProvider(str, enum.Enum):
+    """How the mail physically leaves the building.
+
+    SMTP is the obvious one and the best one when it is available: the message
+    goes out of the operator's own mailbox, lands in their Sent folder, and
+    replies come back to it with no forwarding tricks.
+
+    It is also unavailable on this application's hosting plan. Free instances
+    there stopped allowing outbound traffic to ports 25, 465 and 587 in
+    September 2025, so a connection to smtp.gmail.com fails with "network is
+    unreachable" before any password is checked. The HTTP providers below send
+    over port 443, which is not blocked, and exist for that reason.
+    """
+
+    smtp = "smtp"
+    resend = "resend"
+    brevo = "brevo"
+
+
 class EmailAccount(Base):
     """The mailbox campaigns send from.
 
-    The password is encrypted at rest and never leaves the server — no API
-    response, no log line, no error message includes it. What the UI may show
-    is the address, the host, and whether the last connection worked.
+    The password or API key is encrypted at rest and never leaves the server —
+    no API response, no log line, no error message includes it. What the UI may
+    show is the address, the provider, and whether the last connection worked.
     """
 
     __tablename__ = "email_accounts"
@@ -443,6 +462,16 @@ class EmailAccount(Base):
     label: Mapped[str] = mapped_column(String(120), default="")
     from_name: Mapped[str] = mapped_column(String(120), default="")
     from_email: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    provider: Mapped[MailProvider] = mapped_column(
+        Enum(MailProvider, native_enum=False), default=MailProvider.smtp
+    )
+    # For the HTTP providers. Encrypted exactly like the SMTP password.
+    api_key_enc: Mapped[bytes | None] = mapped_column(LargeBinary)
+    # Where replies should go when the From address is not the mailbox being
+    # watched — sending as kothai@bevigrow.com through a provider while
+    # replies land in the Gmail inbox that is actually read.
+    reply_to: Mapped[str | None] = mapped_column(String(255))
 
     smtp_host: Mapped[str] = mapped_column(String(200), default="smtp.gmail.com")
     smtp_port: Mapped[int] = mapped_column(Integer, default=587)

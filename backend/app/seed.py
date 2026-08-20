@@ -51,6 +51,11 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("contacts", "rfq_reference", "VARCHAR(120)"),
     # File bytes moved off the ephemeral container filesystem.
     ("documents", "content", "BYTEA"),
+    # Sending moved off SMTP: the hosting plan blocks outbound mail ports, so
+    # an HTTP provider is needed and the account has to say which one it is.
+    ("email_accounts", "provider", "VARCHAR(20) DEFAULT 'smtp' NOT NULL"),
+    ("email_accounts", "api_key_enc", "BYTEA"),
+    ("email_accounts", "reply_to", "VARCHAR(255)"),
     # Links a prospect to the quote it became.
     # The foreign key is added separately below — ADD COLUMN alone would
     # not create one, and ON DELETE SET NULL is the point of it.

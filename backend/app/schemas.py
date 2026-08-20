@@ -510,11 +510,17 @@ class OutreachOut(ORMModel):
 class EmailAccountIn(BaseModel):
     from_email: str = Field(max_length=255)
     from_name: str = Field(default="", max_length=120)
+    # smtp | resend | brevo. SMTP needs a host that allows outbound port 587;
+    # the other two are HTTPS and work anywhere.
+    provider: str = Field(default="smtp", pattern="^(smtp|resend|brevo)$")
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587
     smtp_user: str = ""
-    # Write-only. It is never echoed back by any response model below.
+    # Write-only, both of them. Neither is echoed back by any response below.
     password: str | None = Field(default=None, min_length=8, max_length=200)
+    api_key: str | None = Field(default=None, min_length=8, max_length=200)
+    # Where replies land when the From address is not the mailbox you read.
+    reply_to: str | None = Field(default=None, max_length=255)
     use_starttls: bool = True
     daily_limit: int = Field(default=50, ge=1, le=50)
 
@@ -525,12 +531,15 @@ class EmailAccountOut(ORMModel):
     id: int
     from_email: str
     from_name: str
+    provider: str = "smtp"
     smtp_host: str
     smtp_port: int
     smtp_user: str
+    reply_to: str | None = None
     use_starttls: bool
     daily_limit: int
     has_password: bool = False
+    has_api_key: bool = False
     last_verified_at: datetime | None = None
     last_error: str | None = None
 

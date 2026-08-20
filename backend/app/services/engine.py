@@ -226,6 +226,7 @@ def dispatch(
 
     if outcome.ok:
         attempt.status = AttemptStatus.sent
+        attempt.provider_response = outcome.provider_response
         target.state = TargetState.sent
         target.sent_at = now
         target.last_error = None

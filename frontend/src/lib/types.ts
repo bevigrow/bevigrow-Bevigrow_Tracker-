@@ -295,13 +295,18 @@ export interface EmailAccount {
   id: number
   from_email: string
   from_name: string
+  /** smtp | resend | brevo — how the message physically leaves. */
+  provider: 'smtp' | 'resend' | 'brevo'
+  /** Where replies land when the From address is not the mailbox you read. */
+  reply_to: string | null
   smtp_host: string
   smtp_port: number
   smtp_user: string
   use_starttls: boolean
   daily_limit: number
-  /** Whether a password is stored. The password itself is never sent here. */
+  /** Whether a secret is stored. The secret itself is never sent here. */
   has_password: boolean
+  has_api_key: boolean
   last_verified_at: string | null
   last_error: string | null
 }

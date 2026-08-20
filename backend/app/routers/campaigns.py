@@ -26,6 +26,7 @@ from ..models import (
     CampaignTarget,
     EmailAccount,
     EmailTemplate,
+    MailProvider,
     SendAttempt,
     SendMode,
     TargetState,
@@ -59,7 +60,9 @@ MAX_IMPORT_MB = 4
 
 def _account_out(account: EmailAccount) -> EmailAccountOut:
     out = EmailAccountOut.model_validate(account)
+    out.provider = account.provider.value
     out.has_password = bool(account.smtp_password_enc)
+    out.has_api_key = bool(account.api_key_enc)
     return out
 
 
@@ -100,12 +103,18 @@ def save_account(
     account.smtp_port = payload.smtp_port
     account.smtp_user = (payload.smtp_user or payload.from_email).strip()
     account.use_starttls = payload.use_starttls
+    account.provider = MailProvider(payload.provider)
+    account.reply_to = (payload.reply_to or '').strip() or None
     account.daily_limit = min(payload.daily_limit, cm.HARD_DAILY_CAP)
     account.owner_id = user.id
     if payload.password:
         # Gmail shows app passwords in groups of four; people paste them that
         # way and the space is not part of the secret.
         account.smtp_password_enc = sender.encrypt_password(payload.password.replace(" ", ""))
+        account.last_verified_at = None
+        account.last_error = None
+    if payload.api_key:
+        account.api_key_enc = sender.encrypt_password(payload.api_key.strip())
         account.last_verified_at = None
         account.last_error = None
     if account.id is None:

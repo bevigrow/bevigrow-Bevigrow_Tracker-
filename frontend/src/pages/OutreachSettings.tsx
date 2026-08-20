@@ -8,7 +8,7 @@
 import { CheckCircle2, KeyRound, Mail, Plus, ShieldCheck, TriangleAlert } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
-import { Button, Card, Field, Input, Skeleton, Textarea } from '../components/ui'
+import { Button, Card, Field, Input, Select, Skeleton, Textarea } from '../components/ui'
 import { ApiError, api } from '../lib/api'
 import { formatDateTime } from '../lib/format'
 import { useToast } from '../lib/toast'
@@ -22,7 +22,14 @@ export function OutreachSettings() {
   const [busy, setBusy] = useState(false)
   const [testing, setTesting] = useState(false)
 
-  const [form, setForm] = useState({ from_email: '', from_name: '', password: '' })
+  const [form, setForm] = useState({
+    from_email: '',
+    from_name: '',
+    password: '',
+    provider: 'smtp',
+    api_key: '',
+    reply_to: '',
+  })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -33,7 +40,14 @@ export function OutreachSettings() {
       ])
       setAccount(acct)
       setTemplates(tpls)
-      if (acct) setForm((f) => ({ ...f, from_email: acct.from_email, from_name: acct.from_name }))
+      if (acct)
+        setForm((f) => ({
+          ...f,
+          from_email: acct.from_email,
+          from_name: acct.from_name,
+          provider: acct.provider ?? 'smtp',
+          reply_to: acct.reply_to ?? '',
+        }))
     } finally {
       setLoading(false)
     }
@@ -50,13 +64,16 @@ export function OutreachSettings() {
       const saved = await api.saveEmailAccount({
         from_email: form.from_email.trim(),
         from_name: form.from_name.trim(),
+        provider: form.provider,
         smtp_user: form.from_email.trim(),
+        reply_to: form.reply_to.trim() || null,
         // Omitted when blank, so saving the display name does not wipe a
-        // password that is already stored and working.
+        // secret that is already stored and working.
         ...(form.password.trim() ? { password: form.password.trim() } : {}),
+        ...(form.api_key.trim() ? { api_key: form.api_key.trim() } : {}),
       })
       setAccount(saved)
-      setForm((f) => ({ ...f, password: '' }))
+      setForm((f) => ({ ...f, password: '', api_key: '' }))
       toast.success('Mailbox saved.')
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not save the mailbox.')
@@ -80,7 +97,8 @@ export function OutreachSettings() {
 
   if (loading) return <Skeleton className="h-96" />
 
-  const connected = account?.has_password
+  const isSmtp = form.provider === 'smtp'
+  const connected = isSmtp ? account?.has_password : account?.has_api_key
   const verified = Boolean(account?.last_verified_at)
 
   return (
@@ -100,7 +118,9 @@ export function OutreachSettings() {
             <div>
               <h2 className="font-display text-lg text-latte">Sending mailbox</h2>
               <p className="text-[11px] text-latte/45">
-                Gmail over SMTP with an App Password — replies come back to your inbox normally.
+                {isSmtp
+                  ? 'Gmail over SMTP with an App Password.'
+                  : 'Sent over HTTPS, with replies pointed at your Gmail.'}
               </p>
             </div>
           </div>
@@ -119,8 +139,34 @@ export function OutreachSettings() {
         </div>
 
         <form onSubmit={save} className="space-y-4">
+          <Field
+            label="How the mail leaves"
+            hint={
+              isSmtp
+                ? 'Sends from your own mailbox. Needs a host that allows outbound port 587 - free Render instances do not.'
+                : 'Sends over HTTPS, which no host blocks. Verify your sending domain with the provider first.'
+            }
+          >
+            <Select
+              value={form.provider}
+              onChange={(e) => setForm({ ...form, provider: e.target.value })}
+              options={[
+                { value: 'smtp', label: 'Gmail directly (SMTP + App Password)' },
+                { value: 'resend', label: 'Resend (HTTPS - works on free hosting)' },
+                { value: 'brevo', label: 'Brevo (HTTPS - works on free hosting)' },
+              ]}
+            />
+          </Field>
+
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Gmail address" hint="Mail is sent from here, and replies arrive here">
+            <Field
+              label={isSmtp ? 'Gmail address' : 'Send from'}
+              hint={
+                isSmtp
+                  ? 'Mail is sent from here, and replies arrive here'
+                  : 'An address at a domain you have verified with the provider'
+              }
+            >
               <Input
                 type="email"
                 value={form.from_email}
@@ -137,22 +183,53 @@ export function OutreachSettings() {
             </Field>
           </div>
 
-          <Field
-            label="App Password"
-            hint={
-              connected
-                ? 'A password is stored. Leave blank to keep it, or paste a new one to replace it.'
-                : 'Sixteen characters from Google, not your account password.'
-            }
-          >
-            <Input
-              type="password"
-              autoComplete="new-password"
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              placeholder={connected ? '••••••••••••••••' : 'abcd efgh ijkl mnop'}
-            />
-          </Field>
+          {isSmtp ? (
+            <Field
+              label="App Password"
+              hint={
+                connected
+                  ? 'A password is stored. Leave blank to keep it, or paste a new one to replace it.'
+                  : 'Sixteen characters from Google, not your account password.'
+              }
+            >
+              <Input
+                type="password"
+                autoComplete="new-password"
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                placeholder={connected ? 'stored' : 'abcd efgh ijkl mnop'}
+              />
+            </Field>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field
+                label="API key"
+                hint={
+                  connected
+                    ? 'A key is stored. Leave blank to keep it.'
+                    : form.provider === 'resend'
+                      ? 'resend.com then API Keys'
+                      : 'Brevo then SMTP & API then API Keys'
+                }
+              >
+                <Input
+                  type="password"
+                  autoComplete="new-password"
+                  value={form.api_key}
+                  onChange={(e) => setForm({ ...form, api_key: e.target.value })}
+                  placeholder={connected ? 'stored' : 're_xxxxxxxx'}
+                />
+              </Field>
+              <Field label="Replies go to" hint="Your Gmail, so answers land where you read them">
+                <Input
+                  type="email"
+                  value={form.reply_to}
+                  onChange={(e) => setForm({ ...form, reply_to: e.target.value })}
+                  placeholder="bevigrow@gmail.com"
+                />
+              </Field>
+            </div>
+          )}
 
           {account?.last_error && (
             <p className="flex items-start gap-2 rounded-lg border border-red-500/25 bg-red-500/10 px-3.5 py-2.5 text-[12px] text-red-200">

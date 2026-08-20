@@ -1,14 +1,21 @@
-"""AI endpoints — all powered by Claude Haiku (`claude-haiku-4-5`)."""
+"""AI endpoints.
+
+None of these make a person wait for a model. Generation happens after the
+response has been sent; the request itself is answered from the database. See
+`_cached_insight` for why.
+"""
 from __future__ import annotations
 
+import logging
+import threading
 from datetime import date, datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..config import settings
-from ..database import get_db
+from ..database import SessionLocal, get_db
 from ..deps import get_current_user, require_roles
 from ..models import AIInsight, Contact, DealStatus, Reminder, User
 from ..schemas import (
@@ -21,10 +28,18 @@ from ..schemas import (
 from ..services import ai, providers
 from .dashboard import compute_stats
 
+log = logging.getLogger("bevigrow.ai")
+
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
-# Insights are cached this long so a dashboard refresh doesn't re-bill the API.
+# How long a stored insight counts as fresh. Past this it is still served —
+# instantly — while a new one is written behind the response.
 CACHE_MINUTES = 30
+
+# Keys currently being regenerated, so a burst of requests triggers one call
+# rather than one per request.
+_refreshing: set[str] = set()
+_refresh_lock = threading.Lock()
 
 # Statuses where silence from the counterparty is itself a signal.
 AWAITING_REPLY = {
@@ -90,34 +105,120 @@ def summarize(payload: SummarizeRequest, _: User = Depends(get_current_user)):
     return SummarizeResponse(summary=summary, model=ai.active_model(), ai_enabled=used_ai)
 
 
-def _cached_insight(
-    db: Session, kind: str, refresh: bool, builder
-) -> InsightResponse:
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=CACHE_MINUTES)
-    if not refresh:
-        cached = db.scalar(
-            select(AIInsight)
-            .where(AIInsight.kind == kind, AIInsight.created_at >= cutoff)
-            .order_by(AIInsight.created_at.desc())
-        )
-        if cached:
-            return InsightResponse(
-                content=cached.content,
-                model=cached.model,
-                generated_at=cached.created_at,
-                cached=True,
-                ai_enabled=ai.ai_enabled(),
+def _store(kind: str, content: str, used_ai: bool) -> None:
+    """Write a generated insight on its own session.
+
+    Its own, because this runs after the response has been sent and the
+    request's session is already closed.
+    """
+    with SessionLocal() as session:
+        session.add(
+            AIInsight(
+                kind=kind,
+                content=content,
+                model=ai.active_model() if used_ai else "rule-based",
             )
+        )
+        session.commit()
+
+
+def _regenerate(kind: str, builder) -> None:
+    """Build a fresh insight in the background, once per key at a time.
+
+    The guard matters on a dashboard: several panels and a page refresh can
+    all notice the same stale entry within a second of each other, and without
+    it each would start its own twelve-second call to the model.
+    """
+    with _refresh_lock:
+        if kind in _refreshing:
+            return
+        _refreshing.add(kind)
+    try:
+        content, used_ai = builder()
+        _store(kind, content, used_ai)
+    except Exception as exc:  # noqa: BLE001 - a background failure must stay silent
+        log.warning("Background insight refresh failed for %s: %s", kind, exc)
+    finally:
+        with _refresh_lock:
+            _refreshing.discard(kind)
+
+
+def _cached_insight(
+    db: Session,
+    kind: str,
+    refresh: bool,
+    builder,
+    background: BackgroundTasks | None = None,
+    fallback=None,
+) -> InsightResponse:
+    """Answer from the database now; talk to the model afterwards.
+
+    Measured on production, a cache miss here took **11.8 seconds** — the
+    provider reasons at length before writing three lines. The panel was
+    fetched off the critical path already, so the page still rendered, but
+    somebody watched a spinner for twelve seconds every half hour, and on a
+    phone that is the part you notice.
+
+    Nothing is gained by making them wait for it. A briefing thirty-five
+    minutes old is not meaningfully worse than one written this second, so:
+
+      fresh  -> serve it
+      stale  -> serve the stale copy immediately, refresh behind the response
+      empty  -> serve the deterministic rule-based summary, same refresh
+
+    Every path answers in database time. The only request that still waits is
+    an explicit Refresh, where somebody has asked for new words and is
+    watching a button spin — there, waiting is the honest behaviour.
+    """
+    now = datetime.now(timezone.utc)
+    latest = db.scalar(
+        select(AIInsight).where(AIInsight.kind == kind).order_by(AIInsight.created_at.desc())
+    )
+
+    if refresh:
+        content, used_ai = builder()
+        _store(kind, content, used_ai)
+        return InsightResponse(
+            content=content,
+            model=ai.active_model() if used_ai else "rule-based",
+            generated_at=now,
+            cached=False,
+            ai_enabled=used_ai,
+        )
+
+    if latest is not None:
+        age = latest.created_at
+        if age.tzinfo is None:
+            age = age.replace(tzinfo=timezone.utc)
+        is_fresh = age >= now - timedelta(minutes=CACHE_MINUTES)
+        if not is_fresh and background is not None:
+            background.add_task(_regenerate, kind, builder)
+        return InsightResponse(
+            content=latest.content,
+            model=latest.model,
+            generated_at=latest.created_at,
+            cached=True,
+            ai_enabled=ai.ai_enabled(),
+        )
+
+    # Nothing stored at all — the first ever load, or a new prompt version.
+    if background is not None:
+        background.add_task(_regenerate, kind, builder)
+    if fallback is not None:
+        return InsightResponse(
+            content=fallback(),
+            model="rule-based",
+            generated_at=now,
+            cached=False,
+            ai_enabled=False,
+        )
 
     content, used_ai = builder()
-    record = AIInsight(kind=kind, content=content, model=ai.active_model() if used_ai else "rule-based")
-    db.add(record)
-    db.commit()
-    db.refresh(record)
+    _store(kind, content, used_ai)
     return InsightResponse(
-        content=record.content,
-        model=record.model,
-        generated_at=record.created_at,
+        content=content,
+        model=ai.active_model() if used_ai else "rule-based",
+        generated_at=now,
         cached=False,
         ai_enabled=used_ai,
     )
@@ -138,9 +239,10 @@ def _stats_payload(db: Session) -> dict:
 
 @router.get("/insights", response_model=InsightResponse)
 def dashboard_insights(
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
-    refresh: bool = Query(default=False, description="Bypass the 30-minute cache"),
+    refresh: bool = Query(default=False, description="Generate now instead of serving the stored copy"),
 ):
     payload = _stats_payload(db)
     return _cached_insight(
@@ -148,18 +250,28 @@ def dashboard_insights(
         f"dashboard:{ai.prompt_fingerprint()}",
         refresh,
         lambda: ai.dashboard_insight(payload),
+        background=background,
+        fallback=lambda: ai.fallback_briefing(payload),
     )
 
 
 @router.get("/weekly", response_model=InsightResponse)
 def weekly_report(
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
     refresh: bool = Query(default=False),
 ):
     payload = _stats_payload(db)
     payload["window"] = "last 7 days vs prior 7 days"
-    return _cached_insight(db, "weekly", refresh, lambda: ai.weekly_highlights(payload))
+    return _cached_insight(
+        db,
+        "weekly",
+        refresh,
+        lambda: ai.weekly_highlights(payload),
+        background=background,
+        fallback=lambda: ai.fallback_briefing(payload),
+    )
 
 
 def build_suggestions(db: Session, limit: int, min_days_silent: int) -> SuggestionsResponse:

@@ -133,10 +133,15 @@ def dashboard_insight(stats: dict) -> tuple[str, bool]:
     result = _complete(prompt, max_tokens=220)
     if result:
         return result, True
-    return _fallback_dashboard(stats), False
+    return fallback_briefing(stats), False
 
 
-def _fallback_dashboard(stats: dict) -> str:
+def fallback_briefing(stats: dict) -> str:
+    """The briefing written from rules alone — no network, no waiting.
+
+    Public because the routes serve it directly when nothing is cached yet,
+    rather than holding the request open while a model composes three lines.
+    """
     k = stats.get("kpis", {})
     top = stats.get("top_countries") or []
     # Records, not quotes: a country can be entirely cold outreach, and
@@ -175,7 +180,7 @@ def weekly_highlights(stats: dict) -> tuple[str, bool]:
     result = _complete(prompt, max_tokens=600)
     if result:
         return result, True
-    return _fallback_dashboard(stats), False
+    return fallback_briefing(stats), False
 
 
 # ------------------------------------------------------- follow-up suggestions

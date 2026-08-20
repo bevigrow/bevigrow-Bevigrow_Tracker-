@@ -81,6 +81,14 @@ class Settings(BaseSettings):
     SMTP_FROM: str = "BeviGrow <no-reply@bevigrow.local>"
     SMTP_STARTTLS: bool = True
 
+    # ------------------------------------------------------------ outreach
+    # Minutes to add to UTC when deciding which day a send counts against, so
+    # "50 today" means the operator's day rather than the server's. Minutes
+    # rather than hours because half-hour zones are real: India is +5:30, and
+    # an hours-only setting would put the boundary half an hour out.
+    # Default 330 = IST.
+    OUTREACH_DAY_OFFSET_MINUTES: int = 330
+
     @property
     def google_enabled(self) -> bool:
         return bool(self.GOOGLE_CLIENT_ID.strip())

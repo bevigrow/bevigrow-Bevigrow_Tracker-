@@ -282,6 +282,13 @@ export interface OutreachGroup {
   follow_ups: number
 }
 
+/**
+ * A row as the list draws it. Missing on purpose: `message_sent`, `notes` and
+ * the nested `owner` — 70% of the old payload, none of it rendered here. The
+ * editor fetches the full `Outreach` by id when it opens.
+ */
+export type OutreachRow = Omit<Outreach, 'message_sent' | 'notes' | 'owner'>
+
 export interface OutreachInsights {
   by_country: OutreachGroup[]
   countries_tracked: number

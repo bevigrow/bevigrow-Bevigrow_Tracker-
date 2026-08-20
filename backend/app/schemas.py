@@ -504,6 +504,41 @@ class OutreachOut(ORMModel):
     updated_at: datetime
 
 
+class OutreachListOut(ORMModel):
+    """A row as the list actually draws it — deliberately not the whole record.
+
+    The full shape was being returned for every row, and on real data that is a
+    quarter of a megabyte of JSON per page load: `message_sent` alone (the
+    entire email we sent each prospect) was 57% of the response, and the nested
+    owner object another 13%. Neither appears anywhere in the list. On a phone
+    that is seconds of transfer and parse to render a company name.
+
+    The editor needs the full record, so it fetches one row by id when it
+    opens — one small request when you click, instead of 143 emails on arrival.
+    """
+
+    id: int
+    company_name: str
+    contact_person: str | None
+    website: str | None
+    email: str | None
+    country: str | None
+    contact_method: ContactMethod
+    contact_point: str | None
+    contacted_on: date | None
+    status: OutreachStatus
+    # Rendered in the row, clamped to two lines.
+    their_reply: str | None
+    next_action: str | None
+    replied_on: date | None
+    next_follow_up: date | None
+    follow_ups_sent: int
+    owner_id: int | None
+    quote_id: int | None
+    created_at: datetime
+    updated_at: datetime
+
+
 class OutreachStats(BaseModel):
     total: int
     awaiting_reply: int

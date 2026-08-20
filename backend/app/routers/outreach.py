@@ -28,6 +28,7 @@ from ..schemas import (
     OutreachCreate,
     OutreachGroup,
     OutreachInsights,
+    OutreachListOut,
     OutreachOut,
     OutreachStats,
     OutreachUpdate,
@@ -36,7 +37,7 @@ from ..services.geo import CountryTally, canon
 
 router = APIRouter(prefix="/api/outreach", tags=["outreach"])
 
-@router.get("", response_model=list[OutreachOut])
+@router.get("", response_model=list[OutreachListOut])
 def list_outreach(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
@@ -47,7 +48,9 @@ def list_outreach(
     due: bool = Query(default=False, description="Only rows whose follow-up is due"),
     limit: int = Query(default=300, ge=1, le=500),
 ):
-    stmt = select(Outreach).options(selectinload(Outreach.owner))
+    # No owner eager-load: the list does not draw the owner, and shipping the
+    # whole nested user on every row was an eighth of the response.
+    stmt = select(Outreach)
 
     if search:
         needle = f"%{search.strip().lower()}%"

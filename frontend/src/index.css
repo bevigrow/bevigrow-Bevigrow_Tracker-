@@ -59,12 +59,29 @@
 }
 
 @layer components {
+  /* No backdrop-blur here, deliberately.
+   *
+   * It used to carry `backdrop-blur-sm`, which meant every card on every page
+   * — twenty-odd on a dashboard — asked the browser for its own offscreen
+   * composite of whatever sat behind it, re-taken on scroll. Safari on iOS
+   * pays far more for that than Chrome does, which is why the app felt
+   * dramatically slower on an iPhone than the same page on a laptop.
+   *
+   * The card sits on a flat gradient background, so the blur had almost
+   * nothing to reveal: `bg-espresso/55` is visually near-identical and free.
+   * Blur is kept where there is exactly one of them and something real behind
+   * it — the modal overlay and the chart tooltip.
+   */
   .card {
-    @apply rounded-2xl border border-caramel/15 bg-espresso/45 backdrop-blur-sm shadow-lift;
+    @apply rounded-2xl border border-caramel/15 bg-espresso/55 shadow-lift;
   }
 
+  /* `transition-all` animates every animatable property, including the
+   * shadow and the transform, on every card. Naming the three that actually
+   * change keeps the compositor out of the rest. */
   .card-hover {
-    @apply transition-all duration-300 hover:border-gold/40 hover:shadow-glow hover:-translate-y-0.5;
+    @apply transition-[border-color,box-shadow,transform] duration-300
+      hover:border-gold/40 hover:shadow-glow hover:-translate-y-0.5;
   }
 
   .input-field {

@@ -12,6 +12,7 @@ import type {
   LeaderboardRow,
   Outreach,
   OutreachInsights,
+  OutreachRow,
   OutreachStats,
   Reminder,
   Suggestion,
@@ -264,7 +265,9 @@ export const api = {
   deleteReminder: (id: number) => request<void>(`/api/reminders/${id}`, { method: 'DELETE' }),
 
   // ---- outreach
-  listOutreach: (f: Record<string, unknown> = {}) => request<Outreach[]>(`/api/outreach${qs(f)}`),
+  listOutreach: (f: Record<string, unknown> = {}) => request<OutreachRow[]>(`/api/outreach${qs(f)}`),
+  /** The full record, including the message we sent — fetched when you open one. */
+  getOutreach: (id: number) => request<Outreach>(`/api/outreach/${id}`),
   outreachStats: () => request<OutreachStats>('/api/outreach/stats'),
   createOutreach: (body: Record<string, unknown>) =>
     request<Outreach>('/api/outreach', { method: 'POST', body: JSON.stringify(body) }),

@@ -321,8 +321,14 @@ export function Dashboard() {
               <div>
                 <h3 className="font-display text-lg text-latte">Today's briefing</h3>
                 <p className="text-[11px] text-latte/40">
-                  {insight?.model ? `Written by ${insight.model}` : 'Built-in rules'}
-                  {insight?.cached ? ' · cached' : ''}
+                  {/* "Written by rule-based" is not a sentence. The server
+                      answers instantly from rules while the model writes the
+                      real one behind the response, so this state is now
+                      common enough to word properly. */}
+                  {!insight || insight.model === 'rule-based'
+                    ? 'Built-in rules · the written version is on its way'
+                    : `Written by ${insight.model}`}
+                  {insight?.cached && insight.model !== 'rule-based' ? ' · cached' : ''}
                 </p>
               </div>
             </div>

@@ -30,7 +30,8 @@ import { useToast } from '../lib/toast'
 import type {
   ContactMethod,
   CountryOption,
-  Outreach as Row,
+  Outreach as FullRow,
+  OutreachRow as Row,
   OutreachInsights as Insights,
   OutreachStats,
   OutreachStatus,
@@ -65,7 +66,10 @@ export function Outreach() {
   const [dueOnly, setDueOnly] = useState(false)
   const [countries, setCountries] = useState<CountryOption[]>([])
 
-  const [editing, setEditing] = useState<Row | null>(null)
+  // The full record, fetched on open. The list rows do not carry the message
+  // we sent or the notes — that is the point of the list being small.
+  const [editing, setEditing] = useState<FullRow | null>(null)
+  const [opening, setOpening] = useState<number | null>(null)
   const [creating, setCreating] = useState(false)
   const [deleting, setDeleting] = useState<Row | null>(null)
 
@@ -115,6 +119,18 @@ export function Outreach() {
     // rows are closed or filtered out of the current list.
     void knownCountries().then((list) => setCountries(list.filter((c) => c.prospects > 0)))
   }, [rows.length])
+
+  /** Open one record for editing, pulling the parts the list left behind. */
+  const openRecord = async (row: Row) => {
+    setOpening(row.id)
+    try {
+      setEditing(await api.getOutreach(row.id))
+    } catch {
+      toast.error('Could not open that record.')
+    } finally {
+      setOpening(null)
+    }
+  }
 
   const followUp = async (row: Row) => {
     try {
@@ -295,9 +311,10 @@ export function Outreach() {
               <Card key={r.id} className="!p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <button
-                    onClick={() => setEditing(r)}
+                    onClick={() => void openRecord(r)}
                     className="min-w-0 flex-1 text-left"
                     aria-label={`Open ${r.company_name}`}
+                    aria-busy={opening === r.id}
                   >
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-medium text-latte">{r.company_name}</span>
@@ -455,7 +472,7 @@ function OutreachModal({
   onSaved,
 }: {
   open: boolean
-  row: Row | null
+  row: FullRow | null
   onClose: () => void
   onSaved: () => void
 }) {

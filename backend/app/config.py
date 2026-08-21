@@ -98,6 +98,8 @@ class Settings(BaseSettings):
     # Shared secret for the heartbeat endpoint, so a cron can advance the queue
     # without a login. Blank disables that endpoint entirely.
     OUTREACH_TICK_TOKEN: str = ""
+    # How often the mailbox is read, in seconds. Zero turns it off.
+    OUTREACH_REPLY_CHECK_SECONDS: int = 300
 
     @property
     def google_enabled(self) -> bool:

@@ -29,7 +29,7 @@ from ..config import settings
 from ..database import SessionLocal
 from ..models import Campaign, CampaignStatus
 from . import campaigns as cm
-from . import engine
+from . import engine, replies
 
 log = logging.getLogger("bevigrow.scheduler")
 
@@ -41,6 +41,12 @@ PACE_SECONDS = settings.OUTREACH_PACE_SECONDS
 # enough that an idle app is not querying constantly, short enough that
 # pressing Start feels immediate.
 IDLE_SECONDS = 10
+
+# The inbox is read on its own clock, far slower than the send loop: a
+# reply that lands at 10:00 and is noticed at 10:05 has cost nothing,
+# whereas logging into IMAP every three seconds would be rude and slow.
+REPLY_CHECK_SECONDS = settings.OUTREACH_REPLY_CHECK_SECONDS
+_last_reply_check = 0.0
 
 _thread: threading.Thread | None = None
 _stop = threading.Event()
@@ -63,6 +69,42 @@ def running_campaigns(db) -> list[Campaign]:
             .order_by(Campaign.last_activity_at.asc().nullsfirst())
         ).all()
     )
+
+
+def check_replies_if_due(force: bool = False) -> dict | None:
+    """Read the mailbox, at most every REPLY_CHECK_SECONDS.
+
+    Deliberately outside the send loop. Replies never consume quota and never
+    trigger a send; the only thing a reply does automatically is update the
+    company's own record and stop it being chased.
+    """
+    global _last_reply_check
+    if not settings.OUTREACH_REPLY_CHECK_SECONDS and not force:
+        return None
+    now = time.monotonic()
+    if not force and now - _last_reply_check < REPLY_CHECK_SECONDS:
+        return None
+    _last_reply_check = now
+
+    with SessionLocal() as db:
+        account = engine.active_account(db)
+        if account is None or not account.imap_password_enc or not account.reply_check_enabled:
+            return None
+        result = replies.sync(db, account)
+        if result.stored:
+            log.info(
+                "Replies: %d new (%d matched, %d unmatched)",
+                result.stored,
+                result.matched,
+                result.unmatched,
+            )
+        return {
+            "checked": result.checked,
+            "stored": result.stored,
+            "matched": result.matched,
+            "unmatched": result.unmatched,
+            "error": result.error,
+        }
 
 
 def advance_once() -> dict:
@@ -103,6 +145,13 @@ def tick(max_steps: int = 12) -> dict:
     calls it again in ten minutes, and the in-process loop is doing the same
     work continuously in between.
     """
+    # The heartbeat is also the only thing that runs when nobody is looking,
+    # so it reads the inbox as well as advancing the queue.
+    try:
+        check_replies_if_due()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Reply check failed during tick: %s", exc)
+
     done: list[dict] = []
     for _ in range(max(1, min(max_steps, 25))):
         result = advance_once()
@@ -130,6 +179,10 @@ def _loop() -> None:
     log.info("Outreach scheduler started (pace %.1fs)", PACE_SECONDS)
     while not _stop.is_set():
         try:
+            try:
+                check_replies_if_due()
+            except Exception as exc:  # noqa: BLE001 - reading must not stop sending
+                log.warning("Reply check failed: %s", exc)
             result = advance_once()
             if result["action"] == "idle":
                 _stop.wait(IDLE_SECONDS)

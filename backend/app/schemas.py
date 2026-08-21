@@ -533,6 +533,13 @@ class EmailAccountIn(BaseModel):
     use_starttls: bool = True
     daily_limit: int = Field(default=50, ge=1, le=50)
 
+    # --- reading replies. Write-only, like the others.
+    imap_host: str = "imap.gmail.com"
+    imap_port: int = 993
+    imap_user: str = ""
+    imap_password: str | None = Field(default=None, min_length=8, max_length=200)
+    reply_check_enabled: bool = True
+
 
 class EmailAccountOut(ORMModel):
     """What the UI may know about the mailbox. Never the password."""
@@ -551,6 +558,14 @@ class EmailAccountOut(ORMModel):
     has_api_key: bool = False
     last_verified_at: datetime | None = None
     last_error: str | None = None
+
+    imap_host: str = "imap.gmail.com"
+    imap_port: int = 993
+    imap_user: str = ""
+    has_imap_password: bool = False
+    reply_check_enabled: bool = True
+    last_reply_check_at: datetime | None = None
+    last_reply_error: str | None = None
 
 
 class TemplateIn(BaseModel):
@@ -673,6 +688,29 @@ class StepResultOut(BaseModel):
 
     steps: list[dict]
     status: CampaignStatusOut
+
+
+class ReplyOut(ORMModel):
+    """One message that arrived, and what became of it."""
+
+    id: int
+    message_id: str
+    from_email: str | None
+    from_name: str | None
+    subject: str | None
+    received_at: datetime
+    body: str | None
+    match_kind: str
+    classification: str
+    classified_by: str
+    outreach_id: int | None
+    campaign_id: int | None
+    company_name: str | None
+    suggested_reply: str | None
+    handled: bool
+    # Filled in from the outreach record it was matched to.
+    sent_at: date | None = None
+    reply_speed_hours: float | None = None
 
 
 class OutreachListOut(ORMModel):

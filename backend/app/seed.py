@@ -55,6 +55,13 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     # an HTTP provider is needed and the account has to say which one it is.
     ("campaigns", "deleted_at", "TIMESTAMP WITH TIME ZONE"),
     ("campaigns", "allow_recontact", "BOOLEAN DEFAULT FALSE NOT NULL"),
+    ("email_accounts", "imap_host", "VARCHAR(200) DEFAULT 'imap.gmail.com'"),
+    ("email_accounts", "imap_port", "INTEGER DEFAULT 993"),
+    ("email_accounts", "imap_user", "VARCHAR(255) DEFAULT ''"),
+    ("email_accounts", "imap_password_enc", "BYTEA"),
+    ("email_accounts", "reply_check_enabled", "BOOLEAN DEFAULT TRUE NOT NULL"),
+    ("email_accounts", "last_reply_check_at", "TIMESTAMP WITH TIME ZONE"),
+    ("email_accounts", "last_reply_error", "VARCHAR(400)"),
     ("email_accounts", "provider", "VARCHAR(20) DEFAULT 'smtp' NOT NULL"),
     ("email_accounts", "api_key_enc", "BYTEA"),
     ("email_accounts", "reply_to", "VARCHAR(255)"),

@@ -504,6 +504,90 @@ class SendLedger(Base):
     message_id: Mapped[str | None] = mapped_column(String(255))
 
 
+class ReplyClass(str, enum.Enum):
+    """What a reply appears to be, before a person has read it."""
+
+    interested = "interested"
+    pricing_request = "pricing_request"
+    sample_request = "sample_request"
+    specification_request = "specification_request"
+    purchasing_contact = "purchasing_contact"
+    needs_follow_up = "needs_follow_up"
+    not_interested = "not_interested"
+    out_of_office = "out_of_office"
+    unsubscribe = "unsubscribe"
+    bounced = "bounced"
+    other = "other"
+
+
+class ReplyMatch(str, enum.Enum):
+    """How confident the link to an outreach record is, and why.
+
+    Kept explicit because the failure mode matters: attaching a reply to the
+    wrong company is worse than attaching it to none, so anything short of a
+    real signal stays unmatched and waits for a person.
+    """
+
+    thread = "thread"        # the reply quoted our own Message-ID — certain
+    address = "address"      # the sender is an address we wrote to
+    manual = "manual"        # a person said so
+    unmatched = "unmatched"
+
+
+class InboundReply(Base):
+    """One message that arrived in the mailbox we send from.
+
+    Every message is stored exactly once, keyed on the Message-ID the sender's
+    mail system gave it. That is what makes a re-run safe: the inbox is polled
+    repeatedly and the same reply must never become a second reply, or the
+    reply count — and every chart built on it — quietly inflates.
+    """
+
+    __tablename__ = "inbound_replies"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # The sender's own Message-ID. Unique, which is the whole idempotency
+    # story: a second sighting of the same message is refused by the database
+    # rather than by remembering to check.
+    message_id: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    # What it was replying to, if it said so. This is the reliable link back.
+    in_reply_to: Mapped[str | None] = mapped_column(String(255), index=True)
+    thread_refs: Mapped[str | None] = mapped_column(Text)
+
+    from_email: Mapped[str | None] = mapped_column(String(255), index=True)
+    from_name: Mapped[str | None] = mapped_column(String(200))
+    to_email: Mapped[str | None] = mapped_column(String(255))
+    subject: Mapped[str | None] = mapped_column(String(400))
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    # Trimmed to the part that is actually theirs — quoted history below a
+    # reply doubles the size of every row and is already stored on the
+    # outreach record it quotes.
+    body: Mapped[str | None] = mapped_column(Text)
+
+    match_kind: Mapped[ReplyMatch] = mapped_column(
+        Enum(ReplyMatch, native_enum=False), default=ReplyMatch.unmatched, index=True
+    )
+    outreach_id: Mapped[int | None] = mapped_column(
+        ForeignKey("outreach.id", ondelete="SET NULL"), index=True
+    )
+    campaign_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    company_name: Mapped[str | None] = mapped_column(String(200))
+
+    classification: Mapped[ReplyClass] = mapped_column(
+        Enum(ReplyClass, native_enum=False), default=ReplyClass.other, index=True
+    )
+    # Written by the model, shown to a person, never sent by itself.
+    suggested_reply: Mapped[str | None] = mapped_column(Text)
+    classified_by: Mapped[str] = mapped_column(String(40), default="rules")
+    handled: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
 class EmailAccount(Base):
     """The mailbox campaigns send from.
 
@@ -535,6 +619,21 @@ class EmailAccount(Base):
     # Fernet ciphertext, keyed from JWT_SECRET. Never a plain password.
     smtp_password_enc: Mapped[bytes | None] = mapped_column(LargeBinary)
     use_starttls: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # --- reading the replies -------------------------------------------
+    # Mail goes out through a provider over HTTPS, because this host blocks
+    # the SMTP ports. Replies come back to a mailbox a person actually reads,
+    # and IMAP on 993 *is* reachable from here — measured, not assumed. So the
+    # inbox is watched over IMAP even though the sending is not.
+    imap_host: Mapped[str] = mapped_column(String(200), default="imap.gmail.com")
+    imap_port: Mapped[int] = mapped_column(Integer, default=993)
+    imap_user: Mapped[str] = mapped_column(String(255), default="")
+    # An app password, which is not the account password: separately issued,
+    # separately revocable, and useless for signing in anywhere else.
+    imap_password_enc: Mapped[bytes | None] = mapped_column(LargeBinary)
+    reply_check_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_reply_check_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_reply_error: Mapped[str | None] = mapped_column(String(400))
 
     # Gmail's own ceiling is far higher than this; the point of the number is
     # to look like a person, not to max out an allowance.

@@ -28,9 +28,11 @@ from ..models import (
     EmailAccount,
     EmailTemplate,
     MailProvider,
+    InboundReply,
     Outreach,
     OutreachStatus,
     SendAttempt,
+    ReplyMatch,
     SendMode,
     TargetState,
     User,
@@ -43,6 +45,7 @@ from ..schemas import (
     EmailAccountOut,
     EventOut,
     ImportReportOut,
+    ReplyOut,
     StepResultOut,
     TargetOut,
     TemplateIn,
@@ -50,13 +53,18 @@ from ..schemas import (
 )
 from ..services import assistant
 from ..services import campaigns as cm
-from ..services import engine, importer, reports, scheduler, sender, templating
+from ..services import engine, importer, replies as reply_service
+from ..services import reports, scheduler, sender, templating
 
 log = logging.getLogger("bevigrow.campaigns.api")
 
 router = APIRouter(prefix="/api/campaigns", tags=["campaigns"])
 accounts_router = APIRouter(prefix="/api/email-account", tags=["campaigns"])
 templates_router = APIRouter(prefix="/api/templates", tags=["campaigns"])
+# Their own prefix, not /api/campaigns/replies: that path is one segment
+# long and collides with /api/campaigns/{campaign_id}, which is declared
+# first and would try to read "replies" as an id.
+replies_router = APIRouter(prefix="/api/replies", tags=["replies"])
 
 MAX_IMPORT_MB = 4
 
@@ -66,6 +74,7 @@ def _account_out(account: EmailAccount) -> EmailAccountOut:
     out.provider = account.provider.value
     out.has_password = bool(account.smtp_password_enc)
     out.has_api_key = bool(account.api_key_enc)
+    out.has_imap_password = bool(account.imap_password_enc)
     return out
 
 
@@ -120,6 +129,16 @@ def save_account(
         account.api_key_enc = sender.encrypt_password(payload.api_key.strip())
         account.last_verified_at = None
         account.last_error = None
+    account.imap_host = (payload.imap_host or "imap.gmail.com").strip()
+    account.imap_port = payload.imap_port or 993
+    account.imap_user = (payload.imap_user or payload.reply_to or payload.from_email).strip()
+    account.reply_check_enabled = payload.reply_check_enabled
+    if payload.imap_password:
+        # Pasted from Google in groups of four; the spaces are not the secret.
+        account.imap_password_enc = sender.encrypt_password(
+            payload.imap_password.replace(" ", "")
+        )
+        account.last_reply_error = None
     if account.id is None:
         db.add(account)
     db.commit()
@@ -910,3 +929,122 @@ def imap_reachable(_: User = Depends(get_current_user)):
         except Exception as exc:  # noqa: BLE001 - the failure IS the answer
             results[label] = {"open": False, "error": f"{type(exc).__name__}: {exc}"[:160]}
     return results
+
+
+# ------------------------------------------------------------------ replies
+
+
+def _reply_out(db: Session, row: InboundReply) -> ReplyOut:
+    """One reply, with the speed worked out against the email it answers."""
+    out = ReplyOut.model_validate(row)
+    out.match_kind = row.match_kind.value
+    out.classification = row.classification.value
+    if row.outreach_id:
+        source = db.get(Outreach, row.outreach_id)
+        if source is not None and source.contacted_on:
+            out.sent_at = source.contacted_on
+            sent = datetime.combine(source.contacted_on, datetime.min.time(), timezone.utc)
+            received = row.received_at
+            if received.tzinfo is None:
+                received = received.replace(tzinfo=timezone.utc)
+            # Negative would mean the reply predates the send, which happens
+            # when a date header is wrong; report nothing rather than nonsense.
+            hours = (received - sent).total_seconds() / 3600
+            out.reply_speed_hours = round(hours, 1) if hours >= 0 else None
+    return out
+
+
+@replies_router.post("/check")
+def check_replies(
+    days: int = Query(default=14, ge=1, le=90),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Read the mailbox now, rather than waiting for the scheduler."""
+    account = engine.active_account(db)
+    if account is None or not account.imap_password_enc:
+        raise HTTPException(
+            status_code=400,
+            detail="Add the mailbox App Password in Settings so replies can be read.",
+        )
+    result = reply_service.sync(db, account, days=days)
+    if result.error:
+        raise HTTPException(status_code=400, detail=result.error)
+    return {
+        "checked": result.checked,
+        "stored": result.stored,
+        "matched": result.matched,
+        "unmatched": result.unmatched,
+        "skipped": result.skipped,
+    }
+
+
+@accounts_router.post("/verify-inbox", response_model=EmailAccountOut)
+def verify_inbox(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Sign in to the mailbox and hang up. Reads nothing, changes nothing."""
+    account = engine.active_account(db)
+    if account is None:
+        raise HTTPException(status_code=400, detail="No mailbox is configured.")
+    error = reply_service.check_connection(account)
+    account.last_reply_error = error
+    db.commit()
+    db.refresh(account)
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+    return _account_out(account)
+
+
+@replies_router.get("", response_model=list[ReplyOut])
+def list_replies(
+    unmatched: bool = Query(default=False, description="Only the ones needing a decision"),
+    limit: int = Query(default=100, ge=1, le=300),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    stmt = select(InboundReply).order_by(InboundReply.received_at.desc()).limit(limit)
+    if unmatched:
+        stmt = stmt.where(InboundReply.match_kind == ReplyMatch.unmatched)
+    return [_reply_out(db, r) for r in db.scalars(stmt).all()]
+
+
+@replies_router.post("/{reply_id}/match", response_model=ReplyOut)
+def match_reply(
+    reply_id: int,
+    outreach_id: int = Query(..., description="The outreach record it belongs to"),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Attach a reply the machine would not guess at.
+
+    Forwarded mail, a colleague answering from their own address, an alias —
+    all of them arrive with nothing that proves which company they came from.
+    The machine leaves those alone; this is a person saying so.
+    """
+    reply = db.get(InboundReply, reply_id)
+    if reply is None:
+        raise HTTPException(status_code=404, detail="Reply not found")
+    row = db.get(Outreach, outreach_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Outreach record not found")
+    reply.match_kind = ReplyMatch.manual
+    reply_service.apply_to_outreach(db, reply, row)
+    db.commit()
+    db.refresh(reply)
+    return _reply_out(db, reply)
+
+
+@replies_router.post("/{reply_id}/handled", response_model=ReplyOut)
+def mark_handled(
+    reply_id: int,
+    handled: bool = Query(default=True),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Take it off the review list. Nothing is sent, nothing is deleted."""
+    reply = db.get(InboundReply, reply_id)
+    if reply is None:
+        raise HTTPException(status_code=404, detail="Reply not found")
+    reply.handled = handled
+    db.commit()
+    db.refresh(reply)
+    return _reply_out(db, reply)

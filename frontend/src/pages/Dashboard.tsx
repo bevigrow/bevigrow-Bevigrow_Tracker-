@@ -71,30 +71,6 @@ function resolvePeriod(value: string): { days?: number; date_from?: string; date
   }
 }
 
-/** Which sections the page shows.
- *
- * The full dashboard is the default and is never taken away — everything here
- * is a way of hiding what you are not looking at right now, not a different
- * set of numbers. Each view reads the data already fetched, so switching is
- * instant and costs no request.
- */
-const VIEWS = [
-  { value: '', label: 'Full dashboard' },
-  { value: 'value', label: 'Deal value by stage' },
-  { value: 'countries', label: 'Countries' },
-  { value: 'activity', label: 'Activity' },
-  { value: 'stages', label: 'Deal stages' },
-]
-
-/** Views that replace the dashboard rather than trim it.
- *
- * Only trade-desk questions live here. The cold-outreach charts — the funnel,
- * email volume, replies, countries by month — moved to the outreach report,
- * where the person asking them already is. A dashboard about quotes and orders
- * is the wrong place to answer "how many emails went out on Tuesday".
- */
-const CHART_VIEWS = new Set(['value'])
-
 const same = (a: string, b: string) =>
   a.trim().replace(/\s+/g, ' ').toLowerCase() === b.trim().replace(/\s+/g, ' ').toLowerCase()
 
@@ -113,7 +89,6 @@ export function Dashboard() {
   const country = params.get('country') ?? ''
   const tradeType = params.get('trade_type') ?? ''
   const period = params.get('period') ?? '14'
-  const view = params.get('view') ?? ''
   const from = params.get('from') ?? ''
   const to = params.get('to') ?? ''
   const query = params.toString()
@@ -208,16 +183,8 @@ export function Dashboard() {
       .map((c) => ({ value: c.country, label: `${c.country} · ${c.count + c.prospects}` })),
   ]
   const activeFilters = [country, tradeType].filter(Boolean).length
-  const show = (section: string) => (!view || view === section) && !CHART_VIEWS.has(view)
 
 
-  const valueBars = data.by_status
-    .filter((s) => (data.value_by_status?.[s.status] ?? 0) > 0)
-    .map((s) => ({
-      label: statusLabel(s.status),
-      value: Math.round(data.value_by_status?.[s.status] ?? 0),
-      meta: `${s.count} account${s.count === 1 ? '' : 's'}`,
-    }))
 
   /** Carry the country through to the quotes list, so the drill-down agrees. */
   const quotesLink = (trade: string) =>
@@ -236,9 +203,20 @@ export function Dashboard() {
     { icon: Clock, label: 'Pending Follow-ups', value: k.pending_follow_ups, tint: '#D9705B', to: '/app/trade/follow-ups' },
   ]
 
+  // Count on the bar, money in the tooltip. Four accounts at the sample
+  // stage against one in negotiation looks decisive until the one is worth
+  // eight times the four, and that belongs beside the count rather than
+  // behind a menu.
   const pipelineBars = data.by_status
     .filter((s) => s.count > 0)
-    .map((s) => ({ label: statusLabel(s.status), value: s.count }))
+    .map((s) => {
+      const value = data.value_by_status?.[s.status] ?? 0
+      return {
+        label: statusLabel(s.status),
+        value: s.count,
+        meta: value > 0 ? `${compactMoney(value)} of open value` : undefined,
+      }
+    })
 
   const trendSeries = [
     { name: 'Interactions', values: data.trend.map((t) => t.activities), color: CATEGORICAL[0] },
@@ -299,7 +277,7 @@ export function Dashboard() {
           filtered dashboard reads as one view rather than a filtered chart
           surrounded by unfiltered totals. */}
       <Card className="!p-4">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <Select
             value={tradeType}
             onChange={(e) => setFilter('trade_type', e.target.value)}
@@ -315,12 +293,6 @@ export function Dashboard() {
             onChange={(e) => setFilter('country', e.target.value)}
             aria-label="Filter by country"
             options={countryOptions}
-          />
-          <Select
-            value={view}
-            onChange={(e) => setFilter('view', e.target.value)}
-            aria-label="Which sections to show"
-            options={VIEWS}
           />
           <Select
             value={period}
@@ -386,19 +358,7 @@ export function Dashboard() {
         )}
       </Card>
 
-      {/* --------------------------------------------- the chart views */}
-      {view === 'value' && (
-        <ChartFrame
-          title="Money at each stage"
-          subtitle="What the open deals are worth, which the count of them cannot say"
-          table={<BarTable data={valueBars} unit="USD" />}
-        >
-          <RoastBarChart data={valueBars} unit="USD" />
-        </ChartFrame>
-      )}
-
       {/* ----------------------------------------------------------- kpis */}
-      {show("kpis") && (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {KPI_CARDS.map((card, i) => (
           <div key={card.label} className="animate-fade-in-up-sm" style={{ animationDelay: `${i * 50}ms` }}>
@@ -421,12 +381,10 @@ export function Dashboard() {
           </div>
         ))}
       </div>
-      )}
 
       {/* ------------------------------------------------------ briefing */}
       {/* Full width now: this shared a three-column row with a conversion
           meter, and removing the meter left a third of the row empty. */}
-      {show("briefing") && (
       <div>
         <Card>
           <div className="mb-4 flex items-start justify-between gap-4">
@@ -485,20 +443,12 @@ export function Dashboard() {
         </Card>
 
       </div>
-      )}
 
       {/* --------------------------------------------------------- charts */}
       {/* items-start: a grid row stretches its cells to the tallest by
           default, so a pipeline with two stages was drawn in a card sized for
           the fourteen-day trend beside it — mostly empty space. */}
-      <div
-        className={
-          view === 'stages' || view === 'activity'
-            ? 'grid items-start gap-5'
-            : 'grid items-start gap-5 lg:grid-cols-2'
-        }
-      >
-        {(show('stages') || view === 'stages') && (
+      <div className="grid items-start gap-5 lg:grid-cols-2">
         <ChartFrame
           title="Deals by stage"
           subtitle="How far each deal has got"
@@ -506,9 +456,7 @@ export function Dashboard() {
         >
           <RoastBarChart data={pipelineBars} unit="accounts" />
         </ChartFrame>
-        )}
 
-        {(show('activity') || view === 'activity') && (
         <ChartFrame
           title="Activity Trend"
           subtitle={
@@ -526,13 +474,11 @@ export function Dashboard() {
         >
           <TrendChart labels={data.trend.map((t) => t.label)} series={trendSeries} />
         </ChartFrame>
-        )}
       </div>
 
       {/* Quotes AND prospects. Counting quotes alone drew a country you had
           only ever prospected as nothing at all, so a name typed on the
           outreach form looked like it had been dropped on the way in. */}
-      {(show('countries') || view === 'countries') && (
       <ChartFrame
         title="Accounts by Country"
         subtitle="Quotes and cold prospects — tap a country to filter the page"
@@ -561,10 +507,8 @@ export function Dashboard() {
           rowNoun="countries"
         />
       </ChartFrame>
-      )}
 
       {/* ------------------------------------------ recent + follow-ups */}
-      {(show('lists') || view === 'activity') && (
       <div className="grid gap-5 lg:grid-cols-2">
         <Card>
           <div className="mb-4 flex items-center justify-between">
@@ -640,7 +584,6 @@ export function Dashboard() {
           )}
         </Card>
       </div>
-      )}
 
     </div>
   )

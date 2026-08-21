@@ -169,6 +169,23 @@ def verify(account: EmailAccount) -> SendOutcome:
         return SendOutcome(ok=False, error=f"Could not reach {account.smtp_host}: {exc}"[:400])
 
 
+def recipients(to_email: str) -> list[str]:
+    """The addresses on one message.
+
+    A target may carry several mailboxes at the same company — "info@x.ae,
+    sales@x.ae" — and they belong on one email, addressed to both, rather than
+    on two identical emails that read as a mailshot to anyone who sees both
+    copies. Stored as one comma-separated string so a target stays one row,
+    one send, one entry against the daily limit and one line in the log.
+    """
+    seen: list[str] = []
+    for part in (to_email or "").replace(";", ",").split(","):
+        address = part.strip()
+        if address and address.casefold() not in {a.casefold() for a in seen}:
+            seen.append(address)
+    return seen
+
+
 def build_message(
     account: EmailAccount,
     to_email: str,
@@ -186,7 +203,7 @@ def build_message(
     message = EmailMessage()
     message["Subject"] = subject
     message["From"] = formataddr((account.from_name or "", account.from_email))
-    message["To"] = to_email
+    message["To"] = ", ".join(recipients(to_email))
     message["Message-ID"] = message_id or make_msgid(domain=account.from_email.split("@")[-1])
     message.set_content(body)
     return message
@@ -249,7 +266,7 @@ def _send_resend(account, to_email: str, subject: str, body: str, message_id: st
         "from": (
             f"{account.from_name} <{account.from_email}>" if account.from_name else account.from_email
         ),
-        "to": [to_email],
+        "to": recipients(to_email),
         "subject": subject,
         "text": body,
         "headers": {"Message-ID": message_id},
@@ -283,7 +300,7 @@ def _send_brevo(account, to_email: str, subject: str, body: str, message_id: str
         return SendOutcome(ok=False, auth_fault=True, error="No Brevo API key stored.")
     payload = {
         "sender": {"email": account.from_email, "name": account.from_name or account.from_email},
-        "to": [{"email": to_email}],
+        "to": [{"email": a} for a in recipients(to_email)],
         "subject": subject,
         "textContent": body,
         "headers": {"Message-ID": message_id},

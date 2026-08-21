@@ -3,11 +3,14 @@
 Checked before every single send, against everything the app knows: earlier
 rows in this campaign, other campaigns, the outreach log, and the quotes desk.
 
-The unit is the *address*, not the company. That is a deliberate narrowing of
-the original rule, because a company with info@ and sales@ is two mailboxes and
-blocking the second one means the enquiry sits unread in a mailbox nobody
-watches. What must never happen is one mailbox getting the same cold email
-twice — that is the thing a recipient notices and remembers.
+The unit is the *address*, not the company: what must never happen is one
+mailbox getting the same cold email twice, because that is the thing a
+recipient notices and remembers.
+
+A company's mailboxes now travel together — info@ and sales@ at one firm are
+addressed on a single message — so a target carries several addresses and each
+is checked separately. One refusal refuses the send, since the message would
+reach them all on one envelope.
 
 A company-level match is not a block, but it is worth saying out loud, so it
 comes back as context the summary can report.
@@ -35,8 +38,29 @@ def _fold(value: str | None) -> str:
     return (value or "").strip().casefold()
 
 
+def _holds(column, address: str):
+    """SQL for "this stored value is, or contains, exactly this address".
+
+    Both `CampaignTarget.normalized_email` and `Outreach.email` may now hold
+    several addresses for one company, comma-separated, because the company
+    got one message addressed to all of them. Equality would miss those rows
+    entirely and let a second cold email through to somebody who already had
+    one — so the value is padded with commas at both ends and matched against
+    `,address,`. The padding is what makes it exact: a bare LIKE would pair
+    `a@x.ae` with `sales-a@x.ae`.
+    """
+    padded = "," + func.replace(func.lower(func.trim(column)), " ", "") + ","
+    return padded.like(f"%,{address},%")
+
+
 def check(db: Session, target: CampaignTarget, *, allow_recontact: bool = False) -> Verdict:
     """Decide whether this target may be emailed.
+
+    A target can carry several mailboxes at one company — "info@x.ae,
+    sales@x.ae" — which go out on a single message. Every one of them is
+    checked, and the first that is refused refuses the whole send: if one of
+    the two has already had this email, or asked to be left alone, the message
+    cannot go, because it would reach them both on one envelope.
 
     `allow_recontact` is for follow-up campaigns, which exist precisely to
     write again to somebody already written to. It relaxes the "we have
@@ -44,14 +68,32 @@ def check(db: Session, target: CampaignTarget, *, allow_recontact: bool = False)
     sent to *by this same campaign* is still refused, so a follow-up cannot
     double-send within itself.
     """
-    address = _fold(target.normalized_email or target.email)
-    if not address:
+    addresses = [
+        _fold(part)
+        for part in (target.email or "").replace(";", ",").split(",")
+        if _fold(part)
+    ]
+    if not addresses:
         return Verdict(is_duplicate=False)
+
+    context: str | None = None
+    for one in addresses:
+        verdict = _check_address(db, target, one, allow_recontact=allow_recontact)
+        if verdict.is_duplicate:
+            return verdict
+        context = context or verdict.company_seen_before
+    return Verdict(is_duplicate=False, company_seen_before=context)
+
+
+def _check_address(
+    db: Session, target: CampaignTarget, address: str, *, allow_recontact: bool
+) -> Verdict:
+    """The rules, applied to one mailbox."""
 
     # 1. This address, already written to by an earlier campaign row.
     prior_scope = [
         CampaignTarget.id != target.id,
-        func.lower(CampaignTarget.normalized_email) == address,
+        _holds(CampaignTarget.normalized_email, address),
         CampaignTarget.state == TargetState.sent,
     ]
     if allow_recontact:
@@ -81,7 +123,7 @@ def check(db: Session, target: CampaignTarget, *, allow_recontact: bool = False)
     suppressed = db.scalar(
         select(Outreach)
         .where(
-            func.lower(func.trim(Outreach.email)) == address,
+            _holds(Outreach.email, address),
             Outreach.status == OutreachStatus.not_interested,
         )
         .limit(1)
@@ -105,7 +147,7 @@ def check(db: Session, target: CampaignTarget, *, allow_recontact: bool = False)
     #    hand long before any campaign existed.
     logged = db.scalar(
         select(Outreach)
-        .where(func.lower(func.trim(Outreach.email)) == address)
+        .where(_holds(Outreach.email, address))
         .order_by(Outreach.contacted_on.desc().nullslast())
         .limit(1)
     )

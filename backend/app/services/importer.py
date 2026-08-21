@@ -174,7 +174,11 @@ def map_headers(headers: list[str]) -> dict[int, str]:
 
 @dataclass
 class ParsedRow:
-    """One address, ready to become a queue entry."""
+    """One company, ready to become a queue entry.
+
+    Holds every mailbox that company listed, comma-separated: they go out
+    on one message, addressed to all of them.
+    """
 
     position: int
     company_name: str
@@ -200,7 +204,14 @@ class ParsedRow:
 
     @property
     def normalized_email(self) -> str:
-        return normalize_email(self.email)
+        """The comparison key: every address, folded, comma-joined, no spaces.
+
+        One row can hold several mailboxes. Stored without spaces and always
+        comma-delimited so the duplicate guard can ask "is this exact address
+        one of them" with a padded LIKE, rather than a substring test that
+        would let `a@x.ae` match `sales-a@x.ae`.
+        """
+        return ",".join(_addresses_in(self.email or ""))
 
     @property
     def domain(self) -> str | None:
@@ -420,6 +431,7 @@ def parse(data: bytes, filename: str) -> ImportReport:
 
     seen_addresses: dict[str, str] = {}          # address -> the group that claimed it
     group_addresses: dict[str, set[str]] = {}    # group key -> its addresses
+    row_by_group: dict[str, ParsedRow] = {}      # group key -> the one row it gets
     names_by_norm: dict[str, set[str]] = {}      # normalised name -> spellings seen
     rows_by_norm: dict[str, int] = {}            # normalised name -> how many rows
     companies_at: dict[str, set[str]] = {}       # normalised address -> companies there
@@ -514,6 +526,7 @@ def parse(data: bytes, filename: str) -> ImportReport:
             report.without_email += 1
             continue
 
+        fresh: list[str] = []
         for address in emails:
             folded = address.casefold()
             if folded in seen_addresses:
@@ -523,9 +536,36 @@ def parse(data: bytes, filename: str) -> ImportReport:
                 continue
             seen_addresses[folded] = group
             group_addresses[group].add(folded)
-            report.rows.append(build(address))
+            fresh.append(address)
 
-    report.addresses = sum(1 for r in report.rows if r.email)
+        if not fresh:
+            continue
+
+        # One company, one message, however many mailboxes it lists.
+        #
+        # This used to be a row per address, so a firm listing info@ and
+        # sales@ got two separate emails, two entries against the fifty-a-day
+        # limit and two lines in the outreach log that looked to the eye like
+        # the same company entered twice. Both addresses now ride on one
+        # message, addressed to both — which is also what a person writing by
+        # hand would do, and reads far better at the other end than two
+        # identical letters arriving from the same sender.
+        #
+        # "The same company" is the mail domain, not the name: grouping on
+        # names once merged "ABC Coffee" in Japan with "ABC Coffee GmbH" in
+        # Germany, two unrelated firms. Two rows sharing a domain are one
+        # business by any reading.
+        existing = row_by_group.get(group)
+        if existing is not None and existing.email:
+            existing.email = f"{existing.email}, {', '.join(fresh)}"
+            continue
+
+        row = build(", ".join(fresh))
+        row_by_group[group] = row
+        report.rows.append(row)
+
+    # Addresses, not rows: one row can now carry several.
+    report.addresses = sum(len(_addresses_in(r.email)) for r in report.rows if r.email)
     report.companies = len(group_addresses)
     report.multi_address_companies = sum(1 for v in group_addresses.values() if len(v) > 1)
 

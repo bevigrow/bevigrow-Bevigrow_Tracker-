@@ -879,3 +879,34 @@ def build_follow_up(
         "queued": position,
         "days_since": days_since,
     }
+
+
+@router.get("/system/imap-reachable")
+def imap_reachable(_: User = Depends(get_current_user)):
+    """Can this host open a connection to Gmail's IMAP port at all?
+
+    Asked before building anything on it. Outbound SMTP is blocked here, which
+    is why campaigns send over HTTPS — and if 993 were blocked too, an inbox
+    reader would be dead on arrival no matter how well written. No credentials
+    are used: this opens a socket, reads the greeting, and hangs up.
+    """
+    import socket
+    import ssl as ssl_module
+
+    results = {}
+    for label, host, port in (
+        ("gmail_imap", "imap.gmail.com", 993),
+        ("gmail_smtp_587", "smtp.gmail.com", 587),
+    ):
+        try:
+            with socket.create_connection((host, port), timeout=10) as raw:
+                if port == 993:
+                    ctx = ssl_module.create_default_context()
+                    with ctx.wrap_socket(raw, server_hostname=host) as tls:
+                        greeting = tls.recv(64).decode("utf-8", "replace").strip()
+                else:
+                    greeting = raw.recv(64).decode("utf-8", "replace").strip()
+            results[label] = {"open": True, "greeting": greeting[:60]}
+        except Exception as exc:  # noqa: BLE001 - the failure IS the answer
+            results[label] = {"open": False, "error": f"{type(exc).__name__}: {exc}"[:160]}
+    return results

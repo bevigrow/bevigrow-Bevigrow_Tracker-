@@ -373,15 +373,21 @@ def _verify_http(account: EmailAccount) -> SendOutcome:
             res = client.get(url, headers=headers)
     except httpx.HTTPError as exc:
         return SendOutcome(ok=False, error=f"Could not reach {name}: {exc}"[:400])
-    if res.status_code == 401:
+    if res.status_code in (401, 403):
+        # A key created with "Sending access" cannot read this endpoint, and
+        # Resend says so with a 401 — the same status as a key that is simply
+        # wrong. Only the body tells them apart:
+        #
+        #   {"statusCode":401,"name":"restricted_api_key",
+        #    "message":"This API key is restricted to only send emails"}
+        #
+        # Which is the correct key for this application to hold. Reporting it
+        # as rejected would send somebody off to mint a broader one, or to
+        # conclude their good key was bad.
+        if "restricted" in res.text.lower():
+            log.info("%s key is valid and restricted to sending, which is what we want", name)
+            return SendOutcome(ok=True)
         return SendOutcome(ok=False, auth_fault=True, error=f"{name} rejected that API key.")
-    if res.status_code == 403:
-        # The key is real; it simply may not list domains. Resend keys created
-        # with "Sending access" behave exactly like this, and calling a valid
-        # key rejected would send somebody off to make another one that failed
-        # the same way. It answered us, which is what was being tested.
-        log.info("%s key is valid but restricted (403 on %s)", name, url)
-        return SendOutcome(ok=True)
     if res.status_code >= 400:
         return _http_error(name, res.status_code, res.text)
     return SendOutcome(ok=True)

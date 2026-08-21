@@ -225,15 +225,29 @@ def compute_stats(
     # that became a real enquiry, the ones that became an order. Each step is
     # a subset of the one above it, which is what makes the drop between them
     # meaningful rather than two unrelated numbers side by side.
-    contacted = db.scalar(select(func.count(Outreach.id))) or 0
+    # Companies, counted as companies — distinct names, not rows.
+    #
+    # A row in the outreach log is a mailbox, and a firm listing info@ and
+    # sales@ once produced two of them. The funnel said "Companies contacted:
+    # 15" over fifteen rows that were eleven businesses, and there is no way
+    # to read that number except as fifteen firms. `company_name` carries the
+    # location — "Spice Star Foodstuff Trading LLC, Dubai" — so counting
+    # distinct names collapses the pair without merging two real firms that
+    # happen to share a name in different cities.
+    #
+    # Every stage is counted the same way, or the funnel would compare
+    # companies at the top against mailboxes below it and invent a drop-off
+    # that never happened.
+    company = func.distinct(Outreach.company_name)
+    contacted = db.scalar(select(func.count(company))) or 0
     replied = (
         db.scalar(
-            select(func.count(Outreach.id)).where(Outreach.status == OutreachStatus.replied)
+            select(func.count(company)).where(Outreach.status == OutreachStatus.replied)
         )
         or 0
     )
     became_quote = (
-        db.scalar(select(func.count(Outreach.id)).where(Outreach.quote_id.is_not(None))) or 0
+        db.scalar(select(func.count(company)).where(Outreach.quote_id.is_not(None))) or 0
     )
     won = completed
     funnel = [

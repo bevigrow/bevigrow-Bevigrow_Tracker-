@@ -14,6 +14,8 @@ import type {
   DuplicateGroup,
   TrendReport,
   EmailAccount,
+  InboundReply,
+  ReplySync,
   EmailTemplate,
   ImportReport,
   SendAttempt,
@@ -302,6 +304,23 @@ export const api = {
 
   // ---- automated outreach
   emailAccount: () => request<EmailAccount | null>('/api/email-account'),
+
+  // --- replies -----------------------------------------------------------
+  // There is no "send" here on purpose. The application reads the mailbox
+  // and updates the record; answering a customer is done in Gmail.
+  listReplies: (unmatched = false) =>
+    request<InboundReply[]>(`/api/replies${unmatched ? '?unmatched=true' : ''}`),
+  checkReplies: () => request<ReplySync>('/api/replies/check', { method: 'POST' }),
+  matchReply: (id: number, outreachId: number) =>
+    request<InboundReply>(`/api/replies/${id}/match`, {
+      method: 'POST',
+      body: JSON.stringify({ outreach_id: outreachId }),
+    }),
+  markReplyHandled: (id: number, handled = true) =>
+    request<InboundReply>(`/api/replies/${id}/handled`, {
+      method: 'POST',
+      body: JSON.stringify({ handled }),
+    }),
   saveEmailAccount: (body: Record<string, unknown>) =>
     request<EmailAccount>('/api/email-account', { method: 'PUT', body: JSON.stringify(body) }),
   verifyEmailAccount: () =>

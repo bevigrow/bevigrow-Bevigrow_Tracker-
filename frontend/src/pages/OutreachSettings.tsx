@@ -5,7 +5,16 @@
  * password that was mistyped fails exactly like one that was revoked, and
  * finding that out on company one of two hundred is a bad way to learn it.
  */
-import { CheckCircle2, KeyRound, Mail, Plus, ShieldCheck, TriangleAlert } from 'lucide-react'
+import {
+  CheckCircle2,
+  Inbox,
+  KeyRound,
+  Mail,
+  Plus,
+  RefreshCw,
+  ShieldCheck,
+  TriangleAlert,
+} from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { Button, Card, Field, Input, Select, Skeleton, Textarea } from '../components/ui'
@@ -281,9 +290,205 @@ export function OutreachSettings() {
         </details>
       </Card>
 
+      {/* --------------------------------------------------- reading replies */}
+      <ReplyTracking account={account} onSaved={load} />
+
       {/* ------------------------------------------------------- the template */}
       <TemplateEditor templates={templates} onSaved={load} />
     </div>
+  )
+}
+
+/* ------------------------------------------------------------ reply tracking */
+
+/** Connecting the mailbox replies arrive in.
+ *
+ * Sending and reading are two different connections to two different places:
+ * campaigns leave over HTTPS because the host blocks the SMTP ports, and
+ * replies are read over IMAP, which is reachable. So this is its own panel
+ * with its own password, rather than a checkbox on the sending one.
+ */
+function ReplyTracking({
+  account,
+  onSaved,
+}: {
+  account: EmailAccount | null
+  onSaved: () => Promise<void> | void
+}) {
+  const toast = useToast()
+  const [user, setUser] = useState(account?.imap_user || account?.reply_to || '')
+  const [password, setPassword] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [checking, setChecking] = useState(false)
+
+  if (!account)
+    return (
+      <Card>
+        <div className="flex items-center gap-2.5">
+          <Inbox size={18} className="text-latte/30" />
+          <p className="text-sm text-latte/50">
+            Save the sending mailbox above first, then connect the inbox replies arrive in.
+          </p>
+        </div>
+      </Card>
+    )
+
+  const connected = Boolean(account.has_imap_password && account.imap_user)
+  const enabled = account.reply_check_enabled
+
+  // The PUT replaces the whole record, so the sending half has to travel with
+  // it — otherwise connecting the inbox would quietly blank the From address.
+  const put = async (extra: Record<string, unknown>) => {
+    setBusy(true)
+    try {
+      await api.saveEmailAccount({
+        from_email: account.from_email,
+        from_name: account.from_name,
+        provider: account.provider,
+        smtp_user: account.smtp_user,
+        reply_to: account.reply_to,
+        daily_limit: account.daily_limit,
+        imap_host: account.imap_host || 'imap.gmail.com',
+        imap_port: account.imap_port || 993,
+        reply_check_enabled: enabled,
+        ...extra,
+      })
+      setPassword('')
+      await onSaved()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not save.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!user.trim()) {
+      toast.error('Which mailbox should be read?')
+      return
+    }
+    if (!connected && !password.trim()) {
+      toast.error('An App Password is needed the first time.')
+      return
+    }
+    await put({
+      imap_user: user.trim(),
+      reply_check_enabled: true,
+      ...(password.trim() ? { imap_password: password.trim() } : {}),
+    })
+    toast.success('Inbox connected. Replies will be picked up automatically.')
+  }
+
+  const checkNow = async () => {
+    setChecking(true)
+    try {
+      const r = await api.checkReplies()
+      if (r.error) toast.error(r.error)
+      else if (r.stored === 0) toast.success(`Read ${r.checked} messages — nothing new.`)
+      else
+        toast.success(
+          `${r.stored} new: ${r.matched} matched to a company, ${r.unmatched} need a look.`,
+        )
+      await onSaved()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not read the mailbox.')
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  return (
+    <Card>
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div className="flex items-center gap-2.5">
+          <Inbox size={18} className="text-gold" />
+          <div>
+            <h2 className="font-display text-lg text-latte">Reply tracking</h2>
+            <p className="text-[11px] text-latte/45">
+              When somebody answers, their record updates itself.
+            </p>
+          </div>
+        </div>
+        {connected && (
+          <span
+            className={`chip shrink-0 ${
+              account.last_reply_error
+                ? 'border-red-400/40 bg-red-400/10 text-red-300'
+                : 'border-emerald-400/40 bg-emerald-400/10 text-emerald-300'
+            }`}
+          >
+            <CheckCircle2 size={12} />
+            {account.last_reply_error ? 'Needs attention' : enabled ? 'Connected' : 'Paused'}
+          </span>
+        )}
+      </div>
+
+      <form onSubmit={save} className="grid gap-4 sm:grid-cols-2">
+        <Field label="Mailbox to read">
+          <Input
+            value={user}
+            onChange={(e) => setUser(e.target.value)}
+            placeholder="bevigrow@gmail.com"
+            autoComplete="off"
+          />
+        </Field>
+        <Field label={connected ? 'App Password (already stored)' : 'App Password'}>
+          <Input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder={connected ? 'Leave blank to keep the saved one' : 'sixteen characters'}
+            autoComplete="new-password"
+          />
+        </Field>
+
+        <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
+          <Button type="submit" disabled={busy}>
+            {busy ? 'Saving…' : connected ? 'Reconnect' : 'Connect inbox'}
+          </Button>
+          {connected && (
+            <>
+              <Button type="button" variant="ghost" onClick={checkNow} disabled={checking}>
+                <RefreshCw size={14} className={checking ? 'animate-spin' : undefined} />
+                {checking ? 'Reading…' : 'Check now'}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={async () => {
+                  await put({ imap_user: account.imap_user, reply_check_enabled: !enabled })
+                  toast.success(enabled ? 'Automatic checking paused.' : 'Checking again.')
+                }}
+                disabled={busy}
+              >
+                {enabled ? 'Pause checking' : 'Resume checking'}
+              </Button>
+            </>
+          )}
+          {account.last_reply_check_at && (
+            <span className="text-[11px] text-latte/40">
+              Last read {formatDateTime(account.last_reply_check_at)}
+            </span>
+          )}
+        </div>
+      </form>
+
+      {account.last_reply_error && (
+        <p className="mt-4 flex items-start gap-2 rounded-lg border border-red-400/30 bg-red-400/5 px-3 py-2.5 text-[12px] text-red-200/80">
+          <TriangleAlert size={14} className="mt-0.5 shrink-0" />
+          {account.last_reply_error}
+        </p>
+      )}
+
+      <p className="mt-4 flex items-start gap-2 rounded-lg border border-caramel/20 bg-bean/30 px-3 py-2.5 text-[12px] leading-relaxed text-latte/55">
+        <ShieldCheck size={14} className="mt-0.5 shrink-0 text-gold/70" />
+        Replies are read every five minutes. A matched reply marks the company{' '}
+        <span className="text-latte/75">Replied</span>, saves what they wrote, records how long they
+        took and stops any follow-up to them. Nothing is ever written back — answering is done in
+        Gmail, by you.
+      </p>
+    </Card>
   )
 }
 

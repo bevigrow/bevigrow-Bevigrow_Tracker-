@@ -7,8 +7,9 @@
  * written to those companies this morning. This page is the memory that
  * outlives the campaign.
  */
-import { CalendarDays, Copy, Inbox, RotateCcw, Trash2 } from 'lucide-react'
+import { CalendarDays, Copy, Inbox, Mailbox, RotateCcw, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import {
   BarTable,
@@ -28,7 +29,13 @@ import { Button, Card, ConfirmDialog, EmptyState, Select, Skeleton } from '../co
 import { ApiError, api } from '../lib/api'
 import { formatDateTime } from '../lib/format'
 import { useToast } from '../lib/toast'
-import type { Campaign, DailyReport, DuplicateGroup, TrendReport } from '../lib/types'
+import type {
+  Campaign,
+  DailyReport,
+  DuplicateGroup,
+  InboundReply,
+  TrendReport,
+} from '../lib/types'
 import { CATEGORICAL } from '../lib/viz'
 
 /** The charts, all of them about cold outreach.
@@ -63,10 +70,11 @@ export function OutreachReport() {
   const [chart, setChart] = useState('')
   const [trends, setTrends] = useState<TrendReport | null>(null)
   const [funnel, setFunnel] = useState<{ stage: string; count: number }[]>([])
+  const [replies, setReplies] = useState<InboundReply[]>([])
 
   const load = useCallback(async () => {
     try {
-      const [r, d, b, t, dash] = await Promise.all([
+      const [r, d, b, t, dash, inbox] = await Promise.all([
         api.dailyReport(60),
         api.duplicateReport().catch(() => []),
         api.listCampaigns(true).catch(() => []),
@@ -74,12 +82,14 @@ export function OutreachReport() {
         // The funnel lives on the dashboard payload because it spans both
         // sides of the business; this page only borrows it.
         api.dashboard().catch(() => null),
+        api.listReplies().catch(() => []),
       ])
       setReport(r)
       setDupes(d)
       setBinned(b)
       setTrends(t)
       setFunnel(dash?.funnel ?? [])
+      setReplies(inbox)
     } catch {
       toast.error('Could not load the report.')
     } finally {
@@ -276,6 +286,9 @@ export function OutreachReport() {
         </ChartFrame>
       )}
 
+      {/* ------------------------------------------------------- what came back */}
+      {replies.length > 0 && <RepliesReceived replies={replies} onChanged={load} />}
+
       {/* ------------------------------------------------ same name report */}
       {dupes.length > 0 && (
         <Card>
@@ -460,6 +473,166 @@ export function OutreachReport() {
         onCancel={() => setPurging(null)}
       />
     </div>
+  )
+}
+
+/* --------------------------------------------------------------- replies in */
+
+const CLASS_LABEL: Record<string, string> = {
+  interested: 'Interested',
+  pricing_request: 'Wants pricing',
+  sample_request: 'Wants samples',
+  specification_request: 'Wants specifications',
+  purchasing_contact: 'Passed to purchasing',
+  needs_follow_up: 'Needs a follow-up',
+  not_interested: 'Not interested',
+  out_of_office: 'Out of office',
+  unsubscribe: 'Asked to be removed',
+  bounced: 'Bounced',
+  other: 'Other',
+}
+
+/** The messages that came back, and which company each belongs to.
+ *
+ * Matched replies have already changed their outreach record — this is a
+ * reading view, not a queue. The one thing it asks of a person is the
+ * unmatched ones: the app will not guess which company a stranger belongs to,
+ * because filing a reply against the wrong company is worse than filing it
+ * against none.
+ *
+ * There is no reply box. Answering happens in Gmail, in the thread the
+ * customer already has open.
+ */
+function RepliesReceived({
+  replies,
+  onChanged,
+}: {
+  replies: InboundReply[]
+  onChanged: () => Promise<void>
+}) {
+  const toast = useToast()
+  const [showHandled, setShowHandled] = useState(false)
+  const visible = showHandled ? replies : replies.filter((r) => !r.handled)
+  const unmatched = replies.filter((r) => r.match_kind === 'unmatched' && !r.handled).length
+
+  const ignore = async (r: InboundReply) => {
+    try {
+      await api.markReplyHandled(r.id, true)
+      await onChanged()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not update it.')
+    }
+  }
+
+  return (
+    <Card>
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <Mailbox size={17} className="text-gold" />
+          <div>
+            <h2 className="font-display text-lg text-latte">What came back</h2>
+            <p className="text-[11px] text-latte/45">
+              {unmatched > 0
+                ? `${unmatched} could not be matched to a company and are waiting for you.`
+                : 'Every reply has been matched to the company that sent it.'}
+            </p>
+          </div>
+        </div>
+        <Button variant="ghost" onClick={() => setShowHandled((v) => !v)}>
+          {showHandled ? 'Hide dealt-with' : 'Show all'}
+        </Button>
+      </div>
+
+      {visible.length === 0 ? (
+        <EmptyState
+          emoji="📬"
+          title="Nothing waiting"
+          hint="Every reply that arrived has been dealt with."
+        />
+      ) : (
+        <div className="space-y-2.5">
+          {visible.map((r) => (
+            <div
+              key={r.id}
+              className="rounded-lg border border-caramel/20 bg-bean/30 px-3.5 py-3"
+            >
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                <span className="text-sm font-medium text-latte">
+                  {r.company_name ?? r.from_name ?? r.from_email ?? 'Unknown sender'}
+                </span>
+                <span className="text-[11px] text-latte/40">
+                  {formatDateTime(r.received_at)}
+                  {r.reply_speed_hours != null &&
+                    ` · answered in ${
+                      r.reply_speed_hours < 48
+                        ? `${Math.round(r.reply_speed_hours)}h`
+                        : `${Math.round(r.reply_speed_hours / 24)} days`
+                    }`}
+                </span>
+              </div>
+
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <span className="chip border-caramel/30 bg-bean/50 text-latte/70">
+                  {CLASS_LABEL[r.classification] ?? r.classification}
+                </span>
+                {r.match_kind === 'unmatched' ? (
+                  <span className="chip border-amber-400/40 bg-amber-400/10 text-amber-300">
+                    Not matched to a company
+                  </span>
+                ) : (
+                  <span className="chip border-emerald-400/30 bg-emerald-400/10 text-emerald-300/90">
+                    {r.match_kind === 'thread'
+                      ? 'Matched by the email thread'
+                      : r.match_kind === 'address'
+                        ? 'Matched by sender address'
+                        : 'Matched by hand'}
+                  </span>
+                )}
+                {r.from_email && (
+                  <span className="text-[11px] text-latte/35">{r.from_email}</span>
+                )}
+              </div>
+
+              {r.body && (
+                <p className="mt-2 whitespace-pre-wrap break-words text-[12px] leading-relaxed text-latte/60">
+                  {r.body.length > 400 ? `${r.body.slice(0, 400)}…` : r.body}
+                </p>
+              )}
+
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                {r.outreach_id && (
+                  <Link
+                    to={`/outreach?focus=${r.outreach_id}`}
+                    className="text-[12px] text-gold hover:underline"
+                  >
+                    Open the outreach record
+                  </Link>
+                )}
+                {r.from_email && (
+                  <a
+                    href={`https://mail.google.com/mail/u/0/#search/${encodeURIComponent(r.from_email)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[12px] text-latte/50 hover:text-latte hover:underline"
+                  >
+                    Answer in Gmail
+                  </a>
+                )}
+                {!r.handled && (
+                  <button
+                    type="button"
+                    onClick={() => void ignore(r)}
+                    className="text-[12px] text-latte/40 hover:text-latte/70"
+                  >
+                    Mark dealt with
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
   )
 }
 

@@ -319,6 +319,46 @@ export interface EmailAccount {
   has_api_key: boolean
   last_verified_at: string | null
   last_error: string | null
+
+  /** The mailbox replies are read from, over IMAP. */
+  imap_host: string
+  imap_port: number
+  imap_user: string
+  has_imap_password: boolean
+  reply_check_enabled: boolean
+  last_reply_check_at: string | null
+  last_reply_error: string | null
+}
+
+/** A message a customer sent back, and what the app made of it. */
+export interface InboundReply {
+  id: number
+  message_id: string
+  from_email: string | null
+  from_name: string | null
+  subject: string | null
+  received_at: string
+  body: string | null
+  /** thread = proved by the header we sent. address = the sender matches. */
+  match_kind: 'thread' | 'address' | 'manual' | 'unmatched'
+  classification: string
+  classified_by: string
+  outreach_id: number | null
+  campaign_id: number | null
+  company_name: string | null
+  suggested_reply: string | null
+  handled: boolean
+  sent_at: string | null
+  reply_speed_hours: number | null
+}
+
+export interface ReplySync {
+  checked: number
+  stored: number
+  matched: number
+  unmatched: number
+  skipped: number
+  error: string | null
 }
 
 export interface EmailTemplate {

@@ -6,7 +6,7 @@
  * the laptop — does not stop it; the queue, the daily count and the position
  * all live in the database, and the campaign carries on from wherever it was.
  */
-import { FileUp, Pause, Play, Square } from 'lucide-react'
+import { FileUp, MailCheck, Pause, Play, Square } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
@@ -35,7 +35,10 @@ export function Campaigns() {
       ])
       setCampaigns(list)
       setTemplates(tpls)
-      setMailboxReady(Boolean(acct?.has_password))
+      // Either credential counts. Checking only the SMTP password told a
+      // perfectly configured Resend account to "connect your Gmail" and left
+      // New campaign disabled.
+      setMailboxReady(Boolean(acct?.has_password || acct?.has_api_key))
     } catch {
       toast.error('Could not load campaigns.')
     } finally {
@@ -75,7 +78,7 @@ export function Campaigns() {
             {mailboxReady === false && (
               <>
                 <Link to="/app/outreach/settings" className="text-gold hover:underline">
-                  connect your Gmail
+                  connect a sending mailbox
                 </Link>
                 {templates.length === 0 && ' and '}
               </>
@@ -288,8 +291,19 @@ function CampaignRow({ campaign, onChanged }: { campaign: Campaign; onChanged: (
                 {status.failed > 0 && (
                   <span className="text-red-300/90">{status.failed} failed</span>
                 )}
+                {/* A link, not a label.
+                    It used to state that drafts were waiting and offer no way
+                    to reach them — the approvals live on the campaign's own
+                    page, and the only route there was clicking the title,
+                    which nothing said. Telling somebody an action is required
+                    and hiding the action is worse than not mentioning it. */}
                 {status.awaiting_approval > 0 && (
-                  <span className="text-gold">{status.awaiting_approval} awaiting approval</span>
+                  <Link
+                    to={`/app/outreach/campaigns/${campaign.id}`}
+                    className="text-gold underline decoration-gold/40 underline-offset-2 hover:decoration-gold"
+                  >
+                    {status.awaiting_approval} awaiting approval
+                  </Link>
                 )}
               </div>
 
@@ -318,6 +332,15 @@ function CampaignRow({ campaign, onChanged }: { campaign: Campaign; onChanged: (
 
         {/* ------------------------------------------------ start / stop */}
         <div className="flex shrink-0 items-center gap-2">
+          {/* When drafts are waiting, reviewing them is the only thing that
+              moves the campaign — so it is the button, ahead of Start. */}
+          {(status?.awaiting_approval ?? 0) > 0 && (
+            <Link to={`/app/outreach/campaigns/${campaign.id}`}>
+              <Button icon={<MailCheck size={15} />} className="px-3 py-2 text-xs">
+                Review {status?.awaiting_approval}
+              </Button>
+            </Link>
+          )}
           {canStart && (
             <Button onClick={start} icon={<Play size={15} />} className="px-3 py-2 text-xs">
               {status?.status === 'daily_limit' ? 'Resume' : 'Start'}

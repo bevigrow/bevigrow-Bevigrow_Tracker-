@@ -760,6 +760,16 @@ class OutreachStats(BaseModel):
     by_method: dict[str, int]
 
 
+class MergeGroup(BaseModel):
+    """One company that appears on more than one row, and its addresses."""
+
+    company_name: str
+    country: str | None = None
+    rows: int
+    emails: list[str] = []
+    ids: list[int] = []
+
+
 class OutreachGroup(BaseModel):
     """One country or company, with how the conversations there have gone."""
 

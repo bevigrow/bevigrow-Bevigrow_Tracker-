@@ -16,8 +16,10 @@ from ..database import get_db
 from ..deps import get_current_user
 from ..models import (
     OUTREACH_CLOSED,
+    CampaignTarget,
     Contact,
     ContactMethod,
+    InboundReply,
     DealStatus,
     Outreach,
     OutreachStatus,
@@ -26,6 +28,7 @@ from ..models import (
 from ..schemas import (
     ContactOut,
     OutreachCreate,
+    MergeGroup,
     OutreachGroup,
     OutreachInsights,
     OutreachListOut,
@@ -144,6 +147,119 @@ def list_outreach(
     if rows:
         return rows
     return db.scalars(stmt.where(any_match).order_by(*order).limit(limit)).all()
+
+
+# --------------------------------------------------------------- combining
+
+
+# Which status survives when two rows for one company are joined. A reply is
+# the most informative thing that can have happened and must never be lost
+# behind "waiting"; a refusal outranks silence for the same reason.
+_STATUS_RANK = {
+    OutreachStatus.replied: 0,
+    OutreachStatus.not_interested: 1,
+    OutreachStatus.follow_up_sent: 2,
+    OutreachStatus.waiting_reply: 3,
+    OutreachStatus.no_response: 4,
+}
+
+
+def _mergeable(db: Session) -> list[list[Outreach]]:
+    """Groups of rows that are one company written to at several addresses.
+
+    Grouped on the company label, which already carries the location — "Bombay
+    Foodstuff Trading Co. LLC, Al Ras, Deira, Dubai" — plus the country. Two
+    firms of the same name in the same city would be merged wrongly, which is
+    why this is offered as a button and not done silently at startup.
+    """
+    groups: dict[tuple[str, str], list[Outreach]] = {}
+    for row in db.scalars(select(Outreach).order_by(Outreach.id)):
+        label = " ".join((row.company_name or "").split()).casefold()
+        if not label:
+            continue
+        key = (label, (row.country or "").strip().casefold())
+        groups.setdefault(key, []).append(row)
+    return [rows for rows in groups.values() if len(rows) > 1]
+
+
+@router.get("/mergeable", response_model=list[MergeGroup])
+def list_mergeable(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """What combining would do, before anything is combined."""
+    return [
+        MergeGroup(
+            company_name=rows[0].company_name or "",
+            country=rows[0].country,
+            rows=len(rows),
+            emails=[r.email for r in rows if r.email],
+            ids=[r.id for r in rows],
+        )
+        for rows in _mergeable(db)
+    ]
+
+
+@router.post("/merge", response_model=list[MergeGroup])
+def merge_duplicates(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Join every company that appears more than once into a single row.
+
+    One row per company, with its addresses on one line, comma-separated —
+    which is how new imports have been recorded since they were changed to
+    send one email per company. This brings the rows written before that in
+    line with them.
+
+    Nothing is thrown away. The addresses are all kept, the earliest contact
+    date wins, the most informative status wins, and notes and replies are
+    concatenated rather than picked between. Replies already filed against a
+    row, and the campaign targets that produced it, are re-pointed at the row
+    that survives, so no reply is orphaned by the tidy-up.
+    """
+    done: list[MergeGroup] = []
+    for rows in _mergeable(db):
+        keeper, *rest = sorted(
+            rows, key=lambda r: (r.contacted_on or date.max, r.id)
+        )
+        addresses: list[str] = []
+        for row in rows:
+            for part in (row.email or "").replace(";", ",").split(","):
+                one = part.strip()
+                if one and one.casefold() not in {a.casefold() for a in addresses}:
+                    addresses.append(one)
+
+        notes = [r.notes.strip() for r in rows if r.notes and r.notes.strip()]
+        replies = [r.their_reply.strip() for r in rows if r.their_reply and r.their_reply.strip()]
+        best = min(rows, key=lambda r: _STATUS_RANK.get(r.status, 9))
+
+        keeper.email = ", ".join(addresses)[:255]
+        keeper.contact_point = keeper.email[:255]
+        keeper.status = best.status
+        keeper.replied_on = min((r.replied_on for r in rows if r.replied_on), default=None)
+        keeper.their_reply = "\n\n".join(dict.fromkeys(replies)) or None
+        keeper.notes = "\n\n".join(dict.fromkeys(notes)) or None
+        # The soonest outstanding follow-up, and none at all once they replied.
+        pending = [r.next_follow_up for r in rows if r.next_follow_up]
+        keeper.next_follow_up = (
+            None if keeper.status == OutreachStatus.replied else (min(pending) if pending else None)
+        )
+
+        for row in rest:
+            db.query(InboundReply).filter(InboundReply.outreach_id == row.id).update(
+                {InboundReply.outreach_id: keeper.id}, synchronize_session=False
+            )
+            db.query(CampaignTarget).filter(CampaignTarget.outreach_id == row.id).update(
+                {CampaignTarget.outreach_id: keeper.id}, synchronize_session=False
+            )
+            db.delete(row)
+
+        done.append(
+            MergeGroup(
+                company_name=keeper.company_name or "",
+                country=keeper.country,
+                rows=len(rows),
+                emails=addresses,
+                ids=[keeper.id],
+            )
+        )
+    db.commit()
+    return done
 
 
 @router.get("/stats", response_model=OutreachStats)

@@ -545,3 +545,12 @@ export interface TrendReport {
   response_days: { bucket: string; count: number }[]
   replies_counted: number
 }
+
+/** One company sitting on more than one row of the outreach log. */
+export interface MergeGroup {
+  company_name: string
+  country: string | null
+  rows: number
+  emails: string[]
+  ids: number[]
+}

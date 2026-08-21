@@ -412,6 +412,22 @@ def _addresses_in(cell: str) -> list[str]:
     return found
 
 
+def _join(unions: dict[str, str], domain: str, place: str | None) -> str:
+    """Return the one group these two keys share, tying them together.
+
+    A firm can be recognised two ways — by its mail domain, or by its name at
+    its location — and the same firm may be recognised each way on different
+    rows of the same file. Both keys are pointed at whichever group was seen
+    first, so the second row joins the first rather than starting its own.
+    """
+    known = unions.get(domain) or (unions.get(place) if place else None)
+    group = known or domain
+    unions[domain] = group
+    if place:
+        unions[place] = group
+    return group
+
+
 def parse(data: bytes, filename: str) -> ImportReport:
     """Read the file into queue rows — one per address.
 
@@ -432,6 +448,7 @@ def parse(data: bytes, filename: str) -> ImportReport:
     seen_addresses: dict[str, str] = {}          # address -> the group that claimed it
     group_addresses: dict[str, set[str]] = {}    # group key -> its addresses
     row_by_group: dict[str, ParsedRow] = {}      # group key -> the one row it gets
+    unions: dict[str, str] = {}                  # domain/name-place key -> its group
     names_by_norm: dict[str, set[str]] = {}      # normalised name -> spellings seen
     rows_by_norm: dict[str, int] = {}            # normalised name -> how many rows
     companies_at: dict[str, set[str]] = {}       # normalised address -> companies there
@@ -463,21 +480,34 @@ def parse(data: bytes, filename: str) -> ImportReport:
             # Filed under something findable rather than refused.
             company = values.get("website") or (emails[0] if emails else "Unnamed company")
 
-        # A company, for grouping purposes, is its mail domain.
+        # A company, for grouping purposes, is its mail domain — or the same
+        # name at the same place.
         #
-        # Grouping by name alone merged "ABC Coffee" in Japan with "ABC Coffee
-        # GmbH" in Germany — same words after the legal suffix comes off, two
-        # unrelated businesses on two domains. Grouping by domain keeps them
-        # apart and still gathers info@ and sales@ at the same firm, whichever
-        # way the name was typed on each row.
+        # The domain alone is not enough. "Bombay Foodstuff Trading Co. LLC,
+        # Al Ras, Deira, Dubai" was listed twice with bombay@eim.ae and
+        # info@bombayfoodstuff.com: one firm, two domains, and grouping on the
+        # domain kept them apart. So an identical name at an identical
+        # location in the same country groups too.
+        #
+        # The name is never enough on its own, which is the other half of the
+        # rule: grouping on names alone once merged "ABC Coffee" in Japan with
+        # "ABC Coffee GmbH" in Germany, two unrelated businesses. Requiring the
+        # location and the country to match as well is what makes it safe —
+        # two firms of the same name in the same city are a coincidence nobody
+        # in this trade has hit, and a person can still split them by hand.
         norm = normalize_company(company)
-        group = domain_of(emails[0] if emails else None, values.get("website")) or norm
-        names_by_norm.setdefault(norm, set()).add(company)
-        rows_by_norm[norm] = rows_by_norm.get(norm, 0) + 1
-        # An address is the same address whatever the capitalisation or
-        # spacing; anything looser would pair two firms on one street.
         where = _PUNCT.sub(' ', tidy(values.get('location'))).casefold()
         where = ' '.join(where.split())
+        place_key = None
+        if norm and where:
+            place_key = f"{norm}@@{where}@@{normalize_email(values.get('country'))}"
+        group = domain_of(emails[0] if emails else None, values.get("website")) or norm
+        # Two keys can name the same firm — the domain on one row, the
+        # name-and-place on another. Whichever was seen first wins, so both
+        # rows land in one group instead of two that never meet.
+        group = _join(unions, group, place_key)
+        names_by_norm.setdefault(norm, set()).add(company)
+        rows_by_norm[norm] = rows_by_norm.get(norm, 0) + 1
         if where:
             companies_at.setdefault(where, set()).add(company)
         groups_by_norm.setdefault(norm, set()).add(group)

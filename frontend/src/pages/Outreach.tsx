@@ -1,6 +1,7 @@
 import {
   CircleSlash,
   Clock,
+  Combine,
   FilePlus2,
   Globe,
   MailCheck,
@@ -41,6 +42,7 @@ import type {
   ContactMethod,
   CountryOption,
   Outreach as FullRow,
+  MergeGroup,
   OutreachRow as Row,
   OutreachInsights as Insights,
   OutreachStats,
@@ -83,10 +85,14 @@ export function Outreach() {
   const [creating, setCreating] = useState(false)
   const [deleting, setDeleting] = useState<Row | null>(null)
 
+  const [mergeable, setMergeable] = useState<MergeGroup[]>([])
+  const [merging, setMerging] = useState(false)
+  const [combining, setCombining] = useState(false)
+
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [list, s] = await Promise.all([
+      const [list, s, dupes] = await Promise.all([
         api.listOutreach({
           search: search.trim() || undefined,
           contact_method: method || undefined,
@@ -95,9 +101,11 @@ export function Outreach() {
           due: dueOnly || undefined,
         }),
         api.outreachStats().catch(() => null),
+        api.mergeableOutreach().catch(() => []),
       ])
       setRows(list)
       setStats(s)
+      setMergeable(dupes)
     } catch {
       toast.error('Could not load the outreach list.')
     } finally {
@@ -210,6 +218,24 @@ export function Outreach() {
 
   const filtered = search || method || status || country || dueOnly
 
+  const combine = async () => {
+    setCombining(true)
+    try {
+      const done = await api.mergeOutreach()
+      setMerging(false)
+      await load()
+      toast.success(
+        done.length
+          ? `Combined ${done.length} compan${done.length === 1 ? 'y' : 'ies'}.`
+          : 'Nothing needed combining.',
+      )
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not combine them.')
+    } finally {
+      setCombining(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -220,10 +246,37 @@ export function Outreach() {
             {filtered && ' matching your filters'}
           </p>
         </div>
-        <Button onClick={() => setCreating(true)} icon={<Plus size={16} />}>
-          Log Outreach
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Only offered when there is something to combine, so it is not a
+              button that does nothing on most days. */}
+          {mergeable.length > 0 && (
+            <Button variant="ghost" onClick={() => setMerging(true)} icon={<Combine size={16} />}>
+              Combine {mergeable.length} duplicate
+              {mergeable.length === 1 ? '' : 's'}
+            </Button>
+          )}
+          <Button onClick={() => setCreating(true)} icon={<Plus size={16} />}>
+            Log Outreach
+          </Button>
+        </div>
       </div>
+
+      <ConfirmDialog
+        open={merging}
+        onCancel={() => setMerging(false)}
+        onConfirm={combine}
+        confirmLabel={combining ? 'Combining…' : 'Combine them'}
+        title="Combine these into one row each?"
+        message={
+          mergeable
+            .map((g) => `${g.company_name}\n   ${g.emails.join(', ')}`)
+            .join('\n\n') +
+          '\n\nEach of these is one company written to at more than one address. ' +
+          'Combining leaves one row each, with the addresses on one line. Dates, statuses, ' +
+          'replies and notes are kept — the earliest date and the most informative status wins. ' +
+          'This cannot be undone; new imports already do it automatically.'
+        }
+      />
 
       {/* Four numbers, not a dashboard. */}
       {stats && stats.total > 0 && (

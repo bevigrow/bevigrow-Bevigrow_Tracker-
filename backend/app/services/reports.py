@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from ..models import DailyQuota, Outreach, SendLedger
 from . import campaigns as cm
+from .geo import tidy
 from .importer import normalize_company
 
 
@@ -173,10 +174,17 @@ def trends(db: Session, months: int = 12) -> dict:
         axis.append(month_key(cursor))
         cursor = date(cursor.year + 1, 1, 1) if cursor.month == 12 else date(cursor.year, cursor.month + 1, 1)
 
+    # Sourced from the outreach log, not the ledger.
+    #
+    # The ledger only began recording when it was built, so it knows nothing
+    # about anything sent before that — and a chart of the last twelve months
+    # that starts at "whenever this feature shipped" is a chart that quietly
+    # says the work never happened. The outreach log is the record of every
+    # company contacted, by hand or by campaign, since the beginning.
     sent_rows = db.execute(
-        select(SendLedger.day, func.count(SendLedger.id))
-        .where(SendLedger.outcome == "sent", SendLedger.day >= first)
-        .group_by(SendLedger.day)
+        select(Outreach.contacted_on, func.count(Outreach.id))
+        .where(Outreach.contacted_on.is_not(None), Outreach.contacted_on >= first)
+        .group_by(Outreach.contacted_on)
     ).all()
     sent_by_month: dict[str, int] = defaultdict(int)
     for day, count in sent_rows:
@@ -209,15 +217,15 @@ def trends(db: Session, months: int = 12) -> dict:
     # rather than a stack: eleven countries would need eleven hues, and the
     # palette holds three on purpose.
     grid_rows = db.execute(
-        select(SendLedger.day, SendLedger.country, func.count(SendLedger.id))
-        .where(SendLedger.outcome == "sent", SendLedger.day >= first)
-        .group_by(SendLedger.day, SendLedger.country)
+        select(Outreach.contacted_on, Outreach.country, func.count(Outreach.id))
+        .where(Outreach.contacted_on.is_not(None), Outreach.contacted_on >= first)
+        .group_by(Outreach.contacted_on, Outreach.country)
     ).all()
     grid: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     for day, country, count in grid_rows:
         if isinstance(day, str):
             day = date.fromisoformat(day)
-        grid[country or "Unknown"][month_key(day)] += count
+        grid[tidy(country) or "Unknown"][month_key(day)] += count
 
     countries = sorted(grid, key=lambda c: -sum(grid[c].values()))
     country_by_month = [

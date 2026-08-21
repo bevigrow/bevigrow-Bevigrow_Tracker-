@@ -32,6 +32,7 @@ from ..models import (
     Outreach,
     OutreachStatus,
     SendAttempt,
+    SendLedger,
     ReplyMatch,
     SendMode,
     TargetState,
@@ -365,10 +366,11 @@ def update_campaign(
     campaign_id: int,
     mode: str | None = Query(default=None, pattern="^(manual|automatic)$"),
     daily_limit: int | None = Query(default=None, ge=1, le=50),
+    name: str | None = Query(default=None, min_length=1, max_length=160),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """Switch between approving each email and sending automatically.
+    """Rename a campaign, or switch between approving each email and sending.
 
     Changeable mid-campaign on purpose: the point of starting in manual is to
     read the first few and then stop reading them. Drafts already prepared and
@@ -377,6 +379,21 @@ def update_campaign(
     longer part of the flow.
     """
     campaign = _get(db, campaign_id)
+    if name and name.strip() and name.strip() != campaign.name:
+        # Renaming is allowed at any point, finished campaigns included. The
+        # name is a label a person chose to find it by, and the one typed at
+        # import — usually the filename — is rarely the one they want six
+        # weeks later.
+        was, campaign.name = campaign.name, name.strip()
+        # The permanent history stores the name it was sent under, so that a
+        # deleted campaign still reads sensibly in the report. A rename has to
+        # carry through to it: otherwise the report goes on naming a campaign
+        # that no longer exists by that name, and the two screens disagree
+        # about the same fifty emails.
+        db.query(SendLedger).filter(SendLedger.campaign_id == campaign.id).update(
+            {SendLedger.campaign_name: campaign.name}, synchronize_session=False
+        )
+        cm.record(db, campaign.id, "renamed", f'Renamed from "{was}" to "{campaign.name}".')
     if mode:
         campaign.mode = SendMode.automatic if mode == "automatic" else SendMode.manual
         if campaign.mode == SendMode.automatic:

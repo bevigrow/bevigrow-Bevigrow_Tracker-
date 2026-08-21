@@ -6,7 +6,7 @@
  * the laptop — does not stop it; the queue, the daily count and the position
  * all live in the database, and the campaign carries on from wherever it was.
  */
-import { FileUp, HelpCircle, MailCheck, Pause, Play, Square, Trash2 } from 'lucide-react'
+import { FileUp, HelpCircle, MailCheck, Pause, Pencil, Play, Square, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
@@ -303,6 +303,27 @@ function CampaignRow({ campaign, onChanged }: { campaign: Campaign; onChanged: (
   const percent = status?.percent ?? 0
   const canStart = ['draft', 'paused', 'daily_limit'].includes(status?.status ?? campaign.status)
   const canPause = (status?.status ?? campaign.status) === 'running'
+  const [renaming, setRenaming] = useState(false)
+  const [draftName, setDraftName] = useState(campaign.name)
+  const [busyName, setBusyName] = useState(false)
+
+  const saveName = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const wanted = draftName.trim()
+    if (!wanted || wanted === campaign.name) return setRenaming(false)
+    setBusyName(true)
+    try {
+      await api.updateCampaign(campaign.id, { name: wanted })
+      setRenaming(false)
+      await onChanged()
+      toast.success('Renamed.')
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not rename it.')
+    } finally {
+      setBusyName(false)
+    }
+  }
+
   const finished = ['completed', 'stopped'].includes(status?.status ?? campaign.status)
 
   return (
@@ -310,12 +331,56 @@ function CampaignRow({ campaign, onChanged }: { campaign: Campaign; onChanged: (
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <Link
-              to={`/app/outreach/campaigns/${campaign.id}`}
-              className="font-medium text-latte hover:text-gold"
-            >
-              {campaign.name}
-            </Link>
+            {renaming ? (
+              /* A campaign is found by its name weeks later, and the name
+                 typed at import is usually the filename. Editable whenever,
+                 finished ones included — nothing about a name is a record of
+                 what happened. */
+              <form
+                onSubmit={saveName}
+                className="flex min-w-0 flex-1 items-center gap-2"
+              >
+                <Input
+                  autoFocus
+                  value={draftName}
+                  onChange={(e) => setDraftName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Escape' && setRenaming(false)}
+                  className="!py-1 text-sm"
+                  aria-label="Campaign name"
+                />
+                <Button type="submit" disabled={busyName} className="!px-2.5 !py-1 text-[12px]">
+                  {busyName ? 'Saving…' : 'Save'}
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => setRenaming(false)}
+                  className="text-[12px] text-latte/40 hover:text-latte/70"
+                >
+                  Cancel
+                </button>
+              </form>
+            ) : (
+              <>
+                <Link
+                  to={`/app/outreach/campaigns/${campaign.id}`}
+                  className="font-medium text-latte hover:text-gold"
+                >
+                  {campaign.name}
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDraftName(campaign.name)
+                    setRenaming(true)
+                  }}
+                  title="Rename this campaign"
+                  aria-label={`Rename ${campaign.name}`}
+                  className="text-latte/30 transition hover:text-gold"
+                >
+                  <Pencil size={13} />
+                </button>
+              </>
+            )}
             <span
               className="chip"
               style={{ borderColor: `${meta.hex}66`, backgroundColor: `${meta.hex}1f`, color: meta.hex }}

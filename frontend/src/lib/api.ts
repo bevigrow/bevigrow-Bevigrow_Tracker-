@@ -363,7 +363,7 @@ export const api = {
       sent_today: number
       daily_limit: number
     }>('/api/campaigns/system/health'),
-  updateCampaign: (id: number, f: { mode?: string; daily_limit?: number }) =>
+  updateCampaign: (id: number, f: { mode?: string; daily_limit?: number; name?: string }) =>
     request<CampaignStatus>(`/api/campaigns/${id}${qs({ ...f })}`, { method: 'PATCH' }),
   startCampaign: (id: number) =>
     request<CampaignStatus>(`/api/campaigns/${id}/start`, { method: 'POST' }),

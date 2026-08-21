@@ -374,8 +374,22 @@ def start_campaign(
     campaign = _get(db, campaign_id)
     if campaign.template_id is None:
         raise HTTPException(status_code=400, detail="Choose an email template first.")
-    if engine.active_account(db) is None:
+    # A saved address is not a working mailbox. Checking only that a row exists
+    # let a campaign start with no credential stored, so every company would
+    # fail one at a time with "no key stored" — a hundred failures for one
+    # missing field. The distinct messages matter: "connect a mailbox" and
+    # "the mailbox has no password" send you to different places.
+    account = engine.active_account(db)
+    if account is None:
         raise HTTPException(status_code=400, detail="Connect a sending mailbox first.")
+    if not (account.smtp_password_enc or account.api_key_enc):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"{account.from_email} has no password or API key saved. "
+                "Open Settings and enter one, then press Test connection."
+            ),
+        )
     try:
         cm.start(db, campaign)
     except cm.TransitionError as exc:

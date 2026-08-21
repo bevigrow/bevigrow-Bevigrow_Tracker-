@@ -469,6 +469,8 @@ function ImportModal({
   const [mode, setMode] = useState('manual')
   const [busy, setBusy] = useState(false)
   const [report, setReport] = useState<ImportReport | null>(null)
+  const [imported, setImported] = useState<Campaign | null>(null)
+  const [starting, setStarting] = useState(false)
 
   useEffect(() => {
     if (open) {
@@ -477,6 +479,7 @@ function ImportModal({
       setTemplateId(templates[0] ? String(templates[0].id) : '')
       setMode('manual')
       setReport(null)
+      setImported(null)
     }
   }, [open, templates])
 
@@ -493,7 +496,28 @@ function ImportModal({
       form.append('daily_limit', '50')
       const result = await api.importCampaign(form)
       setReport(result.report)
-      toast.success(`${result.report.addresses} addresses queued.`)
+      setImported(result.campaign)
+
+      // Chosen "send automatically" means send automatically. Making somebody
+      // upload a file and then hunt for a Start button is two decisions where
+      // they made one, and with a one-row test file it reads as though every
+      // single company needs its own press.
+      if (mode === 'automatic') {
+        try {
+          await api.startCampaign(result.campaign.id)
+          toast.success(
+            `${result.report.addresses} addresses queued — sending has started.`,
+          )
+        } catch (err) {
+          toast.error(
+            err instanceof ApiError
+              ? err.message
+              : 'Queued, but it could not start. Press Start on the campaign.',
+          )
+        }
+      } else {
+        toast.success(`${result.report.addresses} addresses queued.`)
+      }
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not read that file.')
     } finally {
@@ -573,7 +597,47 @@ function ImportModal({
               Columns kept but not recognised: {report.unmapped_columns.join(', ')}
             </p>
           )}
-          <Button onClick={onDone}>Done</Button>
+          <p className="rounded-lg border border-caramel/20 bg-bean/30 px-3.5 py-2.5 text-[12px] leading-relaxed text-latte/65">
+            {mode === 'automatic' ? (
+              <>
+                Sending has started. It works through the whole list on its own — about{' '}
+                {Math.min(report.addresses, 50)} today, the rest on the days after — and keeps
+                going when you close this page. You do not need to press anything again.
+              </>
+            ) : (
+              <>
+                Nothing is sent yet. Each email will be prepared for you to read first; press
+                Start and the first draft appears.
+              </>
+            )}
+          </p>
+
+          <div className="flex gap-3">
+            {mode === 'manual' && imported && (
+              <Button
+                loading={starting}
+                onClick={async () => {
+                  setStarting(true)
+                  try {
+                    await api.startCampaign(imported.id)
+                    toast.success('Started. The first draft is ready to read.')
+                    onDone()
+                  } catch (err) {
+                    toast.error(
+                      err instanceof ApiError ? err.message : 'Could not start it.',
+                    )
+                  } finally {
+                    setStarting(false)
+                  }
+                }}
+              >
+                Start now
+              </Button>
+            )}
+            <Button variant={mode === 'manual' ? 'ghost' : 'primary'} onClick={onDone}>
+              Done
+            </Button>
+          </div>
         </div>
       ) : (
         <form onSubmit={submit} className="space-y-4">
@@ -608,13 +672,20 @@ function ImportModal({
                 ]}
               />
             </Field>
-            <Field label="Sending" hint="You can switch to automatic once you trust the drafts">
+            <Field
+              label="Sending"
+              hint={
+                mode === 'automatic'
+                  ? 'Starts as soon as it is uploaded, and runs to the end of the list on its own.'
+                  : 'Nothing goes out until you read and approve each one.'
+              }
+            >
               <Select
                 value={mode}
                 onChange={(e) => setMode(e.target.value)}
                 options={[
-                  { value: 'manual', label: 'Show me each email first' },
-                  { value: 'automatic', label: 'Send automatically (50/day)' },
+                  { value: 'manual', label: 'Let me read each email first' },
+                  { value: 'automatic', label: 'Just send them — 50 a day until the list is done' },
                 ]}
               />
             </Field>

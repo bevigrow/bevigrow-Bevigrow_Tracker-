@@ -63,13 +63,17 @@ def list_outreach(
         # location is appended, the legal suffix is there or is not, and the
         # trading word sits in the middle.
         #
-        # So: any word matching is enough to be shown, and how well it matched
-        # decides the order. An exact name comes first, then a name starting
-        # with what you typed, then rows where every word appears in the name,
-        # then every word anywhere at all, and last the rows that caught only
-        # one word. Nothing is hidden for being an imperfect match, which is
-        # the whole point — an empty screen tells you nothing, and a list with
-        # the right row at the top costs you one glance.
+        # So the words are matched separately, and a row must account for all
+        # of them. Among those, an exact name comes first, then a name
+        # starting with what you typed, then the rest.
+        #
+        # Rows that caught only some of the words are shown *only* when
+        # nothing caught them all. Listing them underneath a good match is
+        # worse than useless: searching "Spice Star Dubai" would return every
+        # company in Dubai, and a screen of near-misses reads as though the
+        # search misunderstood you. Falling back to them when there is no
+        # proper match is still right, though — one misremembered word should
+        # find the row rather than an empty screen.
         phrase = " ".join(search.lower().split())
         name = func.lower(func.coalesce(Outreach.company_name, ""))
         # Everything worth searching, as one string per row.
@@ -85,13 +89,20 @@ def list_outreach(
         # bury the rows that matched something meaningful.
         words = [w for w in phrase.split() if len(w) > 1] or [phrase]
 
-        stmt = stmt.where(or_(*[haystack.like(f"%{w}%") for w in words]))
+        # Rows that account for *every* word you typed. These are the answer
+        # whenever there are any: searching "Spice Star Dubai" should not put
+        # Bombay and Gautam underneath the company you asked for merely
+        # because they are also in Dubai.
+        full_match = and_(*[haystack.like(f"%{w}%") for w in words])
+        # The wider net, used only when the narrow one comes back empty — a
+        # misremembered word should still find the row rather than nothing.
+        any_match = or_(*[haystack.like(f"%{w}%") for w in words])
+
         ranking = case(
             (name == phrase, 0),
             (name.like(f"{phrase}%"), 1),
             (and_(*[name.like(f"%{w}%") for w in words]), 2),
-            (and_(*[haystack.like(f"%{w}%") for w in words]), 3),
-            else_=4,
+            else_=3,
         )
     if contact_method:
         stmt = stmt.where(Outreach.contact_method == contact_method)
@@ -122,7 +133,17 @@ def list_outreach(
     # for one row, not scanning the list.
     if ranking is not None:
         order.insert(0, ranking.asc())
-    return db.scalars(stmt.order_by(*order).limit(limit)).all()
+
+    if ranking is None:
+        return db.scalars(stmt.order_by(*order).limit(limit)).all()
+
+    # Narrow first, wide only if narrow found nothing. The second query costs
+    # a round trip, and it is only ever paid on a search that would otherwise
+    # have shown an empty screen.
+    rows = db.scalars(stmt.where(full_match).order_by(*order).limit(limit)).all()
+    if rows:
+        return rows
+    return db.scalars(stmt.where(any_match).order_by(*order).limit(limit)).all()
 
 
 @router.get("/stats", response_model=OutreachStats)

@@ -10,11 +10,42 @@
 import { CalendarDays, Copy, Inbox, RotateCcw, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
-import { Button, Card, ConfirmDialog, EmptyState, Skeleton } from '../components/ui'
+import {
+  BarTable,
+  ChartFrame,
+  ColumnChart,
+  ColumnTable,
+  FunnelChart,
+  FunnelTable,
+  Heatmap,
+  HeatmapTable,
+  LegendItem,
+  RoastBarChart,
+  TrendChart,
+  TrendTable,
+} from '../components/charts'
+import { Button, Card, ConfirmDialog, EmptyState, Select, Skeleton } from '../components/ui'
 import { ApiError, api } from '../lib/api'
 import { formatDateTime } from '../lib/format'
 import { useToast } from '../lib/toast'
-import type { Campaign, DailyReport, DuplicateGroup } from '../lib/types'
+import type { Campaign, DailyReport, DuplicateGroup, TrendReport } from '../lib/types'
+import { CATEGORICAL } from '../lib/viz'
+
+/** The charts, all of them about cold outreach.
+ *
+ * They were on the trade-desk dashboard, which was the wrong room: that page
+ * answers questions about quotes, orders and open value, and "how many emails
+ * went out on Tuesday" is not one of them. Somebody asking these is already
+ * here.
+ */
+const CHARTS = [
+  { value: '', label: 'Day-by-day log' },
+  { value: 'funnel', label: 'Conversion funnel' },
+  { value: 'volume', label: 'Emails sent per day' },
+  { value: 'replies', label: 'Sent vs replied, by month' },
+  { value: 'countries', label: 'Countries by month' },
+  { value: 'speed', label: 'How fast people reply' },
+]
 
 const OUTCOME_TONE: Record<string, string> = {
   duplicate: 'text-latte/55',
@@ -29,17 +60,26 @@ export function OutreachReport() {
   const [binned, setBinned] = useState<Campaign[]>([])
   const [loading, setLoading] = useState(true)
   const [purging, setPurging] = useState<Campaign | null>(null)
+  const [chart, setChart] = useState('')
+  const [trends, setTrends] = useState<TrendReport | null>(null)
+  const [funnel, setFunnel] = useState<{ stage: string; count: number }[]>([])
 
   const load = useCallback(async () => {
     try {
-      const [r, d, b] = await Promise.all([
+      const [r, d, b, t, dash] = await Promise.all([
         api.dailyReport(60),
         api.duplicateReport().catch(() => []),
         api.listCampaigns(true).catch(() => []),
+        api.trendReport(12).catch(() => null),
+        // The funnel lives on the dashboard payload because it spans both
+        // sides of the business; this page only borrows it.
+        api.dashboard().catch(() => null),
       ])
       setReport(r)
       setDupes(d)
       setBinned(b)
+      setTrends(t)
+      setFunnel(dash?.funnel ?? [])
     } catch {
       toast.error('Could not load the report.')
     } finally {
@@ -78,6 +118,38 @@ export function OutreachReport() {
 
   const t = report?.totals
 
+  const funnelSteps = funnel.map((f) => ({ label: String(f.stage), value: Number(f.count) || 0 }))
+
+  // The ledger's days arrive newest first; a time axis reads the other way.
+  const volumeColumns = [...(report?.days ?? [])].reverse().map((d) => ({
+    label: new Date(d.day).toLocaleDateString(undefined, { day: '2-digit', month: 'short' }),
+    value: d.sent,
+    meta: [
+      d.failed ? `${d.failed} failed` : null,
+      d.duplicates ? `${d.duplicates} already contacted` : null,
+    ]
+      .filter(Boolean)
+      .join(' · '),
+  }))
+
+  const replySeries = [
+    {
+      name: 'Sent',
+      values: (trends?.by_month ?? []).map((m) => m.sent),
+      color: CATEGORICAL[0],
+    },
+    {
+      name: 'Replied',
+      values: (trends?.by_month ?? []).map((m) => m.replied),
+      color: CATEGORICAL[2],
+    },
+  ]
+
+  const speedBars = (trends?.response_days ?? []).map((b) => ({
+    label: b.bucket,
+    value: b.count,
+  }))
+
   return (
     <div className="space-y-6">
       <div>
@@ -107,6 +179,101 @@ export function OutreachReport() {
             {t.today.remaining} still available.
           </p>
         </Card>
+      )}
+
+      {/* ------------------------------------------------------- charts */}
+      <Card className="!p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-[11px] uppercase tracking-wider text-latte/45">Show</span>
+          <div className="min-w-[240px]">
+            <Select
+              value={chart}
+              onChange={(e) => setChart(e.target.value)}
+              aria-label="Which chart to show"
+              options={CHARTS}
+            />
+          </div>
+        </div>
+      </Card>
+
+      {chart === 'funnel' && (
+        <ChartFrame
+          title="From cold list to completed order"
+          subtitle="Each step is a subset of the one above it, so the drop between them is real"
+          table={<FunnelTable steps={funnelSteps} />}
+        >
+          <FunnelChart steps={funnelSteps} unit="companies" />
+        </ChartFrame>
+      )}
+
+      {chart === 'volume' && (
+        <ChartFrame
+          title="Emails sent each day"
+          subtitle={`${t?.sent ?? 0} sent in total · the dashed line is the daily ceiling`}
+          table={<ColumnTable data={volumeColumns} unit="Emails" />}
+        >
+          <ColumnChart
+            data={volumeColumns}
+            limit={t?.today.limit ?? 50}
+            limitLabel="a day"
+            unit="emails"
+          />
+        </ChartFrame>
+      )}
+
+      {chart === 'replies' && (
+        <ChartFrame
+          title="Sent and replied, by month"
+          subtitle="Both are counts of emails, so they share one axis — a second scale would let one of them lie"
+          legend={
+            <>
+              <LegendItem color={CATEGORICAL[0]} label="Sent" />
+              <LegendItem color={CATEGORICAL[2]} label="Replied" />
+            </>
+          }
+          table={<TrendTable labels={trends?.months ?? []} series={replySeries} />}
+        >
+          <TrendChart labels={trends?.months ?? []} series={replySeries} />
+        </ChartFrame>
+      )}
+
+      {chart === 'countries' && (
+        <ChartFrame
+          title="Where the emails went, month by month"
+          subtitle="Darker is more. A grid rather than a stack, because thirteen countries would need thirteen colours"
+          table={
+            <HeatmapTable
+              rows={(trends?.country_by_month ?? []).map((c) => ({
+                label: c.country,
+                cells: c.cells,
+              }))}
+              columns={trends?.months ?? []}
+            />
+          }
+        >
+          <Heatmap
+            rows={(trends?.country_by_month ?? []).map((c) => ({
+              label: c.country,
+              cells: c.cells,
+            }))}
+            columns={trends?.months ?? []}
+            unit="emails"
+          />
+        </ChartFrame>
+      )}
+
+      {chart === 'speed' && (
+        <ChartFrame
+          title="How long people take to reply"
+          subtitle={
+            trends?.replies_counted
+              ? `${trends.replies_counted} repl${trends.replies_counted === 1 ? 'y' : 'ies'} — only the ones who answered are counted`
+              : 'Nobody has been marked as replied yet, so there is nothing to measure'
+          }
+          table={<BarTable data={speedBars} unit="Replies" />}
+        >
+          <RoastBarChart data={speedBars} unit="replies" />
+        </ChartFrame>
       )}
 
       {/* ------------------------------------------------ same name report */}
@@ -151,7 +318,7 @@ export function OutreachReport() {
       )}
 
       {/* ----------------------------------------------------------- days */}
-      {!report?.days.length ? (
+      {chart !== '' ? null : !report?.days.length ? (
         <EmptyState
           emoji="📭"
           title="Nothing sent yet"

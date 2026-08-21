@@ -13,12 +13,6 @@ import { Link, useSearchParams } from 'react-router-dom'
 import {
   BarTable,
   ChartFrame,
-  ColumnChart,
-  ColumnTable,
-  FunnelChart,
-  FunnelTable,
-  Heatmap,
-  HeatmapTable,
   LegendItem,
   RoastBarChart,
   SplitBarChart,
@@ -37,12 +31,7 @@ import {
   statusLabel,
 } from '../lib/format'
 import { useToast } from '../lib/toast'
-import type {
-  DailyReport,
-  Dashboard as DashboardData,
-  Insight,
-  TrendReport,
-} from '../lib/types'
+import type { Dashboard as DashboardData, Insight } from '../lib/types'
 import { CATEGORICAL } from '../lib/viz'
 
 /** Periods offered for the activity trend.
@@ -91,21 +80,20 @@ function resolvePeriod(value: string): { days?: number; date_from?: string; date
  */
 const VIEWS = [
   { value: '', label: 'Full dashboard' },
-  { value: 'funnel', label: 'Conversion funnel' },
-  { value: 'sending', label: 'Daily email volume' },
   { value: 'value', label: 'Deal value by stage' },
-  { value: 'replies', label: 'Sends vs replies by month' },
-  { value: 'heatmap', label: 'Countries by month' },
-  { value: 'speed', label: 'How fast people reply' },
   { value: 'countries', label: 'Countries' },
   { value: 'activity', label: 'Activity' },
   { value: 'stages', label: 'Deal stages' },
 ]
 
-/** Views that replace the dashboard rather than trim it. */
-const CHART_VIEWS = new Set(['funnel', 'sending', 'value', 'replies', 'heatmap', 'speed'])
-/** Views whose data is not in the dashboard payload. */
-const TREND_VIEWS = new Set(['replies', 'heatmap', 'speed'])
+/** Views that replace the dashboard rather than trim it.
+ *
+ * Only trade-desk questions live here. The cold-outreach charts — the funnel,
+ * email volume, replies, countries by month — moved to the outreach report,
+ * where the person asking them already is. A dashboard about quotes and orders
+ * is the wrong place to answer "how many emails went out on Tuesday".
+ */
+const CHART_VIEWS = new Set(['value'])
 
 const same = (a: string, b: string) =>
   a.trim().replace(/\s+/g, ' ').toLowerCase() === b.trim().replace(/\s+/g, ' ').toLowerCase()
@@ -119,10 +107,6 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [refreshingAi, setRefreshingAi] = useState(false)
-  // Only fetched for the view that draws it — the full dashboard should
-  // not pay for a chart nobody asked to see.
-  const [sending, setSending] = useState<DailyReport | null>(null)
-  const [trends, setTrends] = useState<TrendReport | null>(null)
 
   // The filters live in the URL, so a filtered dashboard can be reloaded,
   // bookmarked or pasted to a colleague and still say the same thing.
@@ -183,22 +167,6 @@ export function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query])
 
-  useEffect(() => {
-    if (!TREND_VIEWS.has(params.get('view') ?? '') || trends) return
-    void api
-      .trendReport(12)
-      .then(setTrends)
-      .catch(() => setTrends(null))
-  }, [params, trends])
-
-  useEffect(() => {
-    if (params.get('view') !== 'sending' || sending) return
-    void api
-      .dailyReport(60)
-      .then(setSending)
-      .catch(() => setSending(null))
-  }, [params, sending])
-
   const refreshInsight = async () => {
     setRefreshingAi(true)
     try {
@@ -242,24 +210,6 @@ export function Dashboard() {
   const activeFilters = [country, tradeType].filter(Boolean).length
   const show = (section: string) => (!view || view === section) && !CHART_VIEWS.has(view)
 
-  const funnelSteps = (data.funnel ?? []).map((f) => ({
-    label: String(f.stage),
-    value: Number(f.count) || 0,
-  }))
-
-  // The ledger's days come back newest first; a time axis reads the other way.
-  const sendingColumns = [...(sending?.days ?? [])]
-    .reverse()
-    .map((d) => ({
-      label: new Date(d.day).toLocaleDateString(undefined, { day: '2-digit', month: 'short' }),
-      value: d.sent,
-      meta: [
-        d.failed ? `${d.failed} failed` : null,
-        d.duplicates ? `${d.duplicates} already contacted` : null,
-      ]
-        .filter(Boolean)
-        .join(' · '),
-    }))
 
   const valueBars = data.by_status
     .filter((s) => (data.value_by_status?.[s.status] ?? 0) > 0)
@@ -437,110 +387,6 @@ export function Dashboard() {
       </Card>
 
       {/* --------------------------------------------- the chart views */}
-      {view === 'funnel' && (
-        <ChartFrame
-          title="From cold list to completed order"
-          subtitle="Each step is a subset of the one above it, so the drop between them is real"
-          table={<FunnelTable steps={funnelSteps} />}
-        >
-          <FunnelChart steps={funnelSteps} unit="companies" />
-        </ChartFrame>
-      )}
-
-      {view === 'sending' && (
-        <ChartFrame
-          title="Emails sent each day"
-          subtitle={
-            sending
-              ? `${sending.totals.sent} sent in total · the dashed line is the daily ceiling`
-              : 'Reading the send log…'
-          }
-          table={<ColumnTable data={sendingColumns} unit="Emails" />}
-        >
-          <ColumnChart
-            data={sendingColumns}
-            limit={sending?.totals.today.limit ?? 50}
-            limitLabel="a day"
-            unit="emails"
-          />
-        </ChartFrame>
-      )}
-
-      {view === 'replies' && (
-        <ChartFrame
-          title="Sends and replies, by month"
-          subtitle={
-            trends
-              ? 'Both are counts of emails, so they share one axis — a second scale would make one of them lie'
-              : 'Reading the log…'
-          }
-          legend={
-            <>
-              <LegendItem color={CATEGORICAL[0]} label="Sent" />
-              <LegendItem color={CATEGORICAL[2]} label="Replied" />
-            </>
-          }
-          table={
-            <TrendTable
-              labels={trends?.months ?? []}
-              series={[
-                { name: 'Sent', values: (trends?.by_month ?? []).map((m) => m.sent), color: CATEGORICAL[0] },
-                { name: 'Replied', values: (trends?.by_month ?? []).map((m) => m.replied), color: CATEGORICAL[2] },
-              ]}
-            />
-          }
-        >
-          <TrendChart
-            labels={trends?.months ?? []}
-            series={[
-              { name: 'Sent', values: (trends?.by_month ?? []).map((m) => m.sent), color: CATEGORICAL[0] },
-              { name: 'Replied', values: (trends?.by_month ?? []).map((m) => m.replied), color: CATEGORICAL[2] },
-            ]}
-          />
-        </ChartFrame>
-      )}
-
-      {view === 'heatmap' && (
-        <ChartFrame
-          title="Where the emails went, month by month"
-          subtitle="Darker is more. A grid rather than a stack, because eleven countries would need eleven colours"
-          table={
-            <HeatmapTable
-              rows={(trends?.country_by_month ?? []).map((c) => ({ label: c.country, cells: c.cells }))}
-              columns={trends?.months ?? []}
-            />
-          }
-        >
-          <Heatmap
-            rows={(trends?.country_by_month ?? []).map((c) => ({ label: c.country, cells: c.cells }))}
-            columns={trends?.months ?? []}
-            unit="emails"
-          />
-        </ChartFrame>
-      )}
-
-      {view === 'speed' && (
-        <ChartFrame
-          title="How long people take to reply"
-          subtitle={
-            trends?.replies_counted
-              ? `${trends.replies_counted} repl${trends.replies_counted === 1 ? 'y' : 'ies'} — only the ones who answered are counted`
-              : 'Nobody has replied yet, so there is nothing to measure'
-          }
-          table={
-            <BarTable
-              data={(trends?.response_days ?? []).map((b) => ({ label: b.bucket, value: b.count }))}
-              unit="Replies"
-            />
-          }
-        >
-          <RoastBarChart
-            data={(trends?.response_days ?? []).map((b) => ({ label: b.bucket, value: b.count }))}
-            unit="replies"
-          />
-        </ChartFrame>
-      )}
-
       {view === 'value' && (
         <ChartFrame
           title="Money at each stage"

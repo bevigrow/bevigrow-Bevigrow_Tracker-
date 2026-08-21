@@ -14,6 +14,8 @@ from ..models import (
     OPEN_PIPELINE,
     Activity,
     Contact,
+    Outreach,
+    OutreachStatus,
     DealStatus,
     Reminder,
     TradeType,
@@ -206,6 +208,41 @@ def compute_stats(
     ]
     by_status = [StatusStat(status=s, count=status_counts.get(s, 0)) for s in DealStatus]
 
+    # Money by stage, which the counts chart cannot say. Four accounts at the
+    # sample stage and one at negotiation look like the sample stage matters
+    # more, right up until the one is worth eight times the four.
+    value_rows = db.execute(
+        quotes(
+            select(
+                Contact.status,
+                func.coalesce(func.sum(Contact.estimated_value_usd), 0.0),
+            )
+        ).group_by(Contact.status)
+    ).all()
+    value_by_status = {s.value: round(float(v or 0), 2) for s, v in value_rows}
+
+    # The funnel, end to end: a cold list, the ones who wrote back, the ones
+    # that became a real enquiry, the ones that became an order. Each step is
+    # a subset of the one above it, which is what makes the drop between them
+    # meaningful rather than two unrelated numbers side by side.
+    contacted = db.scalar(select(func.count(Outreach.id))) or 0
+    replied = (
+        db.scalar(
+            select(func.count(Outreach.id)).where(Outreach.status == OutreachStatus.replied)
+        )
+        or 0
+    )
+    became_quote = (
+        db.scalar(select(func.count(Outreach.id)).where(Outreach.quote_id.is_not(None))) or 0
+    )
+    won = completed
+    funnel = [
+        {"stage": "Companies contacted", "count": contacted},
+        {"stage": "Replied", "count": replied},
+        {"stage": "Became a quote", "count": became_quote},
+        {"stage": "Order completed", "count": won},
+    ]
+
     # Trend of activities and new leads over the requested window.
     #
     # This used to ask the database two questions per day inside a loop: 28
@@ -290,6 +327,8 @@ def compute_stats(
         "kpis": kpis,
         "by_country": by_country,
         "by_status": by_status,
+        "value_by_status": value_by_status,
+        "funnel": funnel,
         "trend": trend,
         "export_vs_import": {
             "export": trade_counts.get(TradeType.export, 0),

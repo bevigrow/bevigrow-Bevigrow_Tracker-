@@ -381,6 +381,9 @@ class DashboardOut(BaseModel):
     # currently looking at.
     by_country: list[CountryStat]
     by_status: list[StatusStat]
+    # Money per stage, and the cold-outreach funnel end to end.
+    value_by_status: dict[str, float] = {}
+    funnel: list[dict] = []
     trend: list[TrendPoint]
     export_vs_import: dict[str, int]
     recent_activities: list[ActivityOut]

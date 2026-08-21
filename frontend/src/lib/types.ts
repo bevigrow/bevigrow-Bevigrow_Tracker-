@@ -186,6 +186,10 @@ export interface Dashboard {
   /** Never narrowed by the country filter — it is the chart you pick from. */
   by_country: CountryStat[]
   by_status: StatusStat[]
+  /** Money per stage, keyed by DealStatus — the counts chart cannot say this. */
+  value_by_status: Record<string, number>
+  /** Cold list -> replied -> quote -> order. Each step a subset of the last. */
+  funnel: { stage: string; count: number }[]
   trend: TrendPoint[]
   export_vs_import: { export: number; import: number }
   recent_activities: Activity[]

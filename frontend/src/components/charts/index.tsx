@@ -22,6 +22,7 @@ import {
   ROAST_RAMP,
   niceMax,
   roastForValue,
+  roastStep,
   ticksFor,
 } from '../../lib/viz'
 
@@ -236,6 +237,14 @@ export function BarTable({ data, unit = 'Count' }: { data: BarDatum[]; unit?: st
 }
 
 /* -------------------------------------------------- split bar chart (H) */
+
+/** The same shape stood upright: square at the baseline, rounded at the top. */
+function capTop(x: number, y: number, w: number, h: number): string {
+  const height = Math.max(h, 2)
+  if (height < 5) return `M${x} ${y} h${w} v${height} h-${w} Z`
+  return `M${x} ${y + 4} a4 4 0 0 1 4 -4 h${w - 8} a4 4 0 0 1 4 4 v${height - 4} h-${w} Z`
+}
+
 
 /** Square at the baseline, 4px rounded at the data end — the house bar shape. */
 function capRight(x: number, y: number, w: number, h: number): string {
@@ -816,3 +825,336 @@ export function Sparkline({
 }
 
 /* --------------------------------------------------------------- world map */
+
+/* ------------------------------------------------------------------ funnel */
+
+export interface FunnelStep {
+  label: string
+  value: number
+}
+
+/**
+ * One population narrowing through stages.
+ *
+ * A funnel is a ranked bar chart with one extra job: the *drop* between two
+ * stages carries as much meaning as the stages themselves, so it is written in
+ * the gap rather than left to be worked out. Each step is a subset of the one
+ * above, which is what makes that subtraction legitimate — two unrelated
+ * measures stacked into a funnel shape is the classic version of this chart
+ * that lies.
+ *
+ * One measure, so one hue: the sequential ramp, darkest where the population is
+ * largest. No legend — with a single series the title names it.
+ */
+export function FunnelChart({ steps, unit = '' }: { steps: FunnelStep[]; unit?: string }) {
+  const [tip, setTip] = useState<TipState | null>(null)
+  const top = Math.max(1, steps[0]?.value ?? 1)
+  const rowH = 58
+  const barH = 22
+  const labelW = 168
+  const trackW = 620 - labelW - 78
+  const height = steps.length * rowH
+
+  if (!steps.length) {
+    return <p className="py-10 text-center text-sm text-latte/40">Nothing to show yet.</p>
+  }
+
+  return (
+    <div className="relative">
+      <svg
+        viewBox={`0 0 620 ${height}`}
+        className="w-full"
+        style={{ height }}
+        role="img"
+        aria-label={`Funnel from ${steps[0].label} down to ${steps[steps.length - 1].label}`}
+      >
+        {steps.map((step, i) => {
+          const w = Math.max(2, (trackW * step.value) / top)
+          const y = i * rowH + 6
+          const previous = i > 0 ? steps[i - 1].value : null
+          // The share of the step above that got this far — not of the whole
+          // funnel. What you want to know is where people are lost, and that
+          // is a comparison with the step immediately before.
+          const rate =
+            previous && previous > 0 ? Math.round((step.value / previous) * 100) : null
+
+          return (
+            <g
+              key={step.label}
+              onMouseMove={(e) => {
+                const rect = (
+                  e.currentTarget.ownerSVGElement as SVGSVGElement
+                ).getBoundingClientRect()
+                setTip({
+                  x: e.clientX - rect.left,
+                  y: e.clientY - rect.top,
+                  content: (
+                    <>
+                      <div className="font-semibold text-latte">{step.label}</div>
+                      <div className="text-latte/65">
+                        {step.value.toLocaleString()} {unit}
+                      </div>
+                      {rate !== null && (
+                        <div className="text-latte/45">
+                          {rate}% of {steps[i - 1].label.toLowerCase()}
+                        </div>
+                      )}
+                    </>
+                  ),
+                })
+              }}
+              onMouseLeave={() => setTip(null)}
+            >
+              <rect x={0} y={i * rowH} width={620} height={rowH} fill="transparent" />
+              <text
+                x={labelW - 12}
+                y={y + barH / 2 + 4}
+                textAnchor="end"
+                fontSize={11.5}
+                fill={AXIS_TEXT}
+              >
+                {step.label}
+              </text>
+              <path
+                d={capRight(labelW, y, w, barH)}
+                fill={roastStep(steps.length - 1 - i, steps.length)}
+              />
+              <text
+                x={labelW + w + 10}
+                y={y + barH / 2 + 4}
+                fontSize={13}
+                fontWeight={600}
+                fill="rgba(245,230,211,0.9)"
+              >
+                {step.value.toLocaleString()}
+              </text>
+
+              {/* The drop, written in the gap it describes. */}
+              {rate !== null && (
+                <text x={labelW} y={i * rowH - 4} fontSize={10.5} fill={AXIS_TEXT}>
+                  {rate}% carried on
+                </text>
+              )}
+            </g>
+          )
+        })}
+      </svg>
+      <Tooltip tip={tip} />
+    </div>
+  )
+}
+
+export function FunnelTable({ steps }: { steps: FunnelStep[] }) {
+  return (
+    <div className="max-h-72 overflow-y-auto">
+      <table className="w-full text-sm">
+        <thead className="sticky top-0 bg-espresso">
+          <tr>
+            <th className="table-head">Stage</th>
+            <th className="table-head text-right">Count</th>
+            <th className="table-head text-right">Of previous</th>
+          </tr>
+        </thead>
+        <tbody>
+          {steps.map((s, i) => {
+            const previous = i > 0 ? steps[i - 1].value : null
+            return (
+              <tr key={s.label} className="border-t border-caramel/10">
+                <td className="table-cell">{s.label}</td>
+                <td className="table-cell text-right tabular-nums">
+                  {s.value.toLocaleString()}
+                </td>
+                <td className="table-cell text-right tabular-nums text-latte/50">
+                  {previous && previous > 0
+                    ? `${Math.round((s.value / previous) * 100)}%`
+                    : '—'}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------ column chart */
+
+export interface Column {
+  label: string
+  value: number
+  meta?: string
+}
+
+/**
+ * A value per day, with the ceiling drawn on it.
+ *
+ * Vertical because the category is time and reads left to right, and because
+ * the question is "how close to the limit did we get" — comparing a horizontal
+ * bar against a limit line is awkward in a way a column against a horizontal
+ * rule is not.
+ *
+ * The rule is not a series. It is a dashed hairline in the axis colour so it
+ * reads as furniture, and it is labelled, because an unlabelled line on a
+ * chart is a puzzle.
+ */
+export function ColumnChart({
+  data,
+  limit,
+  limitLabel = 'limit',
+  color = CATEGORICAL[0],
+  unit = '',
+}: {
+  data: Column[]
+  limit?: number
+  limitLabel?: string
+  color?: string
+  unit?: string
+}) {
+  const [hover, setHover] = useState<number | null>(null)
+  const W = 620
+  const H = 220
+  const pad = { l: 34, r: 16, t: 16, b: 30 }
+
+  const peak = Math.max(1, ...data.map((d) => d.value), limit ?? 0)
+  const max = niceMax(peak)
+  const ticks = ticksFor(max)
+  const plotW = W - pad.l - pad.r
+  const plotH = H - pad.t - pad.b
+  const slot = data.length ? plotW / data.length : plotW
+  // A 2px gap between touching marks, and never a bar so wide that a run of
+  // days stops reading as a series.
+  const barW = Math.max(2, Math.min(slot - 2, 26))
+  const y = (v: number) => pad.t + plotH - (plotH * v) / max
+
+  if (!data.length) {
+    return <p className="py-10 text-center text-sm text-latte/40">Nothing to show yet.</p>
+  }
+
+  return (
+    <div className="relative">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full"
+        style={{ height: H }}
+        role="img"
+        aria-label={`${unit || 'Value'} per day`}
+        onMouseLeave={() => setHover(null)}
+      >
+        {ticks.map((t) => (
+          <g key={t}>
+            <line x1={pad.l} y1={y(t)} x2={W - pad.r} y2={y(t)} stroke={GRID} strokeWidth={1} />
+            <text
+              x={pad.l - 7}
+              y={y(t) + 4}
+              textAnchor="end"
+              fontSize={10}
+              fill={AXIS_TEXT}
+              className="tabular-nums"
+            >
+              {t.toLocaleString()}
+            </text>
+          </g>
+        ))}
+
+        {data.map((d, i) => {
+          const cx = pad.l + slot * i + slot / 2
+          const topY = y(d.value)
+          const h = pad.t + plotH - topY
+          return (
+            <g key={`${d.label}-${i}`} onMouseMove={() => setHover(i)}>
+              <rect
+                x={cx - slot / 2}
+                y={pad.t}
+                width={slot}
+                height={plotH}
+                fill={hover === i ? 'rgba(245,230,211,0.05)' : 'transparent'}
+              />
+              {d.value > 0 && (
+                <path
+                  d={capTop(cx - barW / 2, topY, barW, Math.max(h, 3))}
+                  fill={color}
+                  opacity={hover === null || hover === i ? 1 : 0.55}
+                />
+              )}
+            </g>
+          )
+        })}
+
+        {limit !== undefined && limit <= max && (
+          <g>
+            <line
+              x1={pad.l}
+              y1={y(limit)}
+              x2={W - pad.r}
+              y2={y(limit)}
+              stroke="rgba(217,160,91,0.55)"
+              strokeWidth={1}
+              strokeDasharray="4 3"
+            />
+            <text
+              x={W - pad.r}
+              y={y(limit) - 5}
+              textAnchor="end"
+              fontSize={10}
+              fill="rgba(217,160,91,0.85)"
+            >
+              {limit} {limitLabel}
+            </text>
+          </g>
+        )}
+
+        {data.map((d, i) =>
+          i % Math.max(1, Math.ceil(data.length / 8)) === 0 ? (
+            <text
+              key={`lab-${i}`}
+              x={pad.l + slot * i + slot / 2}
+              y={H - 9}
+              textAnchor="middle"
+              fontSize={10}
+              fill={AXIS_TEXT}
+            >
+              {d.label}
+            </text>
+          ) : null,
+        )}
+      </svg>
+
+      {hover !== null && (
+        <div
+          className="pointer-events-none absolute z-20 -translate-x-1/2 rounded-lg border border-caramel/35 bg-bean/95 px-3 py-2 text-xs shadow-cup backdrop-blur"
+          style={{ left: `${((pad.l + slot * hover + slot / 2) / W) * 100}%`, top: 4 }}
+        >
+          <div className="font-semibold text-latte">{data[hover].label}</div>
+          <div className="text-latte/70">
+            {data[hover].value.toLocaleString()} {unit}
+          </div>
+          {data[hover].meta && <div className="text-latte/45">{data[hover].meta}</div>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function ColumnTable({ data, unit = 'Count' }: { data: Column[]; unit?: string }) {
+  return (
+    <div className="max-h-72 overflow-y-auto">
+      <table className="w-full text-sm">
+        <thead className="sticky top-0 bg-espresso">
+          <tr>
+            <th className="table-head">Day</th>
+            <th className="table-head text-right">{unit}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((d, i) => (
+            <tr key={`${d.label}-${i}`} className="border-t border-caramel/10">
+              <td className="table-cell">{d.label}</td>
+              <td className="table-cell text-right tabular-nums">{d.value.toLocaleString()}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}

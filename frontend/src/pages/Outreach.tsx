@@ -1,4 +1,14 @@
-import { Clock, FilePlus2, Globe, Plus, Search, Send, Trash2 } from 'lucide-react'
+import {
+  CircleSlash,
+  Clock,
+  FilePlus2,
+  Globe,
+  MailCheck,
+  Plus,
+  Search,
+  Send,
+  Trash2,
+} from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
@@ -129,6 +139,38 @@ export function Outreach() {
       toast.error('Could not open that record.')
     } finally {
       setOpening(null)
+    }
+  }
+
+  /** They answered. Recorded here because replies are read in Gmail. */
+  const markReplied = async (row: Row) => {
+    try {
+      const updated = await api.updateOutreach(row.id, {
+        status: 'replied',
+        replied_on: new Date().toISOString().slice(0, 10),
+        // Chasing somebody who has answered is the fastest way to undo a
+        // reply, so the follow-up date goes with the status.
+        next_follow_up: null,
+        next_action: 'They replied — read it in Gmail and decide',
+      })
+      setRows((list) => list.map((r) => (r.id === row.id ? { ...r, ...updated } : r)))
+      toast.success(`${row.company_name} marked as replied.`)
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not update that.')
+    }
+  }
+
+  const markNotInterested = async (row: Row) => {
+    try {
+      const updated = await api.updateOutreach(row.id, {
+        status: 'not_interested',
+        next_follow_up: null,
+        next_action: null,
+      })
+      setRows((list) => list.map((r) => (r.id === row.id ? { ...r, ...updated } : r)))
+      toast.success(`${row.company_name} closed — no further chasing.`)
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not update that.')
     }
   }
 
@@ -366,6 +408,26 @@ export function Outreach() {
                       >
                         <Globe size={15} />
                       </a>
+                    )}
+                    {r.status !== 'replied' && (
+                      <button
+                        onClick={() => markReplied(r)}
+                        className="rounded-lg p-2 text-latte/40 transition hover:bg-emerald-400/15 hover:text-emerald-300"
+                        aria-label={`Mark ${r.company_name} as replied`}
+                        title="They answered — stop chasing them"
+                      >
+                        <MailCheck size={15} />
+                      </button>
+                    )}
+                    {r.status !== 'not_interested' && r.status !== 'replied' && (
+                      <button
+                        onClick={() => markNotInterested(r)}
+                        className="rounded-lg p-2 text-latte/40 transition hover:bg-latte/10 hover:text-latte/70"
+                        aria-label={`Close ${r.company_name} as not interested`}
+                        title="Not interested — close it"
+                      >
+                        <CircleSlash size={15} />
+                      </button>
                     )}
                     <button
                       onClick={() => followUp(r)}

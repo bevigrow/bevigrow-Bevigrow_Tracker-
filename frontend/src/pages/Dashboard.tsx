@@ -34,12 +34,42 @@ import { useToast } from '../lib/toast'
 import type { Dashboard as DashboardData, Insight } from '../lib/types'
 import { CATEGORICAL } from '../lib/viz'
 
-/** Windows offered for the activity trend. */
-const WINDOWS = [
+/** Periods offered for the activity trend.
+ *
+ * Named rather than numeric, because "this month" is the question people
+ * actually ask and "the last 30 days" is not the same thing on the 3rd. Each
+ * resolves to a real date range; a long one is grouped by week or by calendar
+ * month so a year does not become 365 unreadable marks.
+ */
+const PERIODS = [
   { value: '14', label: 'Last 14 days' },
   { value: '30', label: 'Last 30 days' },
   { value: '90', label: 'Last 90 days' },
+  { value: 'this-month', label: 'This month' },
+  { value: 'last-month', label: 'Last month' },
+  { value: 'this-year', label: 'This year' },
+  { value: 'custom', label: 'Choose dates…' },
 ]
+
+const iso = (d: Date) => d.toISOString().slice(0, 10)
+
+/** A named period as an actual pair of dates. */
+function resolvePeriod(value: string): { days?: number; date_from?: string; date_to?: string } {
+  const now = new Date()
+  switch (value) {
+    case 'this-month':
+      return { date_from: iso(new Date(now.getFullYear(), now.getMonth(), 1)), date_to: iso(now) }
+    case 'last-month':
+      return {
+        date_from: iso(new Date(now.getFullYear(), now.getMonth() - 1, 1)),
+        date_to: iso(new Date(now.getFullYear(), now.getMonth(), 0)),
+      }
+    case 'this-year':
+      return { date_from: iso(new Date(now.getFullYear(), 0, 1)), date_to: iso(now) }
+    default:
+      return { days: Number(value) || 14 }
+  }
+}
 
 const same = (a: string, b: string) =>
   a.trim().replace(/\s+/g, ' ').toLowerCase() === b.trim().replace(/\s+/g, ' ').toLowerCase()
@@ -58,7 +88,9 @@ export function Dashboard() {
   // bookmarked or pasted to a colleague and still say the same thing.
   const country = params.get('country') ?? ''
   const tradeType = params.get('trade_type') ?? ''
-  const days = params.get('days') ?? '14'
+  const period = params.get('period') ?? '14'
+  const from = params.get('from') ?? ''
+  const to = params.get('to') ?? ''
   const query = params.toString()
 
   const setFilter = (key: string, value: string) => {
@@ -93,7 +125,9 @@ export function Dashboard() {
       .dashboard({
         country: filters.get('country') ?? undefined,
         trade_type: filters.get('trade_type') ?? undefined,
-        days: Number(filters.get('days')) || undefined,
+        ...(filters.get('period') === 'custom'
+          ? { date_from: filters.get('from') ?? undefined, date_to: filters.get('to') ?? undefined }
+          : resolvePeriod(filters.get('period') ?? '14')),
       })
       .then((d) => live && setData(d))
       .catch(() => live && toast.error('Could not load the dashboard.'))
@@ -248,12 +282,37 @@ export function Dashboard() {
             options={countryOptions}
           />
           <Select
-            value={days}
-            onChange={(e) => setFilter('days', e.target.value === '14' ? '' : e.target.value)}
-            aria-label="Trend window"
-            options={WINDOWS}
+            value={period}
+            onChange={(e) => setFilter('period', e.target.value === '14' ? '' : e.target.value)}
+            aria-label="Period"
+            options={PERIODS}
           />
         </div>
+        {period === 'custom' && (
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:w-2/3">
+            <label className="text-[11px] uppercase tracking-wider text-latte/45">
+              From
+              <input
+                type="date"
+                value={from}
+                max={to || undefined}
+                onChange={(e) => setFilter('from', e.target.value)}
+                className="input-field mt-1"
+              />
+            </label>
+            <label className="text-[11px] uppercase tracking-wider text-latte/45">
+              To
+              <input
+                type="date"
+                value={to}
+                min={from || undefined}
+                onChange={(e) => setFilter('to', e.target.value)}
+                className="input-field mt-1"
+              />
+            </label>
+          </div>
+        )}
+
         {(activeFilters > 0 || busy) && (
           <div className="mt-3 flex flex-wrap items-center gap-4 text-xs">
             {selected && (
@@ -387,7 +446,11 @@ export function Dashboard() {
 
         <ChartFrame
           title="Activity Trend"
-          subtitle="Interactions and new leads, last 14 days"
+          subtitle={
+            data.filters.bucket_days === 1
+              ? `Interactions and new leads, ${data.filters.days} days`
+              : `Interactions and new leads, per ${data.filters.bucket_days === 7 ? 'week' : 'month'}`
+          }
           legend={
             <>
               <LegendItem color={CATEGORICAL[0]} label="Interactions" />

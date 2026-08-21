@@ -35,20 +35,32 @@ def _fold(value: str | None) -> str:
     return (value or "").strip().casefold()
 
 
-def check(db: Session, target: CampaignTarget) -> Verdict:
-    """Decide whether this target may be emailed."""
+def check(db: Session, target: CampaignTarget, *, allow_recontact: bool = False) -> Verdict:
+    """Decide whether this target may be emailed.
+
+    `allow_recontact` is for follow-up campaigns, which exist precisely to
+    write again to somebody already written to. It relaxes the "we have
+    spoken before" rules and nothing else: an address that has already been
+    sent to *by this same campaign* is still refused, so a follow-up cannot
+    double-send within itself.
+    """
     address = _fold(target.normalized_email or target.email)
     if not address:
         return Verdict(is_duplicate=False)
 
     # 1. This address, already written to by an earlier campaign row.
+    prior_scope = [
+        CampaignTarget.id != target.id,
+        func.lower(CampaignTarget.normalized_email) == address,
+        CampaignTarget.state == TargetState.sent,
+    ]
+    if allow_recontact:
+        # Within this campaign only — the whole point of a follow-up is that
+        # earlier campaigns do not disqualify anybody.
+        prior_scope.append(CampaignTarget.campaign_id == target.campaign_id)
     prior = db.scalar(
         select(CampaignTarget)
-        .where(
-            CampaignTarget.id != target.id,
-            func.lower(CampaignTarget.normalized_email) == address,
-            CampaignTarget.state == TargetState.sent,
-        )
+        .where(*prior_scope)
         .order_by(CampaignTarget.sent_at.desc())
         .limit(1)
     )
@@ -59,6 +71,11 @@ def check(db: Session, target: CampaignTarget) -> Verdict:
             reason=f"Already emailed at this address on {when} (campaign {prior.campaign_id}).",
             outreach_id=prior.outreach_id,
         )
+
+    if allow_recontact:
+        # The rules below are all "we have written to them before", which is
+        # the premise of a follow-up rather than a reason to refuse it.
+        return Verdict(is_duplicate=False)
 
     # 2. This address, already in the outreach log — including rows logged by
     #    hand long before any campaign existed.

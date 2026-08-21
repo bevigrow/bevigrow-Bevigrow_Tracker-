@@ -174,6 +174,10 @@ export interface DashboardFilterState {
   country: string | null
   trade_type: 'export' | 'import' | null
   days: number
+  date_from: string | null
+  date_to: string | null
+  /** 1 = a point per day, 7 = per week, 30 = per calendar month. */
+  bucket_days: number
 }
 
 export interface Dashboard {
@@ -187,6 +191,8 @@ export interface Dashboard {
   recent_activities: Activity[]
   upcoming_follow_ups: Reminder[]
   filters: DashboardFilterState
+  /** Totals for the chosen window, unlike the current-state KPIs. */
+  period: { activities?: number; new_leads?: number }
 }
 
 export interface Insight {

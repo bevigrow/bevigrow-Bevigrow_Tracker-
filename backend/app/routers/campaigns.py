@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import func, select
@@ -28,6 +28,8 @@ from ..models import (
     EmailAccount,
     EmailTemplate,
     MailProvider,
+    Outreach,
+    OutreachStatus,
     SendAttempt,
     SendMode,
     TargetState,
@@ -135,7 +137,7 @@ def verify_account(db: Session = Depends(get_db), _: User = Depends(get_current_
     if account is None:
         raise HTTPException(status_code=400, detail="No mailbox is configured.")
     outcome = sender.verify(account)
-    from datetime import datetime, timezone
+    from datetime import datetime, timedelta, timezone
 
     if outcome.ok:
         account.last_verified_at = datetime.now(timezone.utc)
@@ -760,3 +762,110 @@ def daily_report(
 def duplicate_report(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     """Companies sharing a name but differing in address, domain or mailbox."""
     return reports.same_name_different_details(db)
+
+
+@router.post("/follow-up", status_code=status.HTTP_201_CREATED)
+def build_follow_up(
+    template_id: int = Query(..., description="The follow-up email to send"),
+    days_since: int = Query(default=14, ge=1, le=365),
+    limit: int = Query(default=200, ge=1, le=500),
+    name: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Queue a second letter to everyone who never answered the first.
+
+    This is where cold outreach actually converts — one email rarely does — and
+    it is also the easiest thing to get wrong, so the selection is narrow and
+    explicit rather than clever:
+
+      · written to at least `days_since` days ago
+      · still waiting on a reply — anybody who answered, said no, or was
+        marked no-response is left alone
+      · not already in this follow-up
+
+    The campaign it creates is marked as a deliberate re-contact, which is the
+    only way past the rule that refuses to write to an address twice. That flag
+    cannot be set from an ordinary import.
+    """
+    cutoff = cm.sending_day() - timedelta(days=days_since)
+    candidates = db.scalars(
+        select(Outreach)
+        .where(
+            Outreach.email.is_not(None),
+            func.trim(Outreach.email) != "",
+            Outreach.status.in_(
+                [OutreachStatus.waiting_reply, OutreachStatus.follow_up_sent,
+                 OutreachStatus.follow_up_needed]
+            ),
+            Outreach.contacted_on.is_not(None),
+            Outreach.contacted_on <= cutoff,
+        )
+        .order_by(Outreach.contacted_on.asc())
+        .limit(limit)
+    ).all()
+
+    if not candidates:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Nobody is waiting on a reply from more than {days_since} days ago. "
+                "Try a shorter gap."
+            ),
+        )
+
+    campaign = Campaign(
+        name=name or f"Follow-up · {days_since}+ days · {cm.sending_day():%d %b}",
+        template_id=template_id,
+        daily_limit=cm.HARD_DAILY_CAP,
+        mode=SendMode.manual,
+        source_filename="(built from the outreach log)",
+        owner_id=user.id,
+        status=CampaignStatus.draft,
+        allow_recontact=True,
+    )
+    db.add(campaign)
+    db.flush()
+
+    seen: set[str] = set()
+    position = 0
+    for row in candidates:
+        address = (row.email or "").strip().casefold()
+        if not address or address in seen:
+            continue
+        seen.add(address)
+        position += 1
+        # The company name is stored with its address appended; the template
+        # greets by name, so the address is stripped back off here.
+        company = (row.company_name or "").split(",")[0].strip() or row.company_name
+        db.add(
+            CampaignTarget(
+                campaign_id=campaign.id,
+                position=position,
+                company_name=company,
+                email=row.email,
+                contact_person=row.contact_person,
+                website=row.website,
+                country=row.country,
+                normalized_company=importer.domain_of(row.email, row.website)
+                or importer.normalize_company(company),
+                normalized_email=importer.normalize_email(row.email),
+                domain=importer.domain_of(row.email, row.website),
+            )
+        )
+
+    cm.record(
+        db,
+        campaign.id,
+        "imported",
+        f"{position} companies with no reply after {days_since} days.",
+    )
+    db.commit()
+    db.refresh(campaign)
+    return {
+        "campaign": CampaignOut.model_validate(campaign).model_copy(
+            update={"status": campaign.status.value, "mode": campaign.mode.value}
+        ),
+        "queued": position,
+        "days_since": days_since,
+    }

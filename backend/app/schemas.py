@@ -367,6 +367,10 @@ class DashboardFilterState(BaseModel):
     country: str | None = None
     trade_type: TradeType | None = None
     days: int = 14
+    date_from: date | None = None
+    date_to: date | None = None
+    # 1 = a point per day, 7 = per week, 30 = per month.
+    bucket_days: int = 1
 
 
 class DashboardOut(BaseModel):
@@ -382,6 +386,8 @@ class DashboardOut(BaseModel):
     recent_activities: list[ActivityOut]
     upcoming_follow_ups: list[ReminderOut]
     filters: DashboardFilterState = DashboardFilterState()
+    # Totals for the chosen window, as opposed to the current-state KPIs.
+    period: dict[str, int] = {}
 
 
 # -------------------------------------------------------------------------- ai

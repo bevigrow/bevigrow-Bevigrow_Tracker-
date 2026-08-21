@@ -166,6 +166,9 @@ export interface DashboardFilters {
   trade_type?: string
   /** Length of the activity trend window, in days. */
   days?: number
+  /** Or an explicit range, which wins over `days`. */
+  date_from?: string
+  date_to?: string
 }
 
 export const api = {

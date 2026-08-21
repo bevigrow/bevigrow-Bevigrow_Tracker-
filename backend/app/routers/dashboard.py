@@ -81,6 +81,8 @@ def compute_stats(
     country: str | None = None,
     trade_type: TradeType | None = None,
     days: int = DEFAULT_TREND_DAYS,
+    date_from: date | None = None,
+    date_to: date | None = None,
 ) -> dict:
     """Raw numbers, reused by both the dashboard endpoint and the AI prompts.
 
@@ -212,9 +214,15 @@ def compute_stats(
     # trip pays the latency whether it counts a million rows or none. Grouping
     # by day asks the same two questions once each, and the wall-clock cost of
     # the dashboard drops by roughly two thirds.
-    span = max(1, days)
-    window_start, _ = _day_bounds(today - timedelta(days=span - 1))
-    window_end = today_end
+    # The window: an explicit range if one was given, otherwise the last N
+    # days ending today.
+    end_day = date_to or today
+    start_day = date_from or (end_day - timedelta(days=max(1, days) - 1))
+    if start_day > end_day:
+        start_day, end_day = end_day, start_day
+    window_start, _ = _day_bounds(start_day)
+    _, window_end = _day_bounds(end_day)
+    total_days = (end_day - start_day).days + 1
 
     def _per_day(column, timestamp, foreign_key=None) -> dict[date, int]:
         day = func.date(timestamp)
@@ -235,18 +243,47 @@ def compute_stats(
     acts_by_day = _per_day(Activity.id, Activity.occurred_at, Activity.contact_id)
     leads_by_day = _per_day(Contact.id, Contact.created_at)
 
-    # Days with no rows are absent from a GROUP BY, so build the axis from the
-    # calendar rather than from the results — a quiet day must still show 0.
+    # A year at one point per day is 365 marks in a chart 620 units wide: less
+    # than two pixels each, unreadable, and a payload to match. Longer ranges
+    # are grouped, so the shape of the year survives even though the individual
+    # Tuesdays do not.
+    if total_days <= 45:
+        bucket, fmt = "day", "%d %b"
+    elif total_days <= 130:
+        bucket, fmt = "week", "%d %b"
+    else:
+        bucket, fmt = "month", "%b %Y"
+
+    def _next_boundary(start: date) -> date:
+        """The last day covered by the bucket beginning at `start`."""
+        if bucket == "day":
+            return start
+        if bucket == "week":
+            return start + timedelta(days=6)
+        # Calendar months, not thirty-day blocks. Fixed blocks drift: starting
+        # on 1 January, the second block began on the 31st and was still
+        # labelled January, and February never appeared at all.
+        if start.month == 12:
+            return date(start.year, 12, 31)
+        return date(start.year, start.month + 1, 1) - timedelta(days=1)
+
+    # Days with no rows are absent from a GROUP BY, so the axis is built from
+    # the calendar rather than from the results — a quiet day must show 0.
     trend: list[TrendPoint] = []
-    for offset in range(span - 1, -1, -1):
-        day = today - timedelta(days=offset)
+    cursor = start_day
+    while cursor <= end_day:
+        last = min(_next_boundary(cursor), end_day)
+        days_in_bucket = [
+            cursor + timedelta(days=i) for i in range((last - cursor).days + 1)
+        ]
         trend.append(
             TrendPoint(
-                label=day.strftime("%d %b"),
-                activities=acts_by_day.get(day, 0),
-                new_leads=leads_by_day.get(day, 0),
+                label=cursor.strftime(fmt),
+                activities=sum(acts_by_day.get(d, 0) for d in days_in_bucket),
+                new_leads=sum(leads_by_day.get(d, 0) for d in days_in_bucket),
             )
         )
+        cursor = last + timedelta(days=1)
 
     return {
         "greeting": _greeting(now),
@@ -259,8 +296,19 @@ def compute_stats(
             "import": trade_counts.get(TradeType.import_, 0),
         },
         "filters": DashboardFilterState(
-            country=(country or "").strip() or None, trade_type=trade_type, days=span
+            country=(country or "").strip() or None,
+            trade_type=trade_type,
+            days=total_days,
+            date_from=start_day,
+            date_to=end_day,
+            # So the chart can say "per week" rather than leaving the reader to
+            # work out why Tuesday is missing.
+            bucket_days={'day': 1, 'week': 7, 'month': 30}[bucket],
         ),
+        "period": {
+            "activities": sum(acts_by_day.values()),
+            "new_leads": sum(leads_by_day.values()),
+        },
     }
 
 
@@ -270,9 +318,18 @@ def get_dashboard(
     _: User = Depends(get_current_user),
     country: str | None = Query(default=None, max_length=100),
     trade_type: TradeType | None = None,
-    days: int = Query(default=DEFAULT_TREND_DAYS, ge=7, le=180),
+    days: int = Query(default=DEFAULT_TREND_DAYS, ge=1, le=1095),
+    date_from: date | None = Query(default=None, description="Start of an explicit range"),
+    date_to: date | None = Query(default=None, description="End of an explicit range"),
 ):
-    stats = compute_stats(db, country=country, trade_type=trade_type, days=days)
+    stats = compute_stats(
+        db,
+        country=country,
+        trade_type=trade_type,
+        days=days,
+        date_from=date_from,
+        date_to=date_to,
+    )
     scope = quote_scope(country, trade_type)
 
     recent_stmt = select(Activity).options(

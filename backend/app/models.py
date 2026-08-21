@@ -235,6 +235,13 @@ class Campaign(Base):
 
     source_filename: Mapped[str | None] = mapped_column(String(255))
 
+    # A follow-up is a deliberate second letter to somebody already written to,
+    # so it must be exempt from the rule that refuses exactly that. Off by
+    # default and settable only by the follow-up builder — an ordinary import
+    # can never turn it on, because "ignore the duplicate check" is not an
+    # option anybody should have next to an upload button.
+    allow_recontact: Mapped[bool] = mapped_column(Boolean, default=False)
+
     # A cache of the queue's own truth, for display. The real position is the
     # first target still `pending` — derived, never stored — because a stored
     # index and a queue can disagree, and when they do the index sends someone

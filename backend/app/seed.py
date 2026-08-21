@@ -53,6 +53,7 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("documents", "content", "BYTEA"),
     # Sending moved off SMTP: the hosting plan blocks outbound mail ports, so
     # an HTTP provider is needed and the account has to say which one it is.
+    ("campaigns", "deleted_at", "TIMESTAMP WITH TIME ZONE"),
     ("email_accounts", "provider", "VARCHAR(20) DEFAULT 'smtp' NOT NULL"),
     ("email_accounts", "api_key_enc", "BYTEA"),
     ("email_accounts", "reply_to", "VARCHAR(255)"),

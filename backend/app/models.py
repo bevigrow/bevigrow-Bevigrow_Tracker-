@@ -247,6 +247,10 @@ class Campaign(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
+    # Set instead of deleting. Delete removes the queue and the drafts along
+    # with the campaign, and there is no undo for that — so the button puts it
+    # here first, and only an explicit purge destroys anything.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
 
     targets: Mapped[list["CampaignTarget"]] = relationship(
         back_populates="campaign", cascade="all, delete-orphan"
@@ -446,6 +450,51 @@ class MailProvider(str, enum.Enum):
     smtp = "smtp"
     resend = "resend"
     brevo = "brevo"
+
+
+class SendLedger(Base):
+    """Every decision the agent ever made, kept forever.
+
+    Deliberately outside the campaign it came from. Campaign rows cascade —
+    delete a campaign and its queue, drafts and attempts go with it, which is
+    right, because a deleted test run should not clutter the app. What is *not*
+    right is that the history goes too: delete this morning's test and the
+    agent no longer knows it wrote to anyone this morning, so it will happily
+    do it again and today's figures reset to zero.
+
+    So this table holds no foreign key to campaigns and copies the campaign's
+    name into itself. Nothing removes a row here except a person explicitly
+    purging it. It is the answer to "what did we send, and when, and why was
+    that one skipped" long after the campaign is gone.
+    """
+
+    __tablename__ = "send_ledger"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    # The operator's day, not UTC's — so a report headed "20 August" holds what
+    # a person in Kerala did on the twentieth.
+    day: Mapped[date] = mapped_column(Date, index=True)
+
+    # Plain columns, not references. A reference would either block the delete
+    # or be nulled by it, and both lose the answer.
+    campaign_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    campaign_name: Mapped[str] = mapped_column(String(160), default="")
+
+    company_name: Mapped[str] = mapped_column(String(200), default="")
+    normalized_company: Mapped[str | None] = mapped_column(String(200), index=True)
+    location: Mapped[str | None] = mapped_column(String(200))
+    country: Mapped[str | None] = mapped_column(String(100))
+    email: Mapped[str | None] = mapped_column(String(255), index=True)
+    domain: Mapped[str | None] = mapped_column(String(200), index=True)
+    website: Mapped[str | None] = mapped_column(String(300))
+
+    # sent | failed | duplicate | skipped | unverified
+    outcome: Mapped[str] = mapped_column(String(20), index=True)
+    # Why, in the words a person can read back: "already contacted on 18 Aug".
+    reason: Mapped[str | None] = mapped_column(String(400))
+    subject: Mapped[str | None] = mapped_column(String(300))
+    message_id: Mapped[str | None] = mapped_column(String(255))
 
 
 class EmailAccount(Base):

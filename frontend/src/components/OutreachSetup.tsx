@@ -7,10 +7,11 @@
  * let you start and left you to work out why. A person setting this up for the
  * first time should be able to see the whole path and where they are on it.
  *
- * It disappears once all three are done, because a permanent checklist of
- * finished work is clutter.
+ * It shows itself only on a genuinely empty setup — the first time somebody
+ * opens the page. After that it is a Guide button, because a checklist of work
+ * you have already done, repeated on every visit, is nagging.
  */
-import { ArrowRight, Check } from 'lucide-react'
+import { ArrowRight, Check, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { Card } from './ui'
@@ -34,9 +35,11 @@ interface Step {
 export function OutreachSetup({
   state,
   onNewCampaign,
+  onClose,
 }: {
   state: SetupState
   onNewCampaign: () => void
+  onClose?: () => void
 }) {
   const steps: Step[] = [
     {
@@ -70,16 +73,28 @@ export function OutreachSetup({
     },
   ]
 
-  if (steps.every((s) => s.done)) return null
   const current = steps.findIndex((s) => !s.done)
 
   return (
     <Card>
-      <h2 className="font-display text-lg text-latte">Three steps to your first email</h2>
-      <p className="mb-4 mt-0.5 text-[12px] text-latte/45">
-        Once these are done, the agent sends on its own — fifty a day, and it keeps going when
-        you close this page.
-      </p>
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div>
+          <h2 className="font-display text-lg text-latte">Three steps to your first email</h2>
+          <p className="mt-0.5 text-[12px] text-latte/45">
+            Once these are done, the agent sends on its own — fifty a day, and it keeps going
+            when you close this page.
+          </p>
+        </div>
+        {onClose && (
+          <button
+            onClick={onClose}
+            aria-label="Close the guide"
+            className="shrink-0 rounded-lg p-1.5 text-latte/35 transition hover:bg-latte/10 hover:text-latte"
+          >
+            <X size={15} />
+          </button>
+        )}
+      </div>
 
       <ol className="space-y-2.5">
         {steps.map((step, i) => {

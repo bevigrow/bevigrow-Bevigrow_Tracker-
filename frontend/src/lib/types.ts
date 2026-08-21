@@ -446,3 +446,43 @@ export interface OutreachInsights {
   countries_tracked: number
   companies_tracked: number
 }
+
+/* --------------------------------------------------- the durable report */
+
+export interface DaySummary {
+  day: string
+  sent: number
+  failed: number
+  duplicates: number
+  skipped: number
+  limit: number
+  /** Companies, not addresses — several mailboxes at one firm count once. */
+  companies: number
+  campaigns: string[]
+  sent_to: { company: string; email: string | null; at: string; country: string | null }[]
+  not_sent: { company: string; email: string | null; outcome: string; reason: string | null }[]
+}
+
+export interface DailyReport {
+  totals: {
+    sent: number
+    failed: number
+    duplicates: number
+    skipped: number
+    companies: number
+    today: { sent: number; limit: number; remaining: number; failed: number }
+  }
+  days: DaySummary[]
+}
+
+/** Companies sharing a name but differing in address, domain or mailbox. */
+export interface DuplicateGroup {
+  name: string
+  spellings: string[]
+  locations: string[]
+  emails: string[]
+  websites: string[]
+  differs_by: string[]
+  contacted: number
+  skipped_as_duplicate: number
+}

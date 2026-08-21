@@ -34,6 +34,7 @@ from ..models import (
     Outreach,
     OutreachStatus,
     SendAttempt,
+    SendLedger,
     SendMode,
     TargetState,
 )
@@ -70,6 +71,42 @@ def active_account(db: Session) -> EmailAccount | None:
     )
 
 
+def _ledger(
+    db: Session,
+    campaign: Campaign,
+    target: CampaignTarget,
+    outcome: str,
+    reason: str | None = None,
+    message_id: str | None = None,
+) -> None:
+    """Write one line of permanent history.
+
+    Called for every decision that ends a target's life — sent, failed,
+    duplicate, skipped. It copies the company's details rather than pointing at
+    them, so deleting the campaign tomorrow leaves today's report intact. That
+    is the whole point: without it, clearing out a morning of test runs also
+    clears the agent's memory of having written to those companies.
+    """
+    db.add(
+        SendLedger(
+            day=cm.sending_day(),
+            campaign_id=campaign.id,
+            campaign_name=campaign.name,
+            company_name=target.company_name,
+            normalized_company=target.normalized_company,
+            location=target.location,
+            country=target.country,
+            email=target.email,
+            domain=target.domain,
+            website=target.website,
+            outcome=outcome,
+            reason=(reason or "")[:400] or None,
+            subject=target.prepared_subject,
+            message_id=message_id,
+        )
+    )
+
+
 def step(db: Session, campaign: Campaign, *, account: EmailAccount | None = None) -> StepOutcome:
     """Advance one campaign by exactly one address."""
     if campaign.status == CampaignStatus.daily_limit and cm.resumable_today(db, campaign):
@@ -103,6 +140,7 @@ def step(db: Session, campaign: Campaign, *, account: EmailAccount | None = None
         campaign.last_target_id = target.id
         campaign.last_activity_at = datetime.now(timezone.utc)
         cm.record(db, campaign.id, "skipped", f"{target.company_name}: no address.", target.id)
+        _ledger(db, campaign, target, "skipped", target.skip_reason)
         cm.refresh_completion(db, campaign)
         db.commit()
         return StepOutcome("skipped", f"{target.company_name} has no email address.", target)
@@ -126,6 +164,7 @@ def step(db: Session, campaign: Campaign, *, account: EmailAccount | None = None
             )
         )
         cm.record(db, campaign.id, "duplicate", f"{target.company_name}: {verdict.reason}", target.id)
+        _ledger(db, campaign, target, "duplicate", verdict.reason)
         cm.refresh_completion(db, campaign)
         db.commit()
         return StepOutcome("duplicate", f"{target.company_name} skipped — {verdict.reason}", target)
@@ -147,6 +186,7 @@ def step(db: Session, campaign: Campaign, *, account: EmailAccount | None = None
             cm.record(
                 db, campaign.id, "skipped", f"{target.company_name}: {target.skip_reason}", target.id
             )
+            _ledger(db, campaign, target, "skipped", target.skip_reason)
             cm.refresh_completion(db, campaign)
             db.commit()
             return StepOutcome("skipped", f"{target.company_name}: {target.skip_reason}", target)
@@ -235,6 +275,7 @@ def dispatch(
         campaign.last_target_id = target.id
         campaign.last_activity_at = now
         cm.record(db, campaign.id, "sent", f"Emailed {target.company_name} at {target.email}.", target.id)
+        _ledger(db, campaign, target, "sent", None, message_id)
         cm.refresh_completion(db, campaign)
         db.commit()
         quota = cm.quota_state(db, account_id=account.id, campaign=campaign)
@@ -260,6 +301,7 @@ def dispatch(
     campaign.last_target_id = target.id
     campaign.last_activity_at = now
     cm.record(db, campaign.id, "failed", f"{target.company_name}: {outcome.error}", target.id)
+    _ledger(db, campaign, target, "failed", outcome.error, message_id)
 
     # One bad address must not stop the campaign; a bad password must. Every
     # remaining company would otherwise be marched through and marked failed.

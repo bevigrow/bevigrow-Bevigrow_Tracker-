@@ -3,6 +3,7 @@ import {
   Bell,
   Bot,
   ChevronLeft,
+  ClipboardList,
   Coffee,
   FileText,
   LayoutDashboard,
@@ -51,6 +52,7 @@ const TRADE_NAV: NavItem[] = [
 const OUTREACH_NAV: NavItem[] = [
   { to: '/app/outreach', label: 'Prospects', icon: Send, end: true },
   { to: '/app/outreach/campaigns', label: 'Outreach Agent', icon: Bot },
+  { to: '/app/outreach/report', label: 'Report', icon: ClipboardList },
   { to: '/app/outreach/settings', label: 'Settings', icon: SlidersHorizontal },
 ]
 

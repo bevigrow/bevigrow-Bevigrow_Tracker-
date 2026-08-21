@@ -9,7 +9,9 @@ import type {
   Contact,
   ContactDetail,
   CountryOption,
+  DailyReport,
   Dashboard,
+  DuplicateGroup,
   EmailAccount,
   EmailTemplate,
   ImportReport,
@@ -307,7 +309,13 @@ export const api = {
   updateTemplate: (id: number, body: Record<string, unknown>) =>
     request<EmailTemplate>(`/api/templates/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
 
-  listCampaigns: () => request<Campaign[]>('/api/campaigns'),
+  listCampaigns: (deleted = false) => request<Campaign[]>(`/api/campaigns${qs({ deleted })}`),
+  restoreCampaign: (id: number) =>
+    request<CampaignStatus>(`/api/campaigns/${id}/restore`, { method: 'POST' }),
+  purgeCampaign: (id: number) =>
+    request<void>(`/api/campaigns/${id}/purge`, { method: 'DELETE' }),
+  dailyReport: (days = 30) => request<DailyReport>(`/api/campaigns/report/daily${qs({ days })}`),
+  duplicateReport: () => request<DuplicateGroup[]>('/api/campaigns/report/duplicates'),
   importCampaign: (form: FormData) =>
     request<{ campaign: Campaign; report: ImportReport }>('/api/campaigns/import', {
       method: 'POST',

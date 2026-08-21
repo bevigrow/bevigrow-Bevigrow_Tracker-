@@ -6,7 +6,7 @@
  * the laptop — does not stop it; the queue, the daily count and the position
  * all live in the database, and the campaign carries on from wherever it was.
  */
-import { FileUp, MailCheck, Pause, Play, Square, Trash2 } from 'lucide-react'
+import { FileUp, HelpCircle, MailCheck, Pause, Play, Square, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
@@ -35,6 +35,9 @@ export function Campaigns() {
   const [mailboxVerified, setMailboxVerified] = useState(false)
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
+  // Opened by hand. The guide appears on its own only when nothing is set
+  // up at all; after that it waits behind the Guide button.
+  const [guideOpen, setGuideOpen] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -63,6 +66,8 @@ export function Campaigns() {
   }, [load])
 
   const blocked = mailboxReady === false || templates.length === 0
+  // Nothing configured at all — the one case where the guide is the page.
+  const fresh = mailboxReady === false && templates.length === 0
 
   return (
     <div className="space-y-6">
@@ -75,16 +80,26 @@ export function Campaigns() {
             address twice.
           </p>
         </div>
-        <Button
-          onClick={() => setCreating(true)}
-          icon={<FileUp size={16} />}
-          disabled={blocked}
-        >
-          New campaign
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            onClick={() => setGuideOpen((v) => !v)}
+            icon={<HelpCircle size={15} />}
+            className="px-3 py-2 text-xs"
+          >
+            Guide
+          </Button>
+          <Button
+            onClick={() => setCreating(true)}
+            icon={<FileUp size={16} />}
+            disabled={blocked}
+          >
+            New campaign
+          </Button>
+        </div>
       </div>
 
-      {!loading && (
+      {!loading && (guideOpen || fresh) && (
         <OutreachSetup
           state={{
             mailboxReady: Boolean(mailboxReady),
@@ -93,6 +108,7 @@ export function Campaigns() {
             hasCampaign: campaigns.length > 0,
           }}
           onNewCampaign={() => setCreating(true)}
+          onClose={fresh && !guideOpen ? undefined : () => setGuideOpen(false)}
         />
       )}
 

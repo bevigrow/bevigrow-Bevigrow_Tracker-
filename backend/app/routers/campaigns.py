@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import func, select
@@ -47,7 +48,7 @@ from ..schemas import (
 )
 from ..services import assistant
 from ..services import campaigns as cm
-from ..services import engine, importer, scheduler, sender, templating
+from ..services import engine, importer, reports, scheduler, sender, templating
 
 log = logging.getLogger("bevigrow.campaigns.api")
 
@@ -214,8 +215,16 @@ def update_template(
 
 
 @router.get("", response_model=list[CampaignOut])
-def list_campaigns(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    rows = db.scalars(select(Campaign).order_by(Campaign.created_at.desc())).all()
+def list_campaigns(
+    deleted: bool = Query(default=False, description='Show the recycle bin instead'),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    stmt = select(Campaign).order_by(Campaign.created_at.desc())
+    stmt = stmt.where(
+        Campaign.deleted_at.is_not(None) if deleted else Campaign.deleted_at.is_(None)
+    )
+    rows = db.scalars(stmt).all()
     return [
         CampaignOut.model_validate(r).model_copy(
             update={"status": r.status.value, "mode": r.mode.value}
@@ -283,7 +292,14 @@ async def import_companies(
                 normalized_email=row.normalized_email,
                 domain=row.domain,
                 skip_reason=row.skip_reason,
-                state=TargetState.pending if row.email else TargetState.skipped,
+                # Everything starts pending, even rows with no address.
+                # Marking them skipped here meant the engine never saw
+                # them, so nothing was written to the ledger and they were
+                # missing from the report entirely — the one place
+                # somebody would look to ask why a company was not
+                # written to. The engine skips them on the first step and
+                # records the reason.
+                state=TargetState.pending,
             )
         )
 
@@ -673,29 +689,74 @@ def outreach_health(db: Session = Depends(get_db), _: User = Depends(get_current
 def delete_campaign(
     campaign_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)
 ):
-    """Remove a campaign, its queue and its send history.
+    """Move a campaign to the recycle bin.
 
-    What is *not* removed: the outreach records of emails that actually went
-    out. Those are the log of real messages to real companies, they are what
-    the duplicate check reads before writing to an address again, and they were
-    never this campaign's property — deleting a test run should tidy the list,
-    not quietly make the app willing to email somebody a second time.
+    Nothing is destroyed. Delete used to remove the queue, the drafts and the
+    send history with no way back, which is a lot to hang on one small icon.
+    It is now reversible, and only an explicit purge removes anything.
 
-    A campaign still sending is stopped first, so the scheduler cannot pick it
-    up between the delete and the commit.
+    The ledger is untouched either way: today's report still knows what went
+    out this morning even after the campaign that sent it is binned, which is
+    what stops the agent writing to those companies a second time.
     """
     campaign = _get(db, campaign_id)
     if campaign.status in (CampaignStatus.running, CampaignStatus.daily_limit):
-        cm.pause(db, campaign, "Paused before deletion.")
+        cm.pause(db, campaign, "Paused and moved to the recycle bin.")
+    campaign.deleted_at = datetime.now(timezone.utc)
+    db.commit()
 
-    sent = db.scalar(
-        select(func.count(CampaignTarget.id)).where(
-            CampaignTarget.campaign_id == campaign.id,
-            CampaignTarget.state == TargetState.sent,
+
+@router.post("/{campaign_id}/restore", response_model=CampaignStatusOut)
+def restore_campaign(
+    campaign_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)
+):
+    """Take one back out of the bin, paused, exactly as it was."""
+    campaign = _get(db, campaign_id)
+    campaign.deleted_at = None
+    cm.record(db, campaign.id, "restored", "Restored from the recycle bin.")
+    db.commit()
+    return _status(db, campaign)
+
+
+@router.delete("/{campaign_id}/purge", status_code=status.HTTP_204_NO_CONTENT)
+def purge_campaign(
+    campaign_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)
+):
+    """Destroy a binned campaign for good.
+
+    Its queue, drafts and attempts go. The ledger entries and the outreach
+    records do not: those are the history of real emails to real companies, and
+    they are what the duplicate check reads. Emptying a bin should tidy the
+    workspace, never make the app willing to email somebody twice.
+    """
+    campaign = _get(db, campaign_id)
+    if campaign.deleted_at is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Move it to the recycle bin first — this is the permanent step.",
         )
-    ) or 0
     db.delete(campaign)
     db.commit()
-    log.info(
-        "Deleted campaign %s; %d outreach record(s) from it were kept", campaign_id, sent
-    )
+
+
+# ------------------------------------------------------------------ reports
+
+
+@router.get("/report/daily")
+def daily_report(
+    days: int = Query(default=30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """What was sent each day, and what was not, and why.
+
+    Read from the ledger rather than from campaigns, so deleting a campaign —
+    or emptying the recycle bin — leaves the history standing.
+    """
+    return {"totals": reports.totals(db), "days": reports.daily(db, days)}
+
+
+@router.get("/report/duplicates")
+def duplicate_report(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Companies sharing a name but differing in address, domain or mailbox."""
+    return reports.same_name_different_details(db)

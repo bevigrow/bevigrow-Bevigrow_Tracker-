@@ -19,8 +19,9 @@ person, because attaching a reply to the wrong company is worse than attaching
 it to none.
 
 **Nothing is ever sent from here.** A reply can change a status, stop a
-follow-up and draft a suggestion. Sending that suggestion is a button a person
-presses.
+follow-up and be summarised in a line. It can never be answered: no function
+in this module composes or sends a message to a customer, and none should be
+added. BeviGrow replies to its customers by hand, in Gmail.
 """
 from __future__ import annotations
 
@@ -45,6 +46,7 @@ from ..models import (
     ReplyMatch,
     SendLedger,
 )
+from . import ai
 from . import campaigns as cm
 from .sender import decrypt_password
 
@@ -81,6 +83,7 @@ class SyncResult:
     matched: int = 0
     unmatched: int = 0
     skipped: int = 0
+    ai_reads: int = 0
     error: str | None = None
 
 
@@ -175,6 +178,32 @@ _RULES: list[tuple[ReplyClass, re.Pattern]] = [
         r"\binterested\b|sounds good|tell me more|would like to know|please send|"
         r"happy to (discuss|hear)", re.I)),
 ]
+
+
+# How many replies one sync will spend a model call on. A normal sync brings
+# back nothing or a handful; this only exists so that a mailbox left unread
+# for a fortnight cannot turn one sync into a hundred requests.
+AI_READS_PER_SYNC = 12
+
+
+def read_with_ai(
+    subject: str, body: str, rules_label: ReplyClass
+) -> tuple[ReplyClass, str, str | None]:
+    """Refine the rules verdict with the model, and get a one-line summary.
+
+    Returns (classification, decided_by, summary). The rules result stands
+    unless the model returns a label that is actually one of ours, so the
+    worst an unavailable or confused model can do is leave things as they
+    were. No draft reply is produced here or anywhere else.
+    """
+    label, summary, used_ai = ai.read_reply(subject, body, None, rules_label.value)
+    if not used_ai:
+        return rules_label, "rules", None
+    try:
+        refined = ReplyClass(label)
+    except ValueError:
+        refined = rules_label
+    return refined, "ai" if refined is not rules_label else "ai-agreed", summary
 
 
 def classify(subject: str, body: str, from_email: str) -> tuple[ReplyClass, str]:
@@ -380,6 +409,17 @@ def _ingest_one(db: Session, box: imaplib.IMAP4_SSL, uid: bytes, result: SyncRes
     if precedence in ("bulk", "list") and label is ReplyClass.other:
         label, how = ReplyClass.other, "header"
 
+    # The model reads it second, on top of the rules. Away messages and
+    # delivery failures are skipped: the headers already settled those, and
+    # there is nothing in them worth a sentence.
+    summary: str | None = None
+    if (
+        label not in (ReplyClass.out_of_office, ReplyClass.bounced)
+        and result.ai_reads < AI_READS_PER_SYNC
+    ):
+        result.ai_reads += 1
+        label, how, summary = read_with_ai(subject, body, label)
+
     references = _ids(message.get("References")) + _ids(message.get("In-Reply-To"))
     kind, row, campaign_id = _match(db, references, from_email)
 
@@ -397,6 +437,7 @@ def _ingest_one(db: Session, box: imaplib.IMAP4_SSL, uid: bytes, result: SyncRes
         campaign_id=campaign_id,
         classification=label,
         classified_by=how,
+        suggested_reply=summary,
     )
     db.add(reply)
     db.flush()

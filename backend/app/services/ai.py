@@ -294,3 +294,88 @@ def _fallback_suggestions(candidates: list[dict]) -> list[dict]:
     order = {"high": 0, "medium": 1, "low": 2}
     out.sort(key=lambda s: (order[s["priority"]], -(s.get("days_since_contact") or 0)))
     return out
+
+
+# --------------------------------------------------------------- reading a reply
+
+# The eleven things a reply can be. Kept as plain strings here so this module
+# does not import the ORM, and validated against the enum by the caller.
+REPLY_LABELS = (
+    "interested",
+    "pricing_request",
+    "sample_request",
+    "specification_request",
+    "purchasing_contact",
+    "needs_follow_up",
+    "not_interested",
+    "out_of_office",
+    "unsubscribe",
+    "bounced",
+    "other",
+)
+
+READER_SYSTEM = (
+    "You read incoming business email for BeviGrow, a coffee exporter, and "
+    "report what it says. You are a reader, not a writer: you never compose a "
+    "reply, never address the sender, and never suggest wording. You never "
+    "invent a price, quantity, grade or date that is not in the message. "
+    "Output only the JSON object you are asked for."
+)
+
+
+def read_reply(
+    subject: str,
+    body: str,
+    company_name: str | None,
+    rules_label: str,
+) -> tuple[str, str | None, bool]:
+    """What this reply is, and what it asks for, in one line.
+
+    Returns (label, summary, used_ai). The label falls back to whatever the
+    rules decided, so a missing or nonsense answer from the model can only
+    leave the classification where it already was — never worse.
+
+    This function deliberately produces no draft reply. BeviGrow answers its
+    customers by hand, in Gmail, and the surest way to keep it that way is for
+    no part of the system to hold a ready-made message.
+    """
+    if not ai_enabled():
+        return rules_label, None, False
+
+    who = company_name or "an unidentified sender"
+    prompt = (
+        "Read this reply to a cold outreach email from a coffee exporter and "
+        "report what it says.\n\n"
+        "Return only a JSON object with exactly two keys:\n"
+        '  "label": one of ' + ", ".join(REPLY_LABELS) + "\n"
+        '  "summary": one sentence, at most 20 words, saying what the sender '
+        "wants or has decided. Third person. No greeting, no reply wording, "
+        "no advice.\n\n"
+        "Guidance on the label:\n"
+        "- An automatic away message is out_of_office even if it mentions "
+        "anything else.\n"
+        "- A request to stop being contacted is unsubscribe.\n"
+        "- A delivery failure notice is bounced.\n"
+        "- Use other only when nothing else fits.\n\n"
+        f"Sender: {who}\n"
+        f"Subject: {(subject or '').strip()[:200]}\n"
+        f"Message:\n{(body or '').strip()[:2500]}"
+    )
+    raw = _complete(prompt, system=READER_SYSTEM, max_tokens=200)
+    if not raw:
+        return rules_label, None, False
+
+    try:
+        found = re.search(r"\{.*\}", raw, re.S)
+        parsed = json.loads(found.group(0)) if found else {}
+    except (json.JSONDecodeError, AttributeError):
+        log.warning("Reply reader returned unparseable JSON")
+        return rules_label, None, False
+
+    label = str(parsed.get("label", "")).strip().lower()
+    if label not in REPLY_LABELS:
+        label = rules_label
+    summary = str(parsed.get("summary", "")).strip() or None
+    if summary and len(summary) > 300:
+        summary = summary[:300]
+    return label, summary, True

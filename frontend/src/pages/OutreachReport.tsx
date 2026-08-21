@@ -593,6 +593,12 @@ function RepliesReceived({
                 )}
               </div>
 
+              {r.suggested_reply && (
+                <p className="mt-2 text-[12.5px] leading-relaxed text-latte/80">
+                  {r.suggested_reply}
+                </p>
+              )}
+
               {r.body && (
                 <p className="mt-2 whitespace-pre-wrap break-words text-[12px] leading-relaxed text-latte/60">
                   {r.body.length > 400 ? `${r.body.slice(0, 400)}…` : r.body}

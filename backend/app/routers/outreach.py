@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
@@ -52,17 +52,46 @@ def list_outreach(
     # whole nested user on every row was an eighth of the response.
     stmt = select(Outreach)
 
-    if search:
-        needle = f"%{search.strip().lower()}%"
-        stmt = stmt.where(
-            or_(
-                func.lower(Outreach.company_name).like(needle),
-                func.lower(func.coalesce(Outreach.contact_person, "")).like(needle),
-                func.lower(func.coalesce(Outreach.website, "")).like(needle),
-                func.lower(func.coalesce(Outreach.email, "")).like(needle),
-                func.lower(func.coalesce(Outreach.country, "")).like(needle),
-                func.lower(func.coalesce(Outreach.notes, "")).like(needle),
-            )
+    ranking = None
+    if search and search.strip():
+        # Search on words, and rank rather than refuse.
+        #
+        # This used to match the typed phrase as one contiguous string, so
+        # "Spice Star Dubai" found nothing at all: the log holds "Spice Star
+        # Foodstuff Trading LLC, Dubai" and the words are not adjacent. The
+        # name you half-remember is almost never the name as filed — the
+        # location is appended, the legal suffix is there or is not, and the
+        # trading word sits in the middle.
+        #
+        # So: any word matching is enough to be shown, and how well it matched
+        # decides the order. An exact name comes first, then a name starting
+        # with what you typed, then rows where every word appears in the name,
+        # then every word anywhere at all, and last the rows that caught only
+        # one word. Nothing is hidden for being an imperfect match, which is
+        # the whole point — an empty screen tells you nothing, and a list with
+        # the right row at the top costs you one glance.
+        phrase = " ".join(search.lower().split())
+        name = func.lower(func.coalesce(Outreach.company_name, ""))
+        # Everything worth searching, as one string per row.
+        haystack = (
+            name
+            + " " + func.lower(func.coalesce(Outreach.contact_person, ""))
+            + " " + func.lower(func.coalesce(Outreach.website, ""))
+            + " " + func.lower(func.coalesce(Outreach.email, ""))
+            + " " + func.lower(func.coalesce(Outreach.country, ""))
+            + " " + func.lower(func.coalesce(Outreach.notes, ""))
+        )
+        # Single letters are dropped: they match nearly every row and would
+        # bury the rows that matched something meaningful.
+        words = [w for w in phrase.split() if len(w) > 1] or [phrase]
+
+        stmt = stmt.where(or_(*[haystack.like(f"%{w}%") for w in words]))
+        ranking = case(
+            (name == phrase, 0),
+            (name.like(f"{phrase}%"), 1),
+            (and_(*[name.like(f"%{w}%") for w in words]), 2),
+            (and_(*[haystack.like(f"%{w}%") for w in words]), 3),
+            else_=4,
         )
     if contact_method:
         stmt = stmt.where(Outreach.contact_method == contact_method)
@@ -84,13 +113,16 @@ def list_outreach(
     # and the row you were reading moves. Urgency is already visible per row
     # and available through the "due now" filter, so it does not also need to
     # drive the sort. NULLS LAST keeps unnamed records from heading the list.
-    return db.scalars(
-        stmt.order_by(
-            Outreach.company_name.is_(None),
-            func.lower(Outreach.company_name).asc(),
-            Outreach.id.asc(),
-        ).limit(limit)
-    ).all()
+    order = [
+        Outreach.company_name.is_(None),
+        func.lower(Outreach.company_name).asc(),
+        Outreach.id.asc(),
+    ]
+    # While searching, closeness of match beats the alphabet: you are looking
+    # for one row, not scanning the list.
+    if ranking is not None:
+        order.insert(0, ranking.asc())
+    return db.scalars(stmt.order_by(*order).limit(limit)).all()
 
 
 @router.get("/stats", response_model=OutreachStats)

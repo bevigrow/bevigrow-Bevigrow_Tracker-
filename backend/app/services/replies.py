@@ -408,3 +408,14 @@ def _ingest_one(db: Session, box: imaplib.IMAP4_SSL, uid: bytes, result: SyncRes
         result.unmatched += 1
     result.stored += 1
     db.commit()
+
+# ---------------------------------------------------------------------------
+# There is deliberately no function here that answers a customer.
+#
+# The application reads replies, files them against the right company and
+# stops chasing that company. Writing back is done in Gmail, by a person, in
+# the thread the customer is already looking at. That is a decision, not an
+# omission: an automated system that can compose and send business email is
+# one bad classification away from promising a price, and the cheapest way to
+# make that impossible is to give it no way to send at all.
+# ---------------------------------------------------------------------------

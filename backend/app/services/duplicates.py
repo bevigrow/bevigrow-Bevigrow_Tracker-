@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from ..models import CampaignTarget, Contact, Outreach, TargetState
+from ..models import CampaignTarget, Contact, Outreach, OutreachStatus, TargetState
 
 
 @dataclass
@@ -70,6 +70,30 @@ def check(db: Session, target: CampaignTarget, *, allow_recontact: bool = False)
             is_duplicate=True,
             reason=f"Already emailed at this address on {when} (campaign {prior.campaign_id}).",
             outreach_id=prior.outreach_id,
+        )
+
+    # Somebody who asked not to be written to again is refused whatever the
+    # campaign says. This check sits *above* the follow-up exemption on
+    # purpose: a follow-up is allowed to write to people who ignored the first
+    # letter, and is never allowed to write to somebody who answered it with
+    # "remove me". That distinction is the whole reason the exemption is
+    # narrow.
+    suppressed = db.scalar(
+        select(Outreach)
+        .where(
+            func.lower(func.trim(Outreach.email)) == address,
+            Outreach.status == OutreachStatus.not_interested,
+        )
+        .limit(1)
+    )
+    if suppressed is not None:
+        return Verdict(
+            is_duplicate=True,
+            reason=(
+                f"{suppressed.company_name} asked not to be contacted again. "
+                "Change the status by hand if that was wrong."
+            ),
+            outreach_id=suppressed.id,
         )
 
     if allow_recontact:

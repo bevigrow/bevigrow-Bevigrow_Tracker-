@@ -577,10 +577,13 @@ class InboundReply(Base):
     classification: Mapped[ReplyClass] = mapped_column(
         Enum(ReplyClass, native_enum=False), default=ReplyClass.other, index=True
     )
-    # Written by the model, shown to a person, never sent by itself.
+    # What the reply seems to be asking for, in a line — shown in the log so
+    # a person can triage without opening every message. Never an email: this
+    # application has no way to send one.
     suggested_reply: Mapped[str | None] = mapped_column(Text)
     classified_by: Mapped[str] = mapped_column(String(40), default="rules")
     handled: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(

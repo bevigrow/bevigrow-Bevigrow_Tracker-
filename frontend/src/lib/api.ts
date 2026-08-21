@@ -314,6 +314,7 @@ export const api = {
       body: form,
     }),
   campaignStatus: (id: number) => request<CampaignStatus>(`/api/campaigns/${id}`),
+  deleteCampaign: (id: number) => request<void>(`/api/campaigns/${id}`, { method: 'DELETE' }),
   outreachChat: (message: string, campaign_id?: number) =>
     request<{ reply: string; action: string; acted: boolean; campaign_id: number | null }>(
       '/api/campaigns/chat',

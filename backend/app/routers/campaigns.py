@@ -13,7 +13,7 @@ import json
 import logging
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..config import settings
@@ -310,6 +310,8 @@ async def import_companies(
             invalid_emails=report.invalid_emails,
             possible_duplicates=report.possible_duplicates,
             unmapped_columns=report.unmapped_columns,
+            repeated_companies=report.repeated_companies,
+            shared_locations=report.shared_locations,
         ),
     }
 
@@ -651,3 +653,35 @@ def outreach_health(db: Session = Depends(get_db), _: User = Depends(get_current
         "daily_limit": quota["limit"],
         "pace_seconds": settings.OUTREACH_PACE_SECONDS,
     }
+
+
+@router.delete("/{campaign_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_campaign(
+    campaign_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)
+):
+    """Remove a campaign, its queue and its send history.
+
+    What is *not* removed: the outreach records of emails that actually went
+    out. Those are the log of real messages to real companies, they are what
+    the duplicate check reads before writing to an address again, and they were
+    never this campaign's property — deleting a test run should tidy the list,
+    not quietly make the app willing to email somebody a second time.
+
+    A campaign still sending is stopped first, so the scheduler cannot pick it
+    up between the delete and the commit.
+    """
+    campaign = _get(db, campaign_id)
+    if campaign.status in (CampaignStatus.running, CampaignStatus.daily_limit):
+        cm.pause(db, campaign, "Paused before deletion.")
+
+    sent = db.scalar(
+        select(func.count(CampaignTarget.id)).where(
+            CampaignTarget.campaign_id == campaign.id,
+            CampaignTarget.state == TargetState.sent,
+        )
+    ) or 0
+    db.delete(campaign)
+    db.commit()
+    log.info(
+        "Deleted campaign %s; %d outreach record(s) from it were kept", campaign_id, sent
+    )

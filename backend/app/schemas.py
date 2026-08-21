@@ -574,6 +574,8 @@ class ImportReportOut(BaseModel):
     invalid_emails: int
     possible_duplicates: list[str] = []
     unmapped_columns: list[str] = []
+    repeated_companies: list[str] = []
+    shared_locations: list[str] = []
 
 
 class CampaignOut(ORMModel):

@@ -6,22 +6,33 @@
  * the laptop — does not stop it; the queue, the daily count and the position
  * all live in the database, and the campaign carries on from wherever it was.
  */
-import { FileUp, MailCheck, Pause, Play, Square } from 'lucide-react'
+import { FileUp, MailCheck, Pause, Play, Square, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { OutreachChat } from '../components/OutreachChat'
-import { Button, Card, EmptyState, Field, Input, Modal, Select, Skeleton } from '../components/ui'
+import { OutreachSetup } from '../components/OutreachSetup'
+import {
+  Button,
+  Card,
+  ConfirmDialog,
+  EmptyState,
+  Field,
+  Input,
+  Modal,
+  Select,
+  Skeleton,
+} from '../components/ui'
 import { ApiError, api } from '../lib/api'
-import { relativeDays } from '../lib/format'
 import { useToast } from '../lib/toast'
-import type { Campaign, EmailTemplate, ImportReport } from '../lib/types'
+import type { Campaign, CampaignStatus, EmailTemplate, ImportReport } from '../lib/types'
 
 export function Campaigns() {
   const toast = useToast()
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [templates, setTemplates] = useState<EmailTemplate[]>([])
   const [mailboxReady, setMailboxReady] = useState<boolean | null>(null)
+  const [mailboxVerified, setMailboxVerified] = useState(false)
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
 
@@ -39,6 +50,7 @@ export function Campaigns() {
       // perfectly configured Resend account to "connect your Gmail" and left
       // New campaign disabled.
       setMailboxReady(Boolean(acct?.has_password || acct?.has_api_key))
+      setMailboxVerified(Boolean(acct?.last_verified_at))
     } catch {
       toast.error('Could not load campaigns.')
     } finally {
@@ -58,8 +70,9 @@ export function Campaigns() {
         <div>
           <h1 className="font-display text-3xl text-latte">Outreach Agent</h1>
           <p className="mt-1 text-sm text-latte/50">
-            Upload a company list, and it writes and sends one email at a time — at most{' '}
-            <span className="text-latte/70">50 a day</span>.
+            Upload a company list and it writes and sends the emails for you — one at a time, at
+            most <span className="text-latte/70">50 a day</span>, and it never writes to the same
+            address twice.
           </p>
         </div>
         <Button
@@ -71,26 +84,16 @@ export function Campaigns() {
         </Button>
       </div>
 
-      {blocked && (
-        <Card className="!p-4">
-          <p className="text-sm text-latte/70">
-            Before the first campaign:{' '}
-            {mailboxReady === false && (
-              <>
-                <Link to="/app/outreach/settings" className="text-gold hover:underline">
-                  connect a sending mailbox
-                </Link>
-                {templates.length === 0 && ' and '}
-              </>
-            )}
-            {templates.length === 0 && (
-              <Link to="/app/outreach/settings" className="text-gold hover:underline">
-                write your email template
-              </Link>
-            )}
-            .
-          </p>
-        </Card>
+      {!loading && (
+        <OutreachSetup
+          state={{
+            mailboxReady: Boolean(mailboxReady),
+            mailboxVerified,
+            hasTemplate: templates.length > 0,
+            hasCampaign: campaigns.length > 0,
+          }}
+          onNewCampaign={() => setCreating(true)}
+        />
       )}
 
       {loading ? (
@@ -138,18 +141,54 @@ export function Campaigns() {
 /* --------------------------------------------------------------- one campaign */
 
 const STATE_META: Record<string, { label: string; hex: string }> = {
-  draft: { label: 'Draft', hex: '#9C8AA5' },
-  running: { label: 'Running', hex: '#4FD18B' },
+  draft: { label: 'Not started', hex: '#9C8AA5' },
+  running: { label: 'Sending', hex: '#4FD18B' },
   paused: { label: 'Paused', hex: '#E0A458' },
-  daily_limit: { label: 'Daily limit reached', hex: '#D9A05B' },
-  completed: { label: 'Completed', hex: '#5BA8D9' },
+  daily_limit: { label: "Done for today", hex: '#D9A05B' },
+  completed: { label: 'Finished', hex: '#5BA8D9' },
   stopped: { label: 'Stopped', hex: '#D9705B' },
+}
+
+/**
+ * What is happening, in a sentence.
+ *
+ * The card used to present six figures and leave the reader to assemble the
+ * meaning: "73 / 200 processed", "50/50 today", "next: XYZ". Every one of
+ * those is true and none of them answers the question somebody actually opens
+ * this page with, which is "is it working, and do I need to do anything?".
+ */
+function plainState(s: CampaignStatus | null): string {
+  if (!s) return 'Loading…'
+  const left = s.remaining
+  switch (s.status) {
+    case 'running':
+      return s.next_company
+        ? `Sending now — ${s.next_company} is next.`
+        : 'Sending now.'
+    case 'daily_limit':
+      return `Today's ${s.daily_limit} are sent. ${left} still to go — it carries on tomorrow${
+        s.next_company ? `, starting with ${s.next_company}` : ''
+      }.`
+    case 'paused':
+      return s.awaiting_approval > 0
+        ? `Paused, with ${s.awaiting_approval} email${s.awaiting_approval === 1 ? '' : 's'} waiting for you to read.`
+        : `Paused. ${left} still to send whenever you press Start.`
+    case 'completed':
+      return `Finished — ${s.sent} email${s.sent === 1 ? '' : 's'} to ${s.companies_contacted} compan${
+        s.companies_contacted === 1 ? 'y' : 'ies'
+      }.`
+    case 'stopped':
+      return `Stopped. ${s.sent} sent before it was stopped.`
+    default:
+      return `${s.total} address${s.total === 1 ? '' : 'es'} ready. Press Start when you are.`
+  }
 }
 
 function CampaignRow({ campaign, onChanged }: { campaign: Campaign; onChanged: () => void }) {
   const toast = useToast()
   const [status, setStatus] = useState<Awaited<ReturnType<typeof api.campaignStatus>> | null>(null)
   const [switching, setSwitching] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   const refresh = useCallback(async () => {
     try {
@@ -198,6 +237,18 @@ function CampaignRow({ campaign, onChanged }: { campaign: Campaign; onChanged: (
       toast.error(err instanceof ApiError ? err.message : 'Could not change that.')
     } finally {
       setSwitching(false)
+    }
+  }
+
+  const remove = async () => {
+    try {
+      await api.deleteCampaign(campaign.id)
+      toast.success('Campaign removed. The emails it sent are still in your outreach log.')
+      onChanged()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not delete that.')
+    } finally {
+      setConfirmingDelete(false)
     }
   }
 
@@ -272,57 +323,51 @@ function CampaignRow({ campaign, onChanged }: { campaign: Campaign; onChanged: (
                   : 'border-emerald-400/35 bg-emerald-400/10 text-emerald-300 hover:border-emerald-400/60'
               }`}
             >
-              {mode === 'manual' ? 'Approve each' : 'Automatic'}
+              {mode === 'manual' ? 'You read each one first' : 'Sends by itself'}
             </button>
           </div>
 
           {status && (
             <>
-              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-latte/55">
-                <span>
-                  <span className="text-latte/85">{status.processed}</span> / {status.total}{' '}
-                  processed
-                </span>
-                <span>
-                  <span className="text-emerald-300/90">{status.sent}</span> sent to{' '}
-                  {status.companies_contacted} companies
-                </span>
-                {status.duplicates > 0 && <span>{status.duplicates} duplicates</span>}
-                {status.failed > 0 && (
-                  <span className="text-red-300/90">{status.failed} failed</span>
-                )}
-                {/* A link, not a label.
-                    It used to state that drafts were waiting and offer no way
-                    to reach them — the approvals live on the campaign's own
-                    page, and the only route there was clicking the title,
-                    which nothing said. Telling somebody an action is required
-                    and hiding the action is worse than not mentioning it. */}
-                {status.awaiting_approval > 0 && (
-                  <Link
-                    to={`/app/outreach/campaigns/${campaign.id}`}
-                    className="text-gold underline decoration-gold/40 underline-offset-2 hover:decoration-gold"
-                  >
-                    {status.awaiting_approval} awaiting approval
-                  </Link>
-                )}
-              </div>
+              {/* The one line that answers "is it working?" */}
+              <p className="mt-2 text-sm text-latte/80">{plainState(status)}</p>
 
-              {/* progress */}
-              <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-latte/10">
+              <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-latte/10">
                 <div
                   className="h-full rounded-full transition-[width] duration-500"
                   style={{ width: `${percent}%`, backgroundColor: meta.hex }}
                 />
               </div>
 
-              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-latte/40">
+              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px] text-latte/45">
                 <span>
-                  Today {status.sent_today} / {status.daily_limit}
+                  <span className="text-emerald-300/90">{status.sent}</span> sent
+                  {status.companies_contacted > 0 && ` to ${status.companies_contacted} companies`}
                 </span>
-                {status.next_company && <span>Next: {status.next_company}</span>}
-                {status.last_company && <span>Last: {status.last_company}</span>}
-                {status.last_activity_at && (
-                  <span>{relativeDays(status.last_activity_at)}</span>
+                <span>{status.remaining} to go</span>
+                <span>
+                  today {status.sent_today}/{status.daily_limit}
+                </span>
+                {status.failed > 0 && (
+                  <Link
+                    to={`/app/outreach/campaigns/${campaign.id}`}
+                    className="text-red-300/90 underline decoration-red-300/30 underline-offset-2"
+                  >
+                    {status.failed} failed
+                  </Link>
+                )}
+                {status.duplicates > 0 && (
+                  <span title="Addresses already contacted before, so they were not written to again">
+                    {status.duplicates} already contacted
+                  </span>
+                )}
+                {status.awaiting_approval > 0 && (
+                  <Link
+                    to={`/app/outreach/campaigns/${campaign.id}`}
+                    className="text-gold underline decoration-gold/40 underline-offset-2 hover:decoration-gold"
+                  >
+                    {status.awaiting_approval} waiting for you
+                  </Link>
                 )}
               </div>
             </>
@@ -337,13 +382,17 @@ function CampaignRow({ campaign, onChanged }: { campaign: Campaign; onChanged: (
           {(status?.awaiting_approval ?? 0) > 0 && (
             <Link to={`/app/outreach/campaigns/${campaign.id}`}>
               <Button icon={<MailCheck size={15} />} className="px-3 py-2 text-xs">
-                Review {status?.awaiting_approval}
+                Read {status?.awaiting_approval} draft{status?.awaiting_approval === 1 ? '' : 's'}
               </Button>
             </Link>
           )}
           {canStart && (
             <Button onClick={start} icon={<Play size={15} />} className="px-3 py-2 text-xs">
-              {status?.status === 'daily_limit' ? 'Resume' : 'Start'}
+              {status?.status === 'daily_limit'
+                ? 'Send more today'
+                : status?.status === 'paused'
+                  ? 'Continue'
+                  : 'Start sending'}
             </Button>
           )}
           {canPause && (
@@ -356,6 +405,14 @@ function CampaignRow({ campaign, onChanged }: { campaign: Campaign; onChanged: (
               Pause
             </Button>
           )}
+          <button
+            onClick={() => setConfirmingDelete(true)}
+            title="Delete this campaign — sent emails stay in your outreach log"
+            aria-label={`Delete ${campaign.name}`}
+            className="rounded-lg p-2 text-latte/35 transition hover:bg-red-500/15 hover:text-red-300"
+          >
+            <Trash2 size={15} />
+          </button>
           {!finished && (
             <button
               onClick={stop}
@@ -369,11 +426,23 @@ function CampaignRow({ campaign, onChanged }: { campaign: Campaign; onChanged: (
         </div>
       </div>
 
+      <ConfirmDialog
+        open={confirmingDelete}
+        title={`Delete “${campaign.name}”?`}
+        message={
+          `The queue, the drafts and the send history for this campaign are removed. ` +
+          `The ${status?.sent ?? 0} email${status?.sent === 1 ? '' : 's'} it actually sent stay ` +
+          `in your outreach log — they are the record of real messages, and they are what stops ` +
+          `those addresses being written to again.`
+        }
+        onConfirm={remove}
+        onCancel={() => setConfirmingDelete(false)}
+      />
+
       {status?.status === 'daily_limit' && (
         <p className="mt-3 rounded-lg border border-gold/25 bg-gold/[0.07] px-3.5 py-2.5 text-[12px] text-latte/70">
-          Today’s fifty are spent. It will carry on from{' '}
-          <span className="text-gold">{status.next_company}</span> tomorrow — press Resume then, or
-          leave it and press Resume whenever you next open this.
+          Nothing more will go out today — that is the fifty-a-day limit doing its job. It picks
+          up by itself tomorrow morning; you do not need to be here for it.
         </p>
       )}
     </Card>
@@ -465,6 +534,38 @@ function ImportModal({
                   <li key={p}>{p}</li>
                 ))}
               </ul>
+            </div>
+          )}
+          {report.repeated_companies.length > 0 && (
+            <div className="rounded-lg border border-caramel/25 bg-bean/30 px-3.5 py-3">
+              <p className="text-[12px] font-medium text-latte/75">
+                The same company appears more than once:
+              </p>
+              <ul className="mt-1.5 space-y-1 text-[11.5px] text-latte/55">
+                {report.repeated_companies.slice(0, 6).map((x) => (
+                  <li key={x}>{x}</li>
+                ))}
+              </ul>
+              <p className="mt-1.5 text-[11px] text-latte/40">
+                All of them are queued. Different addresses at one company are emailed separately;
+                the same address twice is never written to twice.
+              </p>
+            </div>
+          )}
+          {report.shared_locations.length > 0 && (
+            <div className="rounded-lg border border-caramel/25 bg-bean/30 px-3.5 py-3">
+              <p className="text-[12px] font-medium text-latte/75">
+                Different companies at the same address:
+              </p>
+              <ul className="mt-1.5 space-y-1 text-[11.5px] text-latte/55">
+                {report.shared_locations.slice(0, 6).map((x) => (
+                  <li key={x}>{x}</li>
+                ))}
+              </ul>
+              <p className="mt-1.5 text-[11px] text-latte/40">
+                Often one group with several trading names. Worth a look before they each get a
+                letter.
+              </p>
             </div>
           )}
           {report.unmapped_columns.length > 0 && (

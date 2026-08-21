@@ -332,6 +332,10 @@ export interface ImportReport {
   invalid_emails: number
   possible_duplicates: string[]
   unmapped_columns: string[]
+  /** The same company name on more than one row. */
+  repeated_companies: string[]
+  /** Different company names at one address. */
+  shared_locations: string[]
 }
 
 export type CampaignState =

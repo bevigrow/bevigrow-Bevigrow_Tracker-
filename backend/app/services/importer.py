@@ -221,6 +221,14 @@ class ImportReport:
     invalid_emails: int = 0
     possible_duplicates: list[str] = field(default_factory=list)
     unmapped_columns: list[str] = field(default_factory=list)
+    # The same company name on more than one row. Not necessarily an error —
+    # a firm with two offices is listed twice on purpose — but you should see
+    # it before two people at the same company get near-identical letters.
+    repeated_companies: list[str] = field(default_factory=list)
+    # Different company names at one address. Usually a group with several
+    # trading names, sometimes the same business entered twice. Reported so a
+    # person decides, because only a person can.
+    shared_locations: list[str] = field(default_factory=list)
 
 
 def _rows_from_xlsx(data: bytes) -> list[list[str]]:
@@ -413,6 +421,8 @@ def parse(data: bytes, filename: str) -> ImportReport:
     seen_addresses: dict[str, str] = {}          # address -> the group that claimed it
     group_addresses: dict[str, set[str]] = {}    # group key -> its addresses
     names_by_norm: dict[str, set[str]] = {}      # normalised name -> spellings seen
+    rows_by_norm: dict[str, int] = {}            # normalised name -> how many rows
+    companies_at: dict[str, set[str]] = {}       # normalised address -> companies there
     groups_by_norm: dict[str, set[str]] = {}     # normalised name -> group keys
     position = 0
 
@@ -451,6 +461,13 @@ def parse(data: bytes, filename: str) -> ImportReport:
         norm = normalize_company(company)
         group = domain_of(emails[0] if emails else None, values.get("website")) or norm
         names_by_norm.setdefault(norm, set()).add(company)
+        rows_by_norm[norm] = rows_by_norm.get(norm, 0) + 1
+        # An address is the same address whatever the capitalisation or
+        # spacing; anything looser would pair two firms on one street.
+        where = _PUNCT.sub(' ', tidy(values.get('location'))).casefold()
+        where = ' '.join(where.split())
+        if where:
+            companies_at.setdefault(where, set()).add(company)
         groups_by_norm.setdefault(norm, set()).add(group)
         group_addresses.setdefault(group, set())
 
@@ -517,6 +534,17 @@ def parse(data: bytes, filename: str) -> ImportReport:
     # firm with two sites or two firms with similar names, and only a person
     # knows which. Guessing wrong either double-sends or drops a customer, so
     # both are queued and the pair is put in front of you instead.
+    report.repeated_companies = sorted(
+        f"{sorted(names_by_norm[norm])[0]} — {count} rows"
+        for norm, count in rows_by_norm.items()
+        if count > 1
+    )
+    report.shared_locations = sorted(
+        f"{' / '.join(sorted(names))} — all at {address}"
+        for address, names in companies_at.items()
+        if len(names) > 1
+    )
+
     for norm, groups in groups_by_norm.items():
         if len(groups) > 1:
             spellings = sorted(names_by_norm.get(norm, {norm}))

@@ -513,8 +513,6 @@ function RepliesReceived({
   const toast = useToast()
   const [showHandled, setShowHandled] = useState(false)
   const visible = showHandled ? replies : replies.filter((r) => !r.handled)
-  const unmatched = replies.filter((r) => r.match_kind === 'unmatched' && !r.handled).length
-
   const ignore = async (r: InboundReply) => {
     try {
       await api.markReplyHandled(r.id, true)
@@ -532,9 +530,8 @@ function RepliesReceived({
           <div>
             <h2 className="font-display text-lg text-latte">What came back</h2>
             <p className="text-[11px] text-latte/45">
-              {unmatched > 0
-                ? `${unmatched} could not be matched to a company and are waiting for you.`
-                : 'Every reply has been matched to the company that sent it.'}
+              Replies to the outreach you sent. Other mail in the inbox is left
+              alone.
             </p>
           </div>
         </div>

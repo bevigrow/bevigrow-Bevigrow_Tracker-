@@ -337,6 +337,18 @@ def sync(db: Session, account: EmailAccount, *, days: int = LOOKBACK_DAYS) -> Sy
         db.commit()
         return result
 
+    # Anything filed as unmatched was stored by an earlier version that kept
+    # the whole inbox. It is unrelated mail by definition — a message that
+    # genuinely belongs to a company is matched by thread or by address, and
+    # one assigned by hand is `manual`, not `unmatched`. Clearing it here
+    # means the first sync after this change tidies up after the last one.
+    pruned = db.query(InboundReply).filter(
+        InboundReply.match_kind == ReplyMatch.unmatched
+    ).delete(synchronize_session=False)
+    if pruned:
+        log.info("Discarded %d unrelated message(s) kept by an earlier sync", pruned)
+        db.commit()
+
     try:
         box.select("INBOX", readonly=True)
         since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%d-%b-%Y")
@@ -399,6 +411,21 @@ def _ingest_one(db: Session, box: imaplib.IMAP4_SSL, uid: bytes, result: SyncRes
     except Exception:  # noqa: BLE001
         received = datetime.now(timezone.utc)
 
+    # Match first, and keep nothing that does not match.
+    #
+    # This mailbox is a person's inbox, not a channel dedicated to outreach.
+    # Fourteen days of it is mostly newsletters, invoices and private mail.
+    # Storing all of that and labelling it "unmatched" would bury the four
+    # replies that matter under two hundred that do not, so a message earns a
+    # row only by answering something this application sent: either it quotes
+    # a Message-ID we generated, or it comes from an address we wrote to.
+    # Everything else is left where it belongs, in Gmail, unread by us.
+    references = _ids(message.get("References")) + _ids(message.get("In-Reply-To"))
+    kind, row, campaign_id = _match(db, references, from_email)
+    if kind is ReplyMatch.unmatched:
+        result.skipped += 1
+        return
+
     # An automated response says so in a header long before its wording does.
     auto = (message.get("Auto-Submitted") or "").lower()
     precedence = (message.get("Precedence") or "").lower()
@@ -419,9 +446,6 @@ def _ingest_one(db: Session, box: imaplib.IMAP4_SSL, uid: bytes, result: SyncRes
     ):
         result.ai_reads += 1
         label, how, summary = read_with_ai(subject, body, label)
-
-    references = _ids(message.get("References")) + _ids(message.get("In-Reply-To"))
-    kind, row, campaign_id = _match(db, references, from_email)
 
     reply = InboundReply(
         message_id=message_id,

@@ -367,8 +367,16 @@ export function Outreach() {
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <StatusPill status={r.status} />
-                      <span className="chip border-caramel/25 bg-bean/40 text-latte/55">
-                        {METHOD_META[r.contact_method].icon} {METHOD_META[r.contact_method].label}
+                      {/* The address, not the word "Email".
+                          One company with three mailboxes is three rows here,
+                          on purpose — each is written to and answers (or does
+                          not) separately. Labelling every row "Email" made
+                          those three look like the same row entered thrice. */}
+                      <span className="chip max-w-full border-caramel/25 bg-bean/40 text-latte/55">
+                        {METHOD_META[r.contact_method].icon}{' '}
+                        <span className="truncate">
+                          {r.contact_point || r.email || METHOD_META[r.contact_method].label}
+                        </span>
                       </span>
                       {r.follow_ups_sent > 0 && (
                         <span className="text-[11px] text-latte/40">

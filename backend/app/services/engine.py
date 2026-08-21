@@ -292,8 +292,19 @@ def _log_outreach(
     local = sent_at + timedelta(minutes=settings.OUTREACH_DAY_OFFSET_MINUTES)
     body = target.prepared_body or ""
     subject = target.prepared_subject or ""
+    # "Albrecht & Dill GmbH, Brandstücken 23, 22549 Hamburg" — the address
+    # rides along with the name in the log, because two firms with similar
+    # names are told apart by where they are, and the outreach list is scanned
+    # by eye. Country stays in its own column, where it can be filtered on.
+    #
+    # This is the *record* only. The email still greets "Dear Albrecht & Dill
+    # GmbH Team" — the template reads the target's own company_name, which is
+    # untouched. Putting an address into a greeting would be unmistakable.
+    label = target.company_name
+    if target.location:
+        label = f"{target.company_name}, {target.location}"
     row = Outreach(
-        company_name=target.company_name,
+        company_name=label[:200],
         contact_person=target.contact_person,
         website=target.website,
         email=target.email,

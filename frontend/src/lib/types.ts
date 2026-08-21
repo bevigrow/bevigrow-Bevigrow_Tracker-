@@ -496,3 +496,12 @@ export interface DuplicateGroup {
   contacted: number
   skipped_as_duplicate: number
 }
+
+/** Sends and replies by month, country against month, and reply speed. */
+export interface TrendReport {
+  months: string[]
+  by_month: { month: string; label: string; sent: number; replied: number }[]
+  country_by_month: { country: string; cells: number[] }[]
+  response_days: { bucket: string; count: number }[]
+  replies_counted: number
+}

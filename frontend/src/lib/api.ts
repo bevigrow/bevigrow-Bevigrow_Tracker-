@@ -12,6 +12,7 @@ import type {
   DailyReport,
   Dashboard,
   DuplicateGroup,
+  TrendReport,
   EmailAccount,
   EmailTemplate,
   ImportReport,
@@ -319,6 +320,8 @@ export const api = {
     request<void>(`/api/campaigns/${id}/purge`, { method: 'DELETE' }),
   dailyReport: (days = 30) => request<DailyReport>(`/api/campaigns/report/daily${qs({ days })}`),
   duplicateReport: () => request<DuplicateGroup[]>('/api/campaigns/report/duplicates'),
+  trendReport: (months = 12) =>
+    request<TrendReport>(`/api/campaigns/report/trends${qs({ months })}`),
   importCampaign: (form: FormData) =>
     request<{ campaign: Campaign; report: ImportReport }>('/api/campaigns/import', {
       method: 'POST',

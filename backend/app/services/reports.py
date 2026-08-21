@@ -14,7 +14,7 @@ from datetime import date, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..models import DailyQuota, SendLedger
+from ..models import DailyQuota, Outreach, SendLedger
 from . import campaigns as cm
 from .importer import normalize_company
 
@@ -147,4 +147,109 @@ def totals(db: Session) -> dict:
         "skipped": counts.get("skipped", 0),
         "companies": companies,
         "today": cm.quota_state(db),
+    }
+
+
+def trends(db: Session, months: int = 12) -> dict:
+    """Three questions the daily view cannot answer.
+
+    Is it working *over time*, where has the effort gone *when*, and how long
+    do the people who answer take to do it. All three read the ledger and the
+    outreach log, so they survive campaigns being deleted.
+    """
+    today = cm.sending_day()
+    first = date(today.year, today.month, 1)
+    for _ in range(max(1, months) - 1):
+        first = date(first.year - 1, 12, 1) if first.month == 1 else date(first.year, first.month - 1, 1)
+
+    def month_key(value: date) -> str:
+        return f"{value.year:04d}-{value.month:02d}"
+
+    # Every month in the window, so a quiet one is a gap in the line rather
+    # than a month that silently does not exist.
+    axis: list[str] = []
+    cursor = first
+    while cursor <= today:
+        axis.append(month_key(cursor))
+        cursor = date(cursor.year + 1, 1, 1) if cursor.month == 12 else date(cursor.year, cursor.month + 1, 1)
+
+    sent_rows = db.execute(
+        select(SendLedger.day, func.count(SendLedger.id))
+        .where(SendLedger.outcome == "sent", SendLedger.day >= first)
+        .group_by(SendLedger.day)
+    ).all()
+    sent_by_month: dict[str, int] = defaultdict(int)
+    for day, count in sent_rows:
+        if isinstance(day, str):
+            day = date.fromisoformat(day)
+        sent_by_month[month_key(day)] += count
+
+    replied_rows = db.execute(
+        select(Outreach.replied_on, func.count(Outreach.id))
+        .where(Outreach.replied_on.is_not(None), Outreach.replied_on >= first)
+        .group_by(Outreach.replied_on)
+    ).all()
+    replied_by_month: dict[str, int] = defaultdict(int)
+    for day, count in replied_rows:
+        if isinstance(day, str):
+            day = date.fromisoformat(day)
+        replied_by_month[month_key(day)] += count
+
+    by_month = [
+        {
+            "month": key,
+            "label": date(int(key[:4]), int(key[5:]), 1).strftime("%b %y"),
+            "sent": sent_by_month.get(key, 0),
+            "replied": replied_by_month.get(key, 0),
+        }
+        for key in axis
+    ]
+
+    # Country against month. Two categories and one magnitude, which is a grid
+    # rather than a stack: eleven countries would need eleven hues, and the
+    # palette holds three on purpose.
+    grid_rows = db.execute(
+        select(SendLedger.day, SendLedger.country, func.count(SendLedger.id))
+        .where(SendLedger.outcome == "sent", SendLedger.day >= first)
+        .group_by(SendLedger.day, SendLedger.country)
+    ).all()
+    grid: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    for day, country, count in grid_rows:
+        if isinstance(day, str):
+            day = date.fromisoformat(day)
+        grid[country or "Unknown"][month_key(day)] += count
+
+    countries = sorted(grid, key=lambda c: -sum(grid[c].values()))
+    country_by_month = [
+        {"country": c, "cells": [grid[c].get(m, 0) for m in axis]} for c in countries
+    ]
+
+    # How long the people who answer take. Only the ones who answered — the
+    # silent majority has no response time, and averaging them in as zero or
+    # as infinity would both be lies.
+    gaps = db.execute(
+        select(Outreach.contacted_on, Outreach.replied_on).where(
+            Outreach.replied_on.is_not(None), Outreach.contacted_on.is_not(None)
+        )
+    ).all()
+    buckets = [("Same day", 0, 0), ("1-3 days", 1, 3), ("4-7 days", 4, 7),
+               ("8-14 days", 8, 14), ("15+ days", 15, 10_000)]
+    counted = {label: 0 for label, _, _ in buckets}
+    for contacted, replied in gaps:
+        if isinstance(contacted, str):
+            contacted = date.fromisoformat(contacted)
+        if isinstance(replied, str):
+            replied = date.fromisoformat(replied)
+        days = max(0, (replied - contacted).days)
+        for label, low, high in buckets:
+            if low <= days <= high:
+                counted[label] += 1
+                break
+
+    return {
+        "months": [m["label"] for m in by_month],
+        "by_month": by_month,
+        "country_by_month": country_by_month,
+        "response_days": [{"bucket": label, "count": counted[label]} for label, _, _ in buckets],
+        "replies_counted": sum(counted.values()),
     }

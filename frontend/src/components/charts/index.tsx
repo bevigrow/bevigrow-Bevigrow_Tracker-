@@ -1158,3 +1158,155 @@ export function ColumnTable({ data, unit = 'Count' }: { data: Column[]; unit?: s
     </div>
   )
 }
+
+/* ----------------------------------------------------------------- heatmap */
+
+export interface HeatRow {
+  label: string
+  cells: number[]
+}
+
+/**
+ * Two categories and one magnitude — a grid, not a stack.
+ *
+ * Country against month is the case this exists for. Stacking it would need a
+ * hue per country, and the palette holds three on purpose; eleven would be
+ * eleven guesses at which is which. A grid needs only one hue and reads by
+ * density, which is the honest encoding when the question is "where and when
+ * was the effort", not "what share was Germany".
+ *
+ * Empty cells are drawn as an empty cell rather than skipped: a month with no
+ * sends is information, and a gap that closes up hides it.
+ */
+export function Heatmap({
+  rows,
+  columns,
+  unit = '',
+}: {
+  rows: HeatRow[]
+  columns: string[]
+  unit?: string
+}) {
+  const [tip, setTip] = useState<TipState | null>(null)
+
+  if (!rows.length || !columns.length) {
+    return <p className="py-10 text-center text-sm text-latte/40">Nothing to show yet.</p>
+  }
+
+  const labelW = 128
+  const cell = Math.min(44, Math.max(18, (620 - labelW - 8) / columns.length))
+  const gap = 2
+  const rowH = cell
+  const height = rows.length * rowH + 22
+  const width = labelW + columns.length * cell
+  const max = Math.max(1, ...rows.flatMap((r) => r.cells))
+
+  return (
+    <div className="relative overflow-x-auto">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        style={{ height, minWidth: Math.min(width, 620) }}
+        className="w-full"
+        role="img"
+        aria-label={`${unit || 'Value'} per ${rows.length} rows across ${columns.length} months`}
+      >
+        {columns.map((c, x) => (
+          <text
+            key={c + x}
+            x={labelW + x * cell + cell / 2}
+            y={12}
+            textAnchor="middle"
+            fontSize={9.5}
+            fill={AXIS_TEXT}
+          >
+            {c}
+          </text>
+        ))}
+
+        {rows.map((row, y) => (
+          <g key={row.label}>
+            <text
+              x={labelW - 10}
+              y={22 + y * rowH + rowH / 2 + 3}
+              textAnchor="end"
+              fontSize={11}
+              fill={AXIS_TEXT}
+            >
+              {row.label.length > 16 ? `${row.label.slice(0, 15)}…` : row.label}
+            </text>
+            {columns.map((_, x) => {
+              const value = row.cells[x] ?? 0
+              return (
+                <rect
+                  key={x}
+                  x={labelW + x * cell + gap / 2}
+                  y={22 + y * rowH + gap / 2}
+                  width={cell - gap}
+                  height={rowH - gap}
+                  rx={3}
+                  fill={value > 0 ? roastForValue(value, max) : 'rgba(245,230,211,0.045)'}
+                  onMouseMove={(e) => {
+                    const rect = (
+                      e.currentTarget.ownerSVGElement as SVGSVGElement
+                    ).getBoundingClientRect()
+                    setTip({
+                      x: e.clientX - rect.left,
+                      y: e.clientY - rect.top,
+                      content: (
+                        <>
+                          <div className="font-semibold text-latte">{row.label}</div>
+                          <div className="text-latte/65">
+                            {columns[x]}: {value.toLocaleString()} {unit}
+                          </div>
+                        </>
+                      ),
+                    })
+                  }}
+                  onMouseLeave={() => setTip(null)}
+                />
+              )
+            })}
+          </g>
+        ))}
+      </svg>
+      <Tooltip tip={tip} />
+    </div>
+  )
+}
+
+export function HeatmapTable({
+  rows,
+  columns,
+}: {
+  rows: HeatRow[]
+  columns: string[]
+}) {
+  return (
+    <div className="max-h-72 overflow-auto">
+      <table className="w-full text-sm">
+        <thead className="sticky top-0 bg-espresso">
+          <tr>
+            <th className="table-head">Country</th>
+            {columns.map((c) => (
+              <th key={c} className="table-head text-right">
+                {c}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.label} className="border-t border-caramel/10">
+              <td className="table-cell">{r.label}</td>
+              {columns.map((_, i) => (
+                <td key={i} className="table-cell text-right tabular-nums">
+                  {r.cells[i] ?? 0}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}

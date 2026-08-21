@@ -758,6 +758,16 @@ def daily_report(
     return {"totals": reports.totals(db), "days": reports.daily(db, days)}
 
 
+@router.get("/report/trends")
+def trend_report(
+    months: int = Query(default=12, ge=1, le=36),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Sends and replies by month, country against month, and reply speed."""
+    return reports.trends(db, months)
+
+
 @router.get("/report/duplicates")
 def duplicate_report(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     """Companies sharing a name but differing in address, domain or mailbox."""

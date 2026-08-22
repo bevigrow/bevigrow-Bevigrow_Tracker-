@@ -477,6 +477,26 @@ def parse(data: bytes, filename: str) -> ImportReport:
                 values[field_name] = text
 
         company = values.get("company_name") or ""
+        # A location typed into the company-name cell is taken back out.
+        #
+        # Files often carry "Spice Star Foodstuff Trading LLC, Dubai" in the
+        # name column *and* "Dubai" in the location column. The greeting reads
+        # the name, so the letter would open "Dear Spice Star Foodstuff
+        # Trading LLC, Dubai Team," — which no person would write and which
+        # reads immediately as a mailshot.
+        #
+        # Only removed when the location column actually says the same thing:
+        # a name genuinely ending in a place, with nothing to confirm it
+        # against, is left exactly as the file has it. The log still shows the
+        # name with the location after it — that is written when the row is
+        # logged, from the two columns kept apart here.
+        place = clean_cell(values.get("location"))
+        if company and place:
+            trimmed = company.rstrip()
+            for suffix in (f", {place}", f" - {place}", f" ({place})", f", {place},"):
+                if trimmed.casefold().endswith(suffix.casefold()):
+                    company = trimmed[: -len(suffix)].rstrip(" ,-").strip() or trimmed
+                    break
         if not company and not emails and not values.get("website"):
             continue  # a blank line in the sheet, not a company
         report.file_rows += 1

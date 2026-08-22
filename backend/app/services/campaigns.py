@@ -25,7 +25,7 @@ from __future__ import annotations
 import logging
 from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from ..config import settings
@@ -194,30 +194,55 @@ def next_target(db: Session, campaign: Campaign) -> CampaignTarget | None:
 
 
 def claim_next_target(db: Session, campaign: Campaign) -> CampaignTarget | None:
-    """Take the next address, locking it against anyone else taking it too.
+    """Take the next address, and make sure nobody else takes it too.
 
-    The background scheduler and a person pressing Send can both reach for the
-    same row within milliseconds of each other, and two claims on one row is
-    two identical emails to one buyer. Postgres hands the row to whichever
-    transaction arrives first and gives the other the row after it —
-    SKIP LOCKED rather than a wait, because the second caller wants the next
-    company, not this one a moment later.
+    Two claims on one row is two identical emails to one buyer, which is the
+    single worst thing this application can do. The scheduler, the heartbeat
+    and a browser watching a campaign can all reach for the same row within
+    milliseconds.
 
-    SQLite has neither, and also no concurrency: one process, one thread at a
-    time, so the plain read is already exclusive.
+    The claim is a conditional update — "become processing, but only if you
+    are still pending" — and the database reports whether it changed a row.
+    One caller gets 1 and the address; the others get 0 and go round for the
+    next one. That is atomic on Postgres and on SQLite alike, which matters
+    because the alternative was SELECT ... FOR UPDATE SKIP LOCKED, correct on
+    Postgres and silently ignored on SQLite: a guard that cannot be tested
+    where the tests run is a guard nobody can vouch for.
+
+    The row lock is still taken on Postgres. Belt and braces on the one
+    operation where being wrong means a stranger receives the same cold email
+    twice.
     """
-    stmt = (
-        select(CampaignTarget)
-        .where(
-            CampaignTarget.campaign_id == campaign.id,
-            CampaignTarget.state == TargetState.pending,
+    for _ in range(50):
+        stmt = (
+            select(CampaignTarget.id)
+            .where(
+                CampaignTarget.campaign_id == campaign.id,
+                CampaignTarget.state == TargetState.pending,
+            )
+            .order_by(CampaignTarget.position.asc())
+            .limit(1)
         )
-        .order_by(CampaignTarget.position.asc())
-        .limit(1)
-    )
-    if not settings.is_sqlite:
-        stmt = stmt.with_for_update(skip_locked=True)
-    return db.scalar(stmt)
+        if not settings.is_sqlite:
+            stmt = stmt.with_for_update(skip_locked=True)
+        target_id = db.scalar(stmt)
+        if target_id is None:
+            return None
+
+        claimed = db.execute(
+            update(CampaignTarget)
+            .where(
+                CampaignTarget.id == target_id,
+                CampaignTarget.state == TargetState.pending,
+            )
+            .values(state=TargetState.processing)
+        ).rowcount
+        db.commit()
+        if claimed:
+            return db.get(CampaignTarget, target_id)
+        # Somebody else was a moment quicker. Their email, not ours; take the
+        # one after it rather than waiting for a row that is already gone.
+    return None
 
 
 def company_counts(db: Session, campaign: Campaign) -> dict:

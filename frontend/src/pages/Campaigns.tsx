@@ -229,18 +229,30 @@ function CampaignRow({ campaign, onChanged }: { campaign: Campaign; onChanged: (
     void refresh()
   }, [refresh])
 
-  /* The page no longer sends anything.
+  /* Watching, and nudging.
 
-     It used to drive the queue itself, one request per company, which meant
-     closing the tab stopped the campaign. The sending now lives in the server,
-     so this only asks how it is going — and stops asking when it is over. */
+     The page stopped driving the queue when the sending moved into the
+     server — closing the tab used to stop a campaign, which was the bug that
+     move fixed. But it left the queue with exactly one thing moving it, and
+     when that one thing is asleep, a campaign sits at nought sent with no
+     error to show for it.
+
+     So while somebody is watching a running campaign, this asks the server to
+     take a step as well as asking how it is going. It is safe to ask twice:
+     each send claims its row under a lock, so a step from here and a step
+     from the scheduler cannot send the same email. The effect is that a
+     campaign always moves while you are looking at it, whatever else is or
+     is not running. */
   useEffect(() => {
     const live = status?.status === 'running'
     if (!live) return
     const id = window.setInterval(() => {
       void api
-        .campaignStatus(campaign.id)
+        .stepCampaign(campaign.id, 1)
+        .catch(() => undefined)
+        .then(() => api.campaignStatus(campaign.id))
         .then((s) => {
+          if (!s) return
           setStatus(s)
           if (s.status !== 'running') onChanged()
         })

@@ -164,6 +164,24 @@ services:
         source: /*
         destination: /index.html
     headers:
+      # The app shell must never be served stale.
+      #
+      # Vite fingerprints every asset, so index.html is the one file that says
+      # which fingerprints are current. Render's default put it behind a CDN
+      # for five minutes (s-maxage=300), which meant a deploy was invisible
+      # until that expired — a new feature would go live and the browser would
+      # keep loading the previous build's chunks, looking like nothing had
+      # shipped. Revalidating it on every load costs one conditional request
+      # that answers 304 in a few bytes.
+      #
+      # Declared before the /assets rule so the immutable one below wins for
+      # the files it names.
+      - path: /*
+        name: Cache-Control
+        value: no-cache
+      # The fingerprinted files, on the other hand, can be cached forever:
+      # their names change whenever their contents do, so a stale one is
+      # unreachable rather than wrong.
       - path: /assets/*
         name: Cache-Control
         value: public, max-age=31536000, immutable

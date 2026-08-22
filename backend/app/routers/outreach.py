@@ -10,7 +10,7 @@ import json
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy import and_, case, func, or_, select, tuple_
 from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
@@ -42,6 +42,11 @@ from ..schemas import (
     OutreachUpdate,
 )
 from ..services.geo import CountryTally, canon
+
+# Row-value IN ((a, b), ...) is supported by PostgreSQL and by SQLite from
+# 3.15. Both of ours have it; the fallback exists so a stricter backend
+# degrades to a wider fetch rather than an error.
+_TUPLES_OK = True
 
 router = APIRouter(prefix="/api/outreach", tags=["outreach"])
 
@@ -177,13 +182,39 @@ def _mergeable(db: Session) -> list[list[Outreach]]:
     firms of the same name in the same city would be merged wrongly, which is
     why this is offered as a button and not done silently at startup.
     """
+    # Ask which labels repeat before fetching anything.
+    #
+    # This used to read every row in the log into memory to group them, on a
+    # page that opens constantly. The answer is a GROUP BY, and only the rows
+    # belonging to a repeated label ever need loading — on a log where nothing
+    # is duplicated, which is the normal state, that is zero rows.
+    label = func.lower(func.trim(func.coalesce(Outreach.company_name, "")))
+    country = func.lower(func.trim(func.coalesce(Outreach.country, "")))
+    repeated = [
+        (a, b)
+        for a, b in db.execute(
+            select(label, country)
+            .where(label != "")
+            .group_by(label, country)
+            .having(func.count(Outreach.id) > 1)
+        ).all()
+    ]
+    if not repeated:
+        return []
+
     groups: dict[tuple[str, str], list[Outreach]] = {}
-    for row in db.scalars(select(Outreach).order_by(Outreach.id)):
-        label = " ".join((row.company_name or "").split()).casefold()
-        if not label:
-            continue
-        key = (label, (row.country or "").strip().casefold())
-        groups.setdefault(key, []).append(row)
+    wanted = {(a, b) for a, b in repeated}
+    for row in db.scalars(
+        select(Outreach)
+        .where(tuple_(label, country).in_(repeated) if _TUPLES_OK else label.in_([a for a, _ in repeated]))
+        .order_by(Outreach.id)
+    ):
+        key = (
+            " ".join((row.company_name or "").split()).casefold(),
+            (row.country or "").strip().casefold(),
+        )
+        if key in wanted:
+            groups.setdefault(key, []).append(row)
     return [rows for rows in groups.values() if len(rows) > 1]
 
 
@@ -413,7 +444,13 @@ def undo_merge(db: Session = Depends(get_db), _: User = Depends(get_current_user
 def list_splittable(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     """Rows holding more than one address, which can be given a row each."""
     out: list[MergeGroup] = []
-    for row in db.scalars(select(Outreach).order_by(func.lower(Outreach.company_name))):
+    # Only the rows that hold a separator can hold two addresses, and asking
+    # the database for those beats reading the whole log to find them.
+    for row in db.scalars(
+        select(Outreach)
+        .where(or_(Outreach.email.like("%,%"), Outreach.email.like("%;%")))
+        .order_by(func.lower(Outreach.company_name))
+    ):
         parts = [p.strip() for p in (row.email or "").replace(";", ",").split(",") if p.strip()]
         if len(parts) > 1:
             out.append(
@@ -446,7 +483,13 @@ def split_combined(db: Session = Depends(get_db), _: User = Depends(get_current_
     and saying so is the point of it being a separate button.
     """
     out: list[MergeGroup] = []
-    for row in list(db.scalars(select(Outreach))):
+    for row in list(
+        db.scalars(
+            select(Outreach).where(
+                or_(Outreach.email.like("%,%"), Outreach.email.like("%;%"))
+            )
+        )
+    ):
         parts: list[str] = []
         for chunk in (row.email or "").replace(";", ",").split(","):
             one = chunk.strip()

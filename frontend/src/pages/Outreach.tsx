@@ -96,7 +96,7 @@ export function Outreach() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [list, s, dupes, undo, splits] = await Promise.all([
+      const [list, s] = await Promise.all([
         api.listOutreach({
           search: search.trim() || undefined,
           contact_method: method || undefined,
@@ -105,15 +105,9 @@ export function Outreach() {
           due: dueOnly || undefined,
         }),
         api.outreachStats().catch(() => null),
-        api.mergeableOutreach().catch(() => []),
-        api.undoableMerge().catch(() => null),
-        api.splittableOutreach().catch(() => []),
       ])
       setRows(list)
       setStats(s)
-      setMergeable(dupes)
-      setUndoable(undo)
-      setSplittable(splits)
     } catch {
       toast.error('Could not load the outreach list.')
     } finally {
@@ -139,6 +133,30 @@ export function Outreach() {
     const id = window.setTimeout(() => void load(), 300)
     return () => window.clearTimeout(id)
   }, [load])
+
+  /** Whether anything can be combined, separated or put back.
+   *
+   * Deliberately not part of `load`. These three answer questions about the
+   * whole log and cannot change from typing in the search box, but they were
+   * being re-asked on every debounced keystroke — five requests where one was
+   * needed, each paying the round trip to a database in another region. They
+   * are fetched once, and again only after a combine or an undo has actually
+   * changed the answer.
+   */
+  const refreshCombineState = useCallback(async () => {
+    const [dupes, undo, splits] = await Promise.all([
+      api.mergeableOutreach().catch(() => []),
+      api.undoableMerge().catch(() => null),
+      api.splittableOutreach().catch(() => []),
+    ])
+    setMergeable(dupes)
+    setUndoable(undo)
+    setSplittable(splits)
+  }, [])
+
+  useEffect(() => {
+    void refreshCombineState()
+  }, [refreshCombineState])
 
   useEffect(() => {
     // Every country the app knows, so the picker still offers one whose only
@@ -230,7 +248,7 @@ export function Outreach() {
     setCombining(true)
     try {
       const back = await api.undoMerge()
-      await load()
+      await Promise.all([load(), refreshCombineState()])
       toast.success(
         `Put back ${back.rows_removed} row${back.rows_removed === 1 ? '' : 's'}, exactly as they were.`,
       )
@@ -245,7 +263,7 @@ export function Outreach() {
     setCombining(true)
     try {
       const done = await api.splitOutreach()
-      await load()
+      await Promise.all([load(), refreshCombineState()])
       const rows = done.reduce((n, g) => n + g.rows, 0)
       toast.success(`Separated ${done.length} compan${done.length === 1 ? 'y' : 'ies'} into ${rows} rows.`)
     } catch (err) {
@@ -260,7 +278,7 @@ export function Outreach() {
     try {
       const done = await api.mergeOutreach()
       setMerging(false)
-      await load()
+      await Promise.all([load(), refreshCombineState()])
       toast.success(
         done.length
           ? `Combined ${done.length} compan${done.length === 1 ? 'y' : 'ies'}.`

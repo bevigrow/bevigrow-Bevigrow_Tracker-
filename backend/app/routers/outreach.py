@@ -814,6 +814,11 @@ def outreach_stats(db: Session = Depends(get_db), _: User = Depends(get_current_
         not_interested=counts.get(OutreachStatus.not_interested, 0),
         reply_rate=round((answered / reachable) * 100, 1) if reachable else 0.0,
         by_method={m.value: c for m, c in method_rows},
+        companies=db.scalar(
+            select(func.count(func.distinct(func.lower(func.trim(Outreach.company_name)))))
+            .where(Outreach.company_name.is_not(None), func.trim(Outreach.company_name) != "")
+        )
+        or 0,
         months=months,
         years=years,
     )
@@ -860,6 +865,10 @@ def outreach_insights(
             Outreach.status != OutreachStatus.replied,
         )
         chases = func.coalesce(func.sum(Outreach.follow_ups_sent), 0)
+        # Companies, not rows. A country written to at forty mailboxes across
+        # thirty firms has reached thirty firms, and "40" over that list reads
+        # as ten more prospects than exist.
+        firms = func.count(func.distinct(func.lower(func.trim(Outreach.company_name))))
         lead = func.count(Outreach.id).desc()
         # Grouped on the canonical name, not the raw one: "Norway", "norway"
         # and "Norway " are one country and must not each get a row with a
@@ -867,7 +876,7 @@ def outreach_insights(
         key = func.lower(func.trim(column))
         labels = _labels(column)
         rows = db.execute(
-            select(key, func.count(Outreach.id), replied, awaiting, chases)
+            select(key, func.count(Outreach.id), replied, awaiting, chases, firms)
             .where(column.is_not(None), func.trim(column) != "")
             .group_by(key)
             .order_by(lead, key.asc())
@@ -877,12 +886,13 @@ def outreach_insights(
             OutreachGroup(
                 label=labels.get(name, name),
                 total=total,
+                companies=int(n_firms or 0),
                 replied=n_replied,
                 awaiting=n_awaiting,
                 reply_rate=round(n_replied / total * 100, 1) if total else 0.0,
                 follow_ups=int(n_chases or 0),
             )
-            for name, total, n_replied, n_awaiting, n_chases in rows
+            for name, total, n_replied, n_awaiting, n_chases, n_firms in rows
         ]
 
     distinct = lambda col: db.scalar(  # noqa: E731

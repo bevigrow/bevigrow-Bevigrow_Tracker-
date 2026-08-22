@@ -289,6 +289,8 @@ export interface OutreachStats {
   not_interested: number
   reply_rate: number
   by_method: Record<string, number>
+  /** Distinct companies, where `total` counts rows. */
+  companies: number
   /** Months and years that actually hold rows, newest first. */
   months: PeriodCount[]
   years: PeriodCount[]
@@ -296,7 +298,10 @@ export interface OutreachStats {
 
 export interface OutreachGroup {
   label: string
+  /** Mailboxes written to. */
   total: number
+  /** Distinct companies behind those mailboxes. */
+  companies: number
   replied: number
   awaiting: number
   reply_rate: number

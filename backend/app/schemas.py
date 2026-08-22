@@ -770,6 +770,10 @@ class OutreachStats(BaseModel):
     not_interested: int
     reply_rate: float
     by_method: dict[str, int]
+    # Distinct companies, where `total` above counts rows. A firm listed at
+    # two addresses is one company and two rows, and a heading that says
+    # "175 companies" over 161 of them is simply wrong.
+    companies: int = 0
     # Newest first. Empty when nothing has a contact date yet.
     months: list[PeriodCount] = []
     years: list[PeriodCount] = []
@@ -819,7 +823,11 @@ class OutreachGroup(BaseModel):
     """One country or company, with how the conversations there have gone."""
 
     label: str
+    # Mailboxes written to. Two addresses at one firm are two of these and one
+    # company, and both numbers are worth having: the first is effort spent,
+    # the second is reach achieved.
     total: int
+    companies: int = 0
     replied: int
     awaiting: int
     # Messages chased after the first one. For companies this is the whole

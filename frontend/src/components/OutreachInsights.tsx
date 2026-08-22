@@ -71,6 +71,10 @@ export function OutreachInsights({
     // A reply rate off two messages is noise, so it only appears once there
     // is enough behind it to mean something.
     meta: [
+      // Companies first: "40 emails" and "30 companies" answer different
+      // questions, and the one asked of this panel is how far the prospecting
+      // has reached, not how much of it there was.
+      `${r.companies} compan${r.companies === 1 ? 'y' : 'ies'} · ${r.total} email${r.total === 1 ? '' : 's'}`,
       r.total >= ENOUGH
         ? `${r.reply_rate}% reply rate`
         : `${r.total} sent — too few to judge a rate`,

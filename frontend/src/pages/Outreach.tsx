@@ -101,6 +101,68 @@ function windowFor(period: string): { from?: string; to?: string } {
   return {}
 }
 
+/** Countries and how many companies in each, pinned where it can be read.
+ *
+ * The outreach log answers "who did we write to" one row at a time, and two
+ * addresses at one firm are two rows, so counting by eye gives the wrong
+ * answer — which is exactly the question asked most often: how many companies
+ * in Germany? This says so directly, counting firms rather than mailboxes,
+ * and stays on screen while the list underneath is scrolled.
+ */
+function CountryTally({ data }: { data: Insights }) {
+  const [open, setOpen] = useState(true)
+  const rows = [...data.by_country].sort((a, b) => b.companies - a.companies)
+  if (rows.length === 0) return null
+
+  const companies = rows.reduce((n, r) => n + r.companies, 0)
+  const emails = rows.reduce((n, r) => n + r.total, 0)
+
+  return (
+    <div className="sticky top-4 z-10">
+      <Card className="!p-3.5">
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="flex w-full items-center justify-between gap-3 text-left"
+        >
+          <span className="flex items-center gap-2">
+            <Globe size={15} className="text-gold" />
+            <span className="text-[12.5px] font-medium text-latte/85">
+              {companies} companies in {rows.length} countries
+            </span>
+          </span>
+          <span className="text-[11px] text-latte/40">
+            {emails} email{emails === 1 ? '' : 's'} · {open ? 'hide' : 'show'}
+          </span>
+        </button>
+
+        {open && (
+          <div className="mt-2.5 grid gap-x-4 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
+            {rows.map((r) => (
+              <div
+                key={r.label}
+                className="flex items-baseline justify-between gap-2 border-b border-caramel/10 py-1"
+              >
+                <span className="truncate text-[12px] text-latte/70">{r.label}</span>
+                <span className="shrink-0 text-[12px] tabular-nums text-latte/85">
+                  {r.companies}
+                  <span className="ml-1 text-[10.5px] text-latte/35">
+                    {r.total !== r.companies ? `/ ${r.total} mail` : ''}
+                  </span>
+                  {r.replied > 0 && (
+                    <span className="ml-1.5 text-[10.5px] text-emerald-300/80">
+                      {r.replied} replied
+                    </span>
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    </div>
+  )
+}
+
 /** Status pill. Colour always ships with the label, never alone. */
 function StatusPill({ status }: { status: OutreachStatus }) {
   const m = OUTREACH_META[status]
@@ -368,8 +430,15 @@ export function Outreach() {
         <div>
           <h1 className="font-display text-3xl text-latte">Outreach</h1>
           <p className="mt-1 text-sm text-latte/50">
-            {loading ? 'Loading…' : `${rows.length} compan${rows.length === 1 ? 'y' : 'ies'}`}
-            {filtered && ' matching your filters'}
+            {loading
+              ? 'Loading…'
+              : filtered
+                ? `${rows.length} row${rows.length === 1 ? '' : 's'} matching your filters`
+                : /* Companies and mailboxes are different numbers and both are
+                     true. Saying "175 companies" over 161 of them, because two
+                     addresses at one firm are two rows, is the kind of wrong
+                     that gets repeated in a meeting. */
+                  `${stats?.companies ?? rows.length} companies · ${stats?.total ?? rows.length} mailboxes`}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -428,6 +497,8 @@ export function Outreach() {
           'This cannot be undone; new imports already do it automatically.'
         }
       />
+
+      {insights && <CountryTally data={insights} />}
 
       {/* Four numbers, not a dashboard. */}
       {stats && stats.total > 0 && (

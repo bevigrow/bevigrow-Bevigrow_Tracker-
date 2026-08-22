@@ -18,6 +18,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 from .geo import tidy
 
@@ -43,6 +44,11 @@ _SUFFIXES = {
 _PUNCT = re.compile(r"[^\w\s]")
 
 
+# Memoised because the same handful of names is normalised over and over: the
+# country note reads one key per send *and* one per log row, and a company
+# appears in both. The work is a regex substitution and a case fold — trivial
+# once, and most of a request when it is done six thousand times.
+@lru_cache(maxsize=4096)
 def normalize_company(raw: str | None) -> str:
     """Comparison key for a company name.
 
@@ -114,6 +120,7 @@ FREE_MAIL = {
 }
 
 
+@lru_cache(maxsize=8192)
 def company_key(
     email: str | None,
     website: str | None,

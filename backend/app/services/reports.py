@@ -313,9 +313,12 @@ def sent_by_country(db: Session) -> list[dict]:
 
     # The log fills in what predates the ledger. A row can hold several
     # addresses, and each of those was an email that went out.
-    for row in db.scalars(select(Outreach)):
-        addresses = [a.strip() for a in (row.email or "").replace(";", ",").split(",") if a.strip()]
-        key = company_key(addresses[0] if addresses else None, row.website, row.company_name)
+    logged = db.execute(
+        select(Outreach.country, Outreach.email, Outreach.website, Outreach.company_name)
+    ).all()
+    for country, email, website, company_name in logged:
+        addresses = [a.strip() for a in (email or "").replace(";", ",").split(",") if a.strip()]
+        key = company_key(addresses[0] if addresses else None, website, company_name)
         # Counted from the ledger already? Then the company is known and so
         # are its sends; this row would double them.
         #
@@ -323,11 +326,11 @@ def sent_by_country(db: Session) -> list[dict]:
         # tally holds so far — an earlier version asked the latter, which made
         # a company's *second* log row look like a repeat of its first and
         # dropped one email per extra mailbox.
-        name = canon((row.country or "").strip()) or "unknown"
+        name = canon((country or "").strip()) or "unknown"
         if (name, key) in from_ledger:
-            note(row.country, key, 0)
+            note(country, key, 0)
         else:
-            note(row.country, key, max(1, len(addresses)))
+            note(country, key, max(1, len(addresses)))
 
     rows = [
         {

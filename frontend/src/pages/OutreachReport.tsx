@@ -7,7 +7,16 @@
  * written to those companies this morning. This page is the memory that
  * outlives the campaign.
  */
-import { CalendarDays, Combine, Copy, Inbox, Mailbox, RotateCcw, Trash2 } from 'lucide-react'
+import {
+  CalendarDays,
+  Combine,
+  Copy,
+  Inbox,
+  Mailbox,
+  RotateCcw,
+  SkipForward,
+  Trash2,
+} from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
@@ -292,6 +301,9 @@ export function OutreachReport() {
 
       {/* ------------------------------------------------------- what came back */}
       {replies.length > 0 && <RepliesReceived replies={replies} onChanged={load} />}
+
+      {/* ------------------------------------------------ what was skipped */}
+      {report && <NotWrittenTo report={report} />}
 
       {/* --------------------------------------------- what was combined */}
       {merges.length > 0 && <CombinedCompanies merges={merges} />}
@@ -710,6 +722,103 @@ function CombinedCompanies({ merges }: { merges: MergeHistory[] }) {
                   )}
                 </div>
               ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+/* --------------------------------------------------------- what was skipped */
+
+const SKIP_HEADING: Record<string, string> = {
+  duplicate: 'Already written to',
+  skipped: 'Nothing to write to',
+  failed: 'Tried, and did not arrive',
+}
+
+const SKIP_NOTE: Record<string, string> = {
+  duplicate:
+    'This mailbox had already had the email — from an earlier campaign, from the same file listing it twice, or from a row logged by hand. It was written to once and not again.',
+  skipped:
+    'The row had no address the mail server would accept, so nothing was sent. The company is still in the queue with the reason on it.',
+  failed: 'The message left and was refused. Worth reading the reason before trying again.',
+}
+
+/** Every company not written to, and why — across the whole window.
+ *
+ * These were listed under each individual day, which answers "what happened
+ * on Tuesday" but not "did this company ever get the email". A firm listed
+ * twice in one file is skipped the second time, and that is the single most
+ * common question about a campaign: it looks like a company was missed when
+ * in fact it was written to once, deliberately.
+ *
+ * The location travels with the name because it is the only thing that tells
+ * two firms of the same name apart, and the address because that is what the
+ * decision was actually made about.
+ */
+function NotWrittenTo({ report }: { report: DailyReport }) {
+  const rows = report.days.flatMap((d) => d.not_sent.map((x) => ({ ...x, day: d.day })))
+  if (rows.length === 0) return null
+
+  const byOutcome = rows.reduce<Record<string, typeof rows>>((acc, r) => {
+    ;(acc[r.outcome] ||= []).push(r)
+    return acc
+  }, {})
+
+  return (
+    <Card>
+      <div className="mb-3 flex items-center gap-2.5">
+        <SkipForward size={17} className="text-gold" />
+        <div>
+          <h2 className="font-display text-lg text-latte">Not written to, and why</h2>
+          <p className="text-[11px] text-latte/45">
+            {rows.length} row{rows.length === 1 ? '' : 's'} the agent decided against. Nothing here
+            was lost — each was a decision, with a reason.
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {Object.entries(byOutcome).map(([outcome, list]) => (
+          <div key={outcome}>
+            <p className="text-[12px] font-medium text-latte/70">
+              {SKIP_HEADING[outcome] ?? outcome}
+              <span className="ml-1.5 text-latte/40">
+                · {list.length} row{list.length === 1 ? '' : 's'}
+              </span>
+            </p>
+            <p className="mt-0.5 text-[11px] leading-relaxed text-latte/40">
+              {SKIP_NOTE[outcome] ?? ''}
+            </p>
+
+            <div className="mt-2 overflow-x-auto">
+              <table className="w-full min-w-[34rem] border-collapse text-[11.5px]">
+                <thead>
+                  <tr className="text-left text-latte/40">
+                    <th className="py-1 pr-3 font-normal">Company</th>
+                    <th className="py-1 pr-3 font-normal">Where</th>
+                    <th className="py-1 pr-3 font-normal">Address</th>
+                    <th className="py-1 font-normal">Why</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {list.map((r, i) => (
+                    <tr
+                      key={`${r.email}-${r.day}-${i}`}
+                      className="border-t border-caramel/10 align-top"
+                    >
+                      <td className="py-1.5 pr-3 text-latte/80">{r.company}</td>
+                      <td className="py-1.5 pr-3 text-latte/45">
+                        {[r.location, r.country].filter(Boolean).join(', ') || '—'}
+                      </td>
+                      <td className="py-1.5 pr-3 break-all text-latte/55">{r.email ?? '—'}</td>
+                      <td className="py-1.5 text-latte/50">{r.reason ?? r.outcome}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         ))}

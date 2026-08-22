@@ -66,6 +66,11 @@ def daily(db: Session, days: int = 30) -> list[dict]:
                 "not_sent": [
                     {
                         "company": e.company_name,
+                        # The location is what tells two firms of one name
+                        # apart, so a line saying a company was skipped is
+                        # ambiguous without it.
+                        "location": e.location,
+                        "country": e.country,
                         "email": e.email,
                         "outcome": e.outcome,
                         "reason": e.reason,

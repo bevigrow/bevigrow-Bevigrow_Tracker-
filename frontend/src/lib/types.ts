@@ -510,7 +510,14 @@ export interface DaySummary {
   companies: number
   campaigns: string[]
   sent_to: { company: string; email: string | null; at: string; country: string | null }[]
-  not_sent: { company: string; email: string | null; outcome: string; reason: string | null }[]
+  not_sent: {
+    company: string
+    location: string | null
+    country: string | null
+    email: string | null
+    outcome: string
+    reason: string | null
+  }[]
 }
 
 export interface DailyReport {

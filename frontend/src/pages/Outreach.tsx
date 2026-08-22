@@ -41,7 +41,6 @@ import type {
   ContactMethod,
   CountryOption,
   Outreach as FullRow,
-  MergeGroup,
   CountrySent,
   OutreachRow as Row,
   OutreachInsights as Insights,
@@ -219,9 +218,7 @@ export function Outreach() {
   const [creating, setCreating] = useState(false)
   const [deleting, setDeleting] = useState<Row | null>(null)
 
-  const [unlogged, setUnlogged] = useState<MergeGroup[]>([])
   const [byCountry, setByCountry] = useState<CountrySent[]>([])
-  const [combining, setCombining] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -271,20 +268,6 @@ export function Outreach() {
     return () => window.clearTimeout(id)
   }, [load])
 
-  /** Whether any email went out without leaving a row in the log.
-   *
-   * Deliberately not part of `load`. It asks a question about the whole log
-   * and cannot change from typing in the search box, so re-asking it on every
-   * debounced keystroke would pay a round trip to another region for an
-   * answer that had not moved.
-   */
-  const refreshGaps = useCallback(async () => {
-    setUnlogged(await api.unloggedOutreach().catch(() => []))
-  }, [])
-
-  useEffect(() => {
-    void refreshGaps()
-  }, [refreshGaps])
 
   useEffect(() => {
     // Every country the app knows, so the picker still offers one whose only
@@ -372,21 +355,6 @@ export function Outreach() {
 
   const filtered = search || method || status || country || dueOnly || period
 
-  const relog = async () => {
-    setCombining(true)
-    try {
-      const made = await api.relogOutreach()
-      await Promise.all([load(), refreshGaps()])
-      toast.success(
-        `Added ${made.length} compan${made.length === 1 ? 'y' : 'ies'} back to the log.`,
-      )
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not rebuild the rows.')
-    } finally {
-      setCombining(false)
-    }
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -405,15 +373,6 @@ export function Outreach() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {/* Emailed, but with no row in the log. The send history is kept
-              separately and cannot be deleted, so a gap between the two is
-              both detectable and repairable — and a company that was written
-              to while appearing untouched is the worst state to leave. */}
-          {unlogged.length > 0 && (
-            <Button onClick={relog} disabled={combining} icon={<FilePlus2 size={16} />}>
-              Add {unlogged.length} missing to the log
-            </Button>
-          )}
           <Button onClick={() => setCreating(true)} icon={<Plus size={16} />}>
             Log Outreach
           </Button>

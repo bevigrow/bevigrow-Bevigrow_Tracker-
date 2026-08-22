@@ -16,7 +16,6 @@ import type {
   TrendReport,
   EmailAccount,
   InboundReply,
-  MergeGroup,
   ReplySync,
   EmailTemplate,
   ImportReport,
@@ -289,8 +288,6 @@ export const api = {
   getOutreach: (id: number) => request<Outreach>(`/api/outreach/${id}`),
   outreachStats: () => request<OutreachStats>('/api/outreach/stats'),
   sentByCountry: () => request<CountrySent[]>('/api/campaigns/report/countries'),
-  unloggedOutreach: () => request<MergeGroup[]>('/api/outreach/unlogged'),
-  relogOutreach: () => request<MergeGroup[]>('/api/outreach/relog', { method: 'POST' }),
   createOutreach: (body: Record<string, unknown>) =>
     request<Outreach>('/api/outreach', { method: 'POST', body: JSON.stringify(body) }),
   updateOutreach: (id: number, body: Record<string, unknown>) =>

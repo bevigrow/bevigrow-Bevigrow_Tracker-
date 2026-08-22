@@ -178,6 +178,17 @@ function plainState(s: CampaignStatus | null): string {
   const left = s.remaining
   switch (s.status) {
     case 'running':
+      // A manual campaign is "running" in the sense that its queue is moving,
+      // but nothing leaves until a person presses Send on each draft. Saying
+      // "Sending now" while the count sits at zero is the app telling you
+      // something it can see is not true, and leaves you waiting for a send
+      // that is waiting for you.
+      if (s.awaiting_approval > 0)
+        return `${s.awaiting_approval} email${
+          s.awaiting_approval === 1 ? '' : 's'
+        } written and waiting for you to read — open the campaign to send ${
+          s.awaiting_approval === 1 ? 'it' : 'them'
+        }.`
       return s.next_company
         ? `Sending now — ${s.next_company} is next.`
         : 'Sending now.'

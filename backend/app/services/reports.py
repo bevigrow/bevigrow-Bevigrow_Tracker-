@@ -14,6 +14,7 @@ from datetime import date, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from .geo import canon
 from ..models import DailyQuota, Outreach, SendLedger
 from . import campaigns as cm
 from .geo import tidy
@@ -266,3 +267,43 @@ def trends(db: Session, months: int = 12) -> dict:
         "response_days": [{"bucket": label, "count": counted[label]} for label, _, _ in buckets],
         "replies_counted": sum(counted.values()),
     }
+
+
+def sent_by_country(db: Session) -> list[dict]:
+    """Companies actually written to, per country, from the send history.
+
+    Counted here rather than from the outreach log on purpose. The log holds a
+    row per mailbox when a company is saved that way, and its company name has
+    a location appended, so two spellings of one firm count twice. The ledger
+    carries `normalized_company` — the key the importer grouped on, which is
+    the mail domain — so info@ and sales@ at one business are one company
+    however the rows were later filed.
+
+    Only successful sends count. A company that was skipped as a duplicate was
+    already counted on the day it was written to, and counting it again here
+    would say the prospecting reached further than it did.
+    """
+    per_country: dict[str, dict] = {}
+    for entry in db.scalars(select(SendLedger).where(SendLedger.outcome == "sent")):
+        name = (entry.country or "").strip()
+        key = canon(name) or "unknown"
+        bucket = per_country.setdefault(
+            key, {"country": name or "Not recorded", "companies": set(), "emails": 0}
+        )
+        # Prefer the grouping key; fall back to the name for rows written
+        # before there was one.
+        bucket["companies"].add(
+            (entry.normalized_company or entry.company_name or entry.email or "?").casefold()
+        )
+        bucket["emails"] += 1
+
+    rows = [
+        {
+            "country": v["country"],
+            "companies": len(v["companies"]),
+            "emails": v["emails"],
+        }
+        for v in per_country.values()
+    ]
+    rows.sort(key=lambda r: (-r["companies"], r["country"]))
+    return rows

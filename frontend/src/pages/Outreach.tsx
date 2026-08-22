@@ -44,6 +44,7 @@ import type {
   CountryOption,
   Outreach as FullRow,
   MergeGroup,
+  CountrySent,
   MergeUndo,
   OutreachRow as Row,
   OutreachInsights as Insights,
@@ -101,65 +102,81 @@ function windowFor(period: string): { from?: string; to?: string } {
   return {}
 }
 
-/** Countries and how many companies in each, pinned where it can be read.
+/** A note pinned to the corner: countries, and companies written to in each.
  *
- * The outreach log answers "who did we write to" one row at a time, and two
- * addresses at one firm are two rows, so counting by eye gives the wrong
- * answer — which is exactly the question asked most often: how many companies
- * in Germany? This says so directly, counting firms rather than mailboxes,
- * and stays on screen while the list underneath is scrolled.
+ * Counted from the send history rather than from the log underneath it. The
+ * log holds a row per mailbox when a company is saved that way, so counting
+ * its rows says a firm with two addresses is two firms — which is exactly the
+ * error this note exists to avoid. The ledger knows which addresses belonged
+ * to one business, because that is how the importer grouped them before
+ * anything was sent.
+ *
+ * Small, fixed, and collapsible to a single line, because it is meant to be
+ * glanced at while reading something else — not a panel to be scrolled past
+ * on the way to the list.
  */
-function CountryTally({ data }: { data: Insights }) {
-  const [open, setOpen] = useState(true)
-  const rows = [...data.by_country].sort((a, b) => b.companies - a.companies)
+function CountryNote({ rows }: { rows: CountrySent[] }) {
+  const [open, setOpen] = useState(() => {
+    try {
+      return localStorage.getItem('bevigrow.countryNote') !== 'closed'
+    } catch {
+      return true
+    }
+  })
   if (rows.length === 0) return null
 
   const companies = rows.reduce((n, r) => n + r.companies, 0)
-  const emails = rows.reduce((n, r) => n + r.total, 0)
+  const emails = rows.reduce((n, r) => n + r.emails, 0)
+
+  const toggle = () => {
+    setOpen((v) => {
+      try {
+        localStorage.setItem('bevigrow.countryNote', v ? 'closed' : 'open')
+      } catch {
+        /* a browser refusing storage is not a reason to refuse the click */
+      }
+      return !v
+    })
+  }
 
   return (
-    <div className="sticky top-4 z-10">
-      <Card className="!p-3.5">
-        <button
-          onClick={() => setOpen((v) => !v)}
-          className="flex w-full items-center justify-between gap-3 text-left"
-        >
-          <span className="flex items-center gap-2">
-            <Globe size={15} className="text-gold" />
-            <span className="text-[12.5px] font-medium text-latte/85">
-              {companies} companies in {rows.length} countries
-            </span>
-          </span>
-          <span className="text-[11px] text-latte/40">
-            {emails} email{emails === 1 ? '' : 's'} · {open ? 'hide' : 'show'}
-          </span>
-        </button>
+    <aside
+      className="fixed bottom-4 right-4 z-40 w-[15.5rem] rounded-xl border border-gold/25 bg-[#1b140f] shadow-xl shadow-black/40"
+      aria-label="Companies written to, by country"
+    >
+      <button
+        onClick={toggle}
+        className="flex w-full items-center justify-between gap-2 rounded-t-xl border-b border-caramel/15 bg-gold/[0.07] px-3 py-2 text-left"
+      >
+        <span className="flex items-center gap-1.5">
+          <Globe size={13} className="text-gold" />
+          <span className="text-[11.5px] font-medium text-latte/85">Sent by country</span>
+        </span>
+        <span className="text-[10.5px] text-latte/45">{open ? '—' : `${companies}`}</span>
+      </button>
 
-        {open && (
-          <div className="mt-2.5 grid gap-x-4 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
+      {open && (
+        <>
+          <div className="max-h-[19rem] overflow-y-auto px-3 py-1.5">
             {rows.map((r) => (
-              <div
-                key={r.label}
-                className="flex items-baseline justify-between gap-2 border-b border-caramel/10 py-1"
-              >
-                <span className="truncate text-[12px] text-latte/70">{r.label}</span>
-                <span className="shrink-0 text-[12px] tabular-nums text-latte/85">
+              <div key={r.country} className="flex items-baseline justify-between gap-2 py-[3px]">
+                <span className="truncate text-[11.5px] text-latte/70">{r.country}</span>
+                <span className="shrink-0 tabular-nums text-[11.5px] text-latte/90">
                   {r.companies}
-                  <span className="ml-1 text-[10.5px] text-latte/35">
-                    {r.total !== r.companies ? `/ ${r.total} mail` : ''}
-                  </span>
-                  {r.replied > 0 && (
-                    <span className="ml-1.5 text-[10.5px] text-emerald-300/80">
-                      {r.replied} replied
-                    </span>
+                  {r.emails !== r.companies && (
+                    <span className="ml-1 text-[10px] text-latte/35">({r.emails})</span>
                   )}
                 </span>
               </div>
             ))}
           </div>
-        )}
-      </Card>
-    </div>
+          <div className="rounded-b-xl border-t border-caramel/15 px-3 py-1.5 text-[10.5px] text-latte/45">
+            {companies} companies · {emails} emails
+            <span className="ml-1 text-latte/30">— (n) = emails, where a firm had several</span>
+          </div>
+        </>
+      )}
+    </aside>
   )
 }
 
@@ -204,6 +221,7 @@ export function Outreach() {
   const [undoable, setUndoable] = useState<MergeUndo | null>(null)
   const [splittable, setSplittable] = useState<MergeGroup[]>([])
   const [unlogged, setUnlogged] = useState<MergeGroup[]>([])
+  const [byCountry, setByCountry] = useState<CountrySent[]>([])
   const [merging, setMerging] = useState(false)
   const [combining, setCombining] = useState(false)
 
@@ -243,6 +261,11 @@ export function Outreach() {
       .outreachInsights(20)
       .then(setInsights)
       .catch(() => setInsights(null))
+    // From the send history, so a company with two mailboxes counts once.
+    api
+      .sentByCountry()
+      .then(setByCountry)
+      .catch(() => setByCountry([]))
   }, [rows.length])
 
   useEffect(() => {
@@ -498,7 +521,7 @@ export function Outreach() {
         }
       />
 
-      {insights && <CountryTally data={insights} />}
+      <CountryNote rows={byCountry} />
 
       {/* Four numbers, not a dashboard. */}
       {stats && stats.total > 0 && (

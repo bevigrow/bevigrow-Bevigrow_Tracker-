@@ -1,5 +1,6 @@
 /** Thin typed fetch wrapper around the BeviGrow API. */
 import type {
+  CountrySent,
   Activity,
   AuthConfig,
   Campaign,
@@ -293,6 +294,7 @@ export const api = {
   mergeOutreach: () => request<MergeGroup[]>('/api/outreach/merge', { method: 'POST' }),
   undoableMerge: () => request<MergeUndo | null>('/api/outreach/merge/undoable'),
   undoMerge: () => request<MergeUndo>('/api/outreach/merge/undo', { method: 'POST' }),
+  sentByCountry: () => request<CountrySent[]>('/api/campaigns/report/countries'),
   mergeHistory: () => request<MergeHistory[]>('/api/outreach/merge/history'),
   unloggedOutreach: () => request<MergeGroup[]>('/api/outreach/unlogged'),
   relogOutreach: () => request<MergeGroup[]>('/api/outreach/relog', { method: 'POST' }),

@@ -794,6 +794,17 @@ def daily_report(
     return {"totals": reports.totals(db), "days": reports.daily(db, days)}
 
 
+@router.get("/report/countries")
+def country_report(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Companies written to per country, counted from the send history.
+
+    The outreach log is the wrong place to count this: it holds a row per
+    mailbox when a company is saved that way. This reads the ledger, which
+    knows which addresses belonged to one business.
+    """
+    return reports.sent_by_country(db)
+
+
 @router.get("/report/trends")
 def trend_report(
     months: int = Query(default=12, ge=1, le=36),

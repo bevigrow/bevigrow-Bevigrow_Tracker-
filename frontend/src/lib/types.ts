@@ -603,3 +603,10 @@ export interface MergeHistory {
   undone: boolean
   details: MergedInto[]
 }
+
+/** Companies written to in one country, counted from the send history. */
+export interface CountrySent {
+  country: string
+  companies: number
+  emails: number
+}

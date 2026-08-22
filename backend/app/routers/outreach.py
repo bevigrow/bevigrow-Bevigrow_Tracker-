@@ -19,6 +19,7 @@ from ..models import (
     OUTREACH_CLOSED,
     CampaignTarget,
     MergeSnapshot,
+    SendLedger,
     Contact,
     ContactMethod,
     InboundReply,
@@ -40,6 +41,7 @@ from ..schemas import (
     OutreachOut,
     OutreachStats,
     OutreachUpdate,
+    PeriodCount,
 )
 from ..services.geo import CountryTally, canon
 
@@ -47,6 +49,14 @@ from ..services.geo import CountryTally, canon
 # 3.15. Both of ours have it; the fallback exists so a stricter backend
 # degrades to a wider fetch rather than an error.
 _TUPLES_OK = True
+
+# Written out rather than taken from the locale: the app is read in English by
+# people whose machines are set to several different ones, and a month that
+# changes name depending on whose laptop it is opened on is a bug.
+_MONTH_NAMES = (
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+)
 
 router = APIRouter(prefix="/api/outreach", tags=["outreach"])
 
@@ -59,6 +69,12 @@ def list_outreach(
     outreach_status: OutreachStatus | None = Query(default=None, alias="status"),
     country: str | None = None,
     due: bool = Query(default=False, description="Only rows whose follow-up is due"),
+    contacted_from: date | None = Query(
+        default=None, description="Only rows contacted on or after this date"
+    ),
+    contacted_to: date | None = Query(
+        default=None, description="Only rows contacted on or before this date"
+    ),
     limit: int = Query(default=300, ge=1, le=500),
 ):
     # No owner eager-load: the list does not draw the owner, and shipping the
@@ -124,6 +140,18 @@ def list_outreach(
     if country:
         # Case-insensitive, to match every spelling behind one picker option.
         stmt = stmt.where(func.lower(func.trim(Outreach.country)) == canon(country))
+    # A window on the contact date. Two open-ended bounds rather than a
+    # month, because a month is only one of the questions asked of it: "this
+    # week", "since the trade fair" and "all of last year" are the same query
+    # with different edges, and the picker turns each into a pair of dates.
+    #
+    # A row with no contact date is not in any window, and is excluded by the
+    # comparison rather than by a rule — it has not been contacted, so it
+    # cannot have been contacted in March.
+    if contacted_from:
+        stmt = stmt.where(Outreach.contacted_on >= contacted_from)
+    if contacted_to:
+        stmt = stmt.where(Outreach.contacted_on <= contacted_to)
     if due:
         stmt = stmt.where(
             Outreach.next_follow_up.is_not(None),
@@ -587,6 +615,119 @@ def merge_history(
     return out
 
 
+# ------------------------------------------------------- log reconciliation
+
+
+def _unlogged(db: Session) -> list[SendLedger]:
+    """Emails the ledger says went out that the outreach log does not show.
+
+    The two are written in the same transaction, so they should never
+    disagree — but they are separate tables and the ledger is the one that
+    cannot be deleted, which makes it the reference. If a send committed and
+    the log row did not, this finds it, and the alternative to finding it is
+    a company that was emailed and looks untouched.
+
+    Matching on the address rather than the company name: the name gets a
+    location appended when it is logged, so comparing names would report
+    every row as missing.
+    """
+    logged: set[str] = set()
+    for (raw,) in db.execute(select(Outreach.email).where(Outreach.email.is_not(None))):
+        for part in (raw or "").replace(";", ",").split(","):
+            if part.strip():
+                logged.add(part.strip().casefold())
+
+    missing: list[SendLedger] = []
+    for entry in db.scalars(
+        select(SendLedger).where(SendLedger.outcome == "sent").order_by(SendLedger.at)
+    ):
+        address = (entry.email or "").strip().casefold()
+        if address and address not in logged:
+            missing.append(entry)
+    return missing
+
+
+@router.get("/unlogged", response_model=list[MergeGroup])
+def list_unlogged(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """What was emailed but is missing from the log."""
+    grouped: dict[str, list[SendLedger]] = {}
+    for entry in _unlogged(db):
+        label = entry.company_name or entry.email or "?"
+        if entry.location:
+            label = f"{entry.company_name}, {entry.location}"
+        grouped.setdefault(label, []).append(entry)
+    return [
+        MergeGroup(
+            company_name=label,
+            country=rows[0].country,
+            rows=len(rows),
+            emails=[r.email for r in rows if r.email],
+            ids=[r.id for r in rows],
+        )
+        for label, rows in grouped.items()
+    ]
+
+
+@router.post("/relog", response_model=list[MergeGroup])
+def relog_from_history(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Rebuild the log rows for emails the history says were sent.
+
+    The ledger keeps the company, the location, the country, the address and
+    the day for every message that left, which is everything a log row needs
+    except the text of the letter — that lives with the campaign and may be
+    gone. The rebuilt row says so rather than inventing one.
+
+    One row per company, as everywhere else. Rows already in the log are left
+    exactly as they are; this only fills gaps.
+    """
+    made: list[MergeGroup] = []
+    by_company: dict[str, list[SendLedger]] = {}
+    for entry in _unlogged(db):
+        label = entry.company_name or entry.email or "?"
+        if entry.location:
+            label = f"{entry.company_name}, {entry.location}"
+        by_company.setdefault(label[:200], []).append(entry)
+
+    for label, entries in by_company.items():
+        addresses: list[str] = []
+        for entry in entries:
+            one = (entry.email or "").strip()
+            if one and one.casefold() not in {a.casefold() for a in addresses}:
+                addresses.append(one)
+        first = min(entries, key=lambda e: e.day)
+        joined = ", ".join(addresses)[:255]
+        db.add(
+            Outreach(
+                company_name=label,
+                email=joined,
+                contact_point=joined,
+                country=first.country,
+                website=first.website,
+                contact_method=ContactMethod.email,
+                contacted_on=first.day,
+                status=OutreachStatus.waiting_reply,
+                next_action="Wait for reply",
+                next_follow_up=first.day + timedelta(days=7),
+                message_sent=(
+                    "Rebuilt from the send history. The letter itself was not "
+                    "recorded on this row at the time it was sent."
+                ),
+                notes=f"Sent by campaign \"{first.campaign_name}\" on {first.day}.",
+            )
+        )
+        made.append(
+            MergeGroup(
+                company_name=label,
+                country=first.country,
+                rows=len(entries),
+                emails=addresses,
+                ids=[],
+            )
+        )
+    db.commit()
+    return made
+
+
 @router.get("/stats", response_model=OutreachStats)
 def outreach_stats(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     today = date.today()
@@ -619,6 +760,43 @@ def outreach_stats(db: Session = Depends(get_db), _: User = Depends(get_current_
         select(Outreach.contact_method, func.count(Outreach.id)).group_by(Outreach.contact_method)
     ).all()
 
+    # The months and years that actually hold rows.
+    #
+    # Grouped by day in SQL and folded up in Python on purpose: date_trunc is
+    # PostgreSQL's, strftime is SQLite's, and extract() does not translate
+    # cleanly to both. The number of distinct days a campaign ever ran on is
+    # small — a few dozen — so one portable query beats two dialect-specific
+    # ones and a bug on whichever database is not being tested that week.
+    per_day = db.execute(
+        select(Outreach.contacted_on, func.count(Outreach.id))
+        .where(Outreach.contacted_on.is_not(None))
+        .group_by(Outreach.contacted_on)
+    ).all()
+
+    by_month: dict[str, int] = {}
+    by_year: dict[int, int] = {}
+    for day, count in per_day:
+        if day is None:
+            continue
+        by_month[f"{day.year:04d}-{day.month:02d}"] = (
+            by_month.get(f"{day.year:04d}-{day.month:02d}", 0) + count
+        )
+        by_year[day.year] = by_year.get(day.year, 0) + count
+
+    months = [
+        PeriodCount(
+            value=key,
+            label=f"{_MONTH_NAMES[int(key[5:7]) - 1]} {key[:4]}",
+            count=count,
+            year=int(key[:4]),
+        )
+        for key, count in sorted(by_month.items(), reverse=True)
+    ]
+    years = [
+        PeriodCount(value=str(y), label=str(y), count=count, year=y)
+        for y, count in sorted(by_year.items(), reverse=True)
+    ]
+
     # Of everyone we actually heard back from, one way or the other.
     answered = replied + counts.get(OutreachStatus.not_interested, 0)
     reachable = answered + counts.get(OutreachStatus.no_response, 0) + counts.get(
@@ -636,6 +814,8 @@ def outreach_stats(db: Session = Depends(get_db), _: User = Depends(get_current_
         not_interested=counts.get(OutreachStatus.not_interested, 0),
         reply_rate=round((answered / reachable) * 100, 1) if reachable else 0.0,
         by_method={m.value: c for m, c in method_rows},
+        months=months,
+        years=years,
     )
 
 

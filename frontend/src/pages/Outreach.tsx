@@ -51,6 +51,56 @@ import type {
   OutreachStatus,
 } from '../lib/types'
 
+/** The two dates a chosen period means.
+ *
+ * The picker offers words — "this month", "August 2026", "2025" — and the
+ * filter takes a pair of dates, because that is the shape every one of those
+ * questions really has. Doing the arithmetic here rather than on the server
+ * keeps the API to one honest parameter pair instead of a vocabulary of
+ * period names it would have to keep in step with this list.
+ */
+function windowFor(period: string): { from?: string; to?: string } {
+  if (!period) return {}
+  const iso = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const today = new Date()
+
+  if (period === 'today') return { from: iso(today), to: iso(today) }
+  if (period === 'last7') {
+    const from = new Date(today)
+    from.setDate(from.getDate() - 6)
+    return { from: iso(from), to: iso(today) }
+  }
+  if (period === 'last30') {
+    const from = new Date(today)
+    from.setDate(from.getDate() - 29)
+    return { from: iso(from), to: iso(today) }
+  }
+  if (period === 'thismonth') {
+    return {
+      from: iso(new Date(today.getFullYear(), today.getMonth(), 1)),
+      to: iso(new Date(today.getFullYear(), today.getMonth() + 1, 0)),
+    }
+  }
+  if (period === 'lastmonth') {
+    return {
+      from: iso(new Date(today.getFullYear(), today.getMonth() - 1, 1)),
+      to: iso(new Date(today.getFullYear(), today.getMonth(), 0)),
+    }
+  }
+  // "2026-08" — one month. Day 0 of the next month is the last of this one,
+  // which is how February and the leap years take care of themselves.
+  if (/^\d{4}-\d{2}$/.test(period)) {
+    const [y, m] = period.split('-').map(Number)
+    return { from: iso(new Date(y, m - 1, 1)), to: iso(new Date(y, m, 0)) }
+  }
+  // "2026" — a whole year.
+  if (/^\d{4}$/.test(period)) {
+    return { from: `${period}-01-01`, to: `${period}-12-31` }
+  }
+  return {}
+}
+
 /** Status pill. Colour always ships with the label, never alone. */
 function StatusPill({ status }: { status: OutreachStatus }) {
   const m = OUTREACH_META[status]
@@ -78,6 +128,7 @@ export function Outreach() {
   const [status, setStatus] = useState('')
   const [country, setCountry] = useState('')
   const [dueOnly, setDueOnly] = useState(false)
+  const [period, setPeriod] = useState('')
   const [countries, setCountries] = useState<CountryOption[]>([])
 
   // The full record, fetched on open. The list rows do not carry the message
@@ -90,6 +141,7 @@ export function Outreach() {
   const [mergeable, setMergeable] = useState<MergeGroup[]>([])
   const [undoable, setUndoable] = useState<MergeUndo | null>(null)
   const [splittable, setSplittable] = useState<MergeGroup[]>([])
+  const [unlogged, setUnlogged] = useState<MergeGroup[]>([])
   const [merging, setMerging] = useState(false)
   const [combining, setCombining] = useState(false)
 
@@ -103,6 +155,8 @@ export function Outreach() {
           status: status || undefined,
           country: country || undefined,
           due: dueOnly || undefined,
+          contacted_from: windowFor(period).from,
+          contacted_to: windowFor(period).to,
         }),
         api.outreachStats().catch(() => null),
       ])
@@ -114,7 +168,7 @@ export function Outreach() {
       setLoading(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, method, status, country, dueOnly])
+  }, [search, method, status, country, dueOnly, period])
 
   useEffect(() => {
     // Not part of `load`: these summarise the whole log, so re-fetching them
@@ -144,14 +198,16 @@ export function Outreach() {
    * changed the answer.
    */
   const refreshCombineState = useCallback(async () => {
-    const [dupes, undo, splits] = await Promise.all([
+    const [dupes, undo, splits, gaps] = await Promise.all([
       api.mergeableOutreach().catch(() => []),
       api.undoableMerge().catch(() => null),
       api.splittableOutreach().catch(() => []),
+      api.unloggedOutreach().catch(() => []),
     ])
     setMergeable(dupes)
     setUndoable(undo)
     setSplittable(splits)
+    setUnlogged(gaps)
   }, [])
 
   useEffect(() => {
@@ -242,7 +298,7 @@ export function Outreach() {
     }
   }
 
-  const filtered = search || method || status || country || dueOnly
+  const filtered = search || method || status || country || dueOnly || period
 
   const undoCombine = async () => {
     setCombining(true)
@@ -268,6 +324,21 @@ export function Outreach() {
       toast.success(`Separated ${done.length} compan${done.length === 1 ? 'y' : 'ies'} into ${rows} rows.`)
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not separate them.')
+    } finally {
+      setCombining(false)
+    }
+  }
+
+  const relog = async () => {
+    setCombining(true)
+    try {
+      const made = await api.relogOutreach()
+      await Promise.all([load(), refreshCombineState()])
+      toast.success(
+        `Added ${made.length} compan${made.length === 1 ? 'y' : 'ies'} back to the log.`,
+      )
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not rebuild the rows.')
     } finally {
       setCombining(false)
     }
@@ -304,6 +375,15 @@ export function Outreach() {
         <div className="flex flex-wrap items-center gap-2">
           {/* Only offered when there is something to combine, so it is not a
               button that does nothing on most days. */}
+          {/* Emailed, but with no row in the log. The send history is kept
+              separately and cannot be deleted, so a gap between the two is
+              both detectable and repairable — and a company that was written
+              to while appearing untouched is the worst state to leave. */}
+          {unlogged.length > 0 && (
+            <Button onClick={relog} disabled={combining} icon={<FilePlus2 size={16} />}>
+              Add {unlogged.length} missing to the log
+            </Button>
+          )}
           {mergeable.length > 0 && (
             <Button variant="ghost" onClick={() => setMerging(true)} icon={<Combine size={16} />}>
               Combine {mergeable.length} duplicate
@@ -405,6 +485,31 @@ export function Outreach() {
               ...OUTREACH_ORDER.map((s) => ({ value: s, label: outreachLabel(s) })),
             ]}
           />
+          {/* When they were contacted. Presets first, because "this month"
+              is asked far more often than any particular month, then every
+              month and year that actually holds rows — offering an empty
+              December would be offering a dead end. */}
+          <Select
+            value={period}
+            onChange={(e) => setPeriod(e.target.value)}
+            aria-label="Filter by when they were contacted"
+            options={[
+              { value: '', label: 'Any time' },
+              { value: 'today', label: 'Today' },
+              { value: 'last7', label: 'Last 7 days' },
+              { value: 'last30', label: 'Last 30 days' },
+              { value: 'thismonth', label: 'This month' },
+              { value: 'lastmonth', label: 'Last month' },
+              ...(stats?.months ?? []).map((m) => ({
+                value: m.value,
+                label: `${m.label} · ${m.count}`,
+              })),
+              ...(stats?.years ?? []).map((y) => ({
+                value: y.value,
+                label: `All of ${y.label} · ${y.count}`,
+              })),
+            ]}
+          />
           <Select
             value={country}
             onChange={(e) => setCountry(e.target.value)}
@@ -433,6 +538,7 @@ export function Outreach() {
                 setStatus('')
                 setCountry('')
                 setDueOnly(false)
+                setPeriod('')
               }}
               className="text-xs text-gold hover:underline"
             >

@@ -271,6 +271,14 @@ export interface Outreach {
   updated_at: string
 }
 
+/** One month or year that has rows in it. */
+export interface PeriodCount {
+  value: string
+  label: string
+  count: number
+  year: number
+}
+
 export interface OutreachStats {
   total: number
   awaiting_reply: number
@@ -281,6 +289,9 @@ export interface OutreachStats {
   not_interested: number
   reply_rate: number
   by_method: Record<string, number>
+  /** Months and years that actually hold rows, newest first. */
+  months: PeriodCount[]
+  years: PeriodCount[]
 }
 
 export interface OutreachGroup {

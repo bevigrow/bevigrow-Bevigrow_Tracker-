@@ -748,6 +748,18 @@ class OutreachListOut(ORMModel):
     updated_at: datetime
 
 
+class PeriodCount(BaseModel):
+    """One month that has rows in it, for the date picker."""
+
+    # "2026-08", and "August 2026" — the value the filter sends and the words
+    # a person reads. Built on the server because the server knows which
+    # months exist; a picker offering empty months is a picker that lies.
+    value: str
+    label: str
+    count: int
+    year: int
+
+
 class OutreachStats(BaseModel):
     total: int
     awaiting_reply: int
@@ -758,6 +770,9 @@ class OutreachStats(BaseModel):
     not_interested: int
     reply_rate: float
     by_method: dict[str, int]
+    # Newest first. Empty when nothing has a contact date yet.
+    months: list[PeriodCount] = []
+    years: list[PeriodCount] = []
 
 
 class MergeUndoOut(BaseModel):

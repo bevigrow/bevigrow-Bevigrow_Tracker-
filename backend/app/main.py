@@ -112,9 +112,19 @@ def health():
         log.error("Health check DB error: %s", exc)
         db_ok = False
 
+    # Whether anything is driving the send queue. A campaign stuck at nought
+    # sent looks the same whether the sender is working slowly, was switched
+    # off, or died with the instance — and none of those show up as an error.
+    try:
+        from .services import scheduler
+        sender_state = scheduler.state()
+    except Exception as exc:  # noqa: BLE001 - the probe must not fail
+        sender_state = {"error": str(exc)[:200]}
+
     return {
         "status": "ok" if db_ok else "degraded",
         "database": "connected" if db_ok else "unreachable",
         "ai_model": settings.AI_MODEL,
         "environment": settings.ENVIRONMENT,
+        "sender": sender_state,
     }

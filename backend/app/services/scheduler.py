@@ -47,6 +47,11 @@ IDLE_SECONDS = 10
 # whereas logging into IMAP every three seconds would be rude and slow.
 REPLY_CHECK_SECONDS = settings.OUTREACH_REPLY_CHECK_SECONDS
 _last_reply_check = 0.0
+# When the sender last actually moved a queue, and what it did. Kept so the
+# health endpoint can answer "is anything driving this?" — the question you
+# are left with when a campaign sits at nought sent and no error anywhere.
+_last_tick_at: float = 0.0
+_last_tick_result: dict | None = None
 
 _thread: threading.Thread | None = None
 _stop = threading.Event()
@@ -137,6 +142,28 @@ def advance_once() -> dict:
             return {"action": "idle", "message": "Nothing to do."}
 
 
+def state() -> dict:
+    """Whether anything is driving the queue, and when it last did.
+
+    A campaign that is not sending looks identical whether the scheduler is
+    working through it slowly, has been switched off, or died with the
+    instance that hosted it. This is what tells those three apart without
+    reading a log file.
+    """
+    import time as _time
+
+    alive = bool(_thread and _thread.is_alive())
+    return {
+        "enabled": settings.OUTREACH_SCHEDULER_ENABLED,
+        "thread_alive": alive,
+        "seconds_since_last_send": (
+            round(_time.time() - _last_tick_at, 1) if _last_tick_at else None
+        ),
+        "last_result": _last_tick_result,
+        "heartbeat_token_set": bool(settings.OUTREACH_TICK_TOKEN.strip()),
+    }
+
+
 def tick(max_steps: int = 12) -> dict:
     """Advance the queue a few steps. What the cron and the UI both call.
 
@@ -152,9 +179,12 @@ def tick(max_steps: int = 12) -> dict:
     except Exception as exc:  # noqa: BLE001
         log.warning("Reply check failed during tick: %s", exc)
 
+    global _last_tick_at, _last_tick_result
     done: list[dict] = []
     for _ in range(max(1, min(max_steps, 25))):
         result = advance_once()
+        _last_tick_at = time.time()
+        _last_tick_result = result
         done.append(result)
         if result["action"] == "idle":
             break

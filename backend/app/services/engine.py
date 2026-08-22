@@ -371,6 +371,25 @@ def _log_outreach(
             existing.append(target.email)
         twin.email = ", ".join(existing)[:255]
         twin.contact_point = twin.email[:255]
+
+        # The second envelope's own text, if it differs from the first.
+        #
+        # Both addresses usually receive the identical letter, and storing it
+        # twice would double the row for nothing. But they need not be
+        # identical — a template reading the contact's name produces different
+        # text per mailbox — and "what did we actually say to them" is the
+        # question this column exists to answer. So it is compared, and kept
+        # only when it says something new, under a heading naming the mailbox
+        # it went to.
+        written = f"Subject: {subject}\n\n{body}" if subject else body
+        if written and written not in (twin.message_sent or ""):
+            twin.message_sent = (
+                f"{twin.message_sent}\n\n--- to {target.email} ---\n{written}"
+                if twin.message_sent
+                else written
+            )
+        # Contacted on the day of the *first* letter: that is when this
+        # company heard from us, and a follow-up is counted from it.
         db.commit()
         return twin
 

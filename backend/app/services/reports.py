@@ -270,32 +270,64 @@ def trends(db: Session, months: int = 12) -> dict:
 
 
 def sent_by_country(db: Session) -> list[dict]:
-    """Companies actually written to, per country, from the send history.
+    """Companies written to, per country, from everything the app knows.
 
-    Counted here rather than from the outreach log on purpose. The log holds a
-    row per mailbox when a company is saved that way, and its company name has
-    a location appended, so two spellings of one firm count twice. The ledger
-    carries `normalized_company` — the key the importer grouped on, which is
-    the mail domain — so info@ and sales@ at one business are one company
-    however the rows were later filed.
+    Two sources, deliberately, because neither alone is complete.
 
-    Only successful sends count. A company that was skipped as a duplicate was
-    already counted on the day it was written to, and counting it again here
-    would say the prospecting reached further than it did.
+    The send ledger is the better one: it carries `normalized_company`, the
+    key the importer grouped on, so info@ and sales@ at one business were one
+    company before anything was sent. But it only holds sends made since it
+    existed, and the log goes back further — reading only the ledger would
+    silently omit whole countries written to before it.
+
+    The outreach log covers those, at the cost of having to work out which
+    rows are one company. That is done on the mail domain, which is the same
+    rule the importer used, so the two sources agree about what a company is
+    and a firm present in both is counted once.
+
+    Only successful sends count from the ledger; a duplicate that was refused
+    was already counted on the day the company was actually written to.
     """
     per_country: dict[str, dict] = {}
-    for entry in db.scalars(select(SendLedger).where(SendLedger.outcome == "sent")):
-        name = (entry.country or "").strip()
-        key = canon(name) or "unknown"
+
+    def note(country: str | None, key: str, emails: int) -> None:
+        name = (country or "").strip()
         bucket = per_country.setdefault(
-            key, {"country": name or "Not recorded", "companies": set(), "emails": 0}
+            canon(name) or "unknown",
+            {"country": name or "Not recorded", "companies": set(), "emails": 0},
         )
-        # Prefer the grouping key; fall back to the name for rows written
-        # before there was one.
-        bucket["companies"].add(
-            (entry.normalized_company or entry.company_name or entry.email or "?").casefold()
+        bucket["companies"].add(key)
+        bucket["emails"] += emails
+
+    def company_key(email: str | None, website: str | None, name: str | None) -> str:
+        """The mail domain, or the name when there is no address to read."""
+        if email and "@" in email:
+            return email.rsplit("@", 1)[-1].strip().casefold()
+        if website:
+            host = website.strip().casefold()
+            for prefix in ("https://", "http://", "www."):
+                if host.startswith(prefix):
+                    host = host[len(prefix):]
+            return host.split("/")[0].strip() or (name or "?").casefold()
+        return (name or "?").casefold()
+
+    for entry in db.scalars(select(SendLedger).where(SendLedger.outcome == "sent")):
+        key = (entry.normalized_company or "").strip().casefold() or company_key(
+            entry.email, entry.website, entry.company_name
         )
-        bucket["emails"] += 1
+        note(entry.country, key, 1)
+
+    # The log fills in what predates the ledger. A row can hold several
+    # addresses, and each of those was an email that went out.
+    for row in db.scalars(select(Outreach)):
+        addresses = [a.strip() for a in (row.email or "").replace(";", ",").split(",") if a.strip()]
+        key = company_key(addresses[0] if addresses else None, row.website, row.company_name)
+        name = canon((row.country or "").strip()) or "unknown"
+        bucket = per_country.get(name)
+        # Already counted from the ledger? Then only the company matters here;
+        # its emails are already in the total and must not be added twice.
+        seen = bucket is not None and key in bucket["companies"]
+        note(row.country, key, 0 if seen else max(1, len(addresses)))
 
     rows = [
         {

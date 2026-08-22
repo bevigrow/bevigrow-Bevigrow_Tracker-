@@ -152,12 +152,17 @@ function CountryNote({ rows }: { rows: CountrySent[] }) {
           <Globe size={13} className="text-gold" />
           <span className="text-[11.5px] font-medium text-latte/85">Sent by country</span>
         </span>
-        <span className="text-[10.5px] text-latte/45">{open ? '—' : `${companies}`}</span>
+        <span className="text-[10.5px] text-latte/45">
+          {open ? `${rows.length} countries` : `${companies} companies`}
+        </span>
       </button>
 
       {open && (
         <>
-          <div className="max-h-[19rem] overflow-y-auto px-3 py-1.5">
+          {/* Tall enough for a dozen countries without scrolling, and
+              capped against the window rather than a fixed height so it
+              cannot grow past the bottom of a small screen. */}
+          <div className="max-h-[65vh] overflow-y-auto px-3 py-1.5">
             {rows.map((r) => (
               <div key={r.country} className="flex items-baseline justify-between gap-2 py-[3px]">
                 <span className="truncate text-[11.5px] text-latte/70">{r.country}</span>

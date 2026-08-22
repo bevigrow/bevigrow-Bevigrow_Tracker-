@@ -15,6 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .geo import canon
+from .importer import company_key
 from ..models import DailyQuota, Outreach, SendLedger
 from . import campaigns as cm
 from .geo import tidy
@@ -289,6 +290,9 @@ def sent_by_country(db: Session) -> list[dict]:
     was already counted on the day the company was actually written to.
     """
     per_country: dict[str, dict] = {}
+    # Which companies the ledger already accounted for. A log row for one of
+    # these adds no emails, because the ledger holds every send it made.
+    from_ledger: set[tuple[str, str]] = set()
 
     def note(country: str | None, key: str, emails: int) -> None:
         name = (country or "").strip()
@@ -299,22 +303,12 @@ def sent_by_country(db: Session) -> list[dict]:
         bucket["companies"].add(key)
         bucket["emails"] += emails
 
-    def company_key(email: str | None, website: str | None, name: str | None) -> str:
-        """The mail domain, or the name when there is no address to read."""
-        if email and "@" in email:
-            return email.rsplit("@", 1)[-1].strip().casefold()
-        if website:
-            host = website.strip().casefold()
-            for prefix in ("https://", "http://", "www."):
-                if host.startswith(prefix):
-                    host = host[len(prefix):]
-            return host.split("/")[0].strip() or (name or "?").casefold()
-        return (name or "?").casefold()
-
     for entry in db.scalars(select(SendLedger).where(SendLedger.outcome == "sent")):
-        key = (entry.normalized_company or "").strip().casefold() or company_key(
-            entry.email, entry.website, entry.company_name
-        )
+        # Recomputed rather than trusted: `normalized_company` was written
+        # by an older rule that grouped on the domain alone, so rows stored
+        # before this would have every gmail company under one key.
+        key = company_key(entry.email, entry.website, entry.company_name)
+        from_ledger.add((canon((entry.country or "").strip()) or "unknown", key))
         note(entry.country, key, 1)
 
     # The log fills in what predates the ledger. A row can hold several
@@ -322,12 +316,18 @@ def sent_by_country(db: Session) -> list[dict]:
     for row in db.scalars(select(Outreach)):
         addresses = [a.strip() for a in (row.email or "").replace(";", ",").split(",") if a.strip()]
         key = company_key(addresses[0] if addresses else None, row.website, row.company_name)
+        # Counted from the ledger already? Then the company is known and so
+        # are its sends; this row would double them.
+        #
+        # Checked against the ledger specifically, not against whatever the
+        # tally holds so far — an earlier version asked the latter, which made
+        # a company's *second* log row look like a repeat of its first and
+        # dropped one email per extra mailbox.
         name = canon((row.country or "").strip()) or "unknown"
-        bucket = per_country.get(name)
-        # Already counted from the ledger? Then only the company matters here;
-        # its emails are already in the total and must not be added twice.
-        seen = bucket is not None and key in bucket["companies"]
-        note(row.country, key, 0 if seen else max(1, len(addresses)))
+        if (name, key) in from_ledger:
+            note(row.country, key, 0)
+        else:
+            note(row.country, key, max(1, len(addresses)))
 
     rows = [
         {

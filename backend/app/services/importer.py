@@ -98,6 +98,37 @@ def domain_of(email: str | None, website: str | None = None) -> str | None:
     return None
 
 
+# Mailboxes anyone can open. A domain is a good name for a company right up
+# until the company uses gmail — and in this trade a great many do. Grouping
+# on the domain would then file every unrelated firm with a gmail address as
+# one business, so for these the company name is the better key.
+FREE_MAIL = {
+    "gmail.com", "googlemail.com", "yahoo.com", "yahoo.co.in", "yahoo.co.uk",
+    "hotmail.com", "outlook.com", "live.com", "msn.com", "aol.com",
+    "icloud.com", "me.com", "mac.com", "protonmail.com", "proton.me",
+    "gmx.com", "gmx.de", "gmx.net", "web.de", "mail.com", "zoho.com",
+    "yandex.com", "yandex.ru", "rediffmail.com", "sify.com", "vsnl.net",
+    "bsnl.in", "airtelmail.in", "163.com", "126.com", "qq.com", "sina.com",
+    "naver.com", "daum.net", "t-online.de", "orange.fr", "free.fr",
+    "libero.it", "bol.com.br", "uol.com.br", "terra.com.br",
+}
+
+
+def company_key(email: str | None, website: str | None, name: str | None) -> str:
+    """What counts as "the same company" for grouping.
+
+    The mail domain when it identifies a business, the company name when it
+    does not. Everything that groups companies — the importer, the country
+    note, the duplicate report — has to use this one answer, or two screens
+    will disagree about how many companies there are and both will be
+    defensible.
+    """
+    domain = domain_of(email, website)
+    if domain and domain not in FREE_MAIL:
+        return domain
+    return normalize_company(name) or (domain or (email or "").casefold() or "?")
+
+
 # --------------------------------------------------------------- the columns
 
 
@@ -525,7 +556,9 @@ def parse(data: bytes, filename: str) -> ImportReport:
         place_key = None
         if norm and where:
             place_key = f"{norm}@@{where}@@{normalize_email(values.get('country'))}"
-        group = domain_of(emails[0] if emails else None, values.get("website")) or norm
+        group = company_key(
+            emails[0] if emails else None, values.get("website"), company
+        ) or norm
         # Two keys can name the same firm — the domain on one row, the
         # name-and-place on another. Whichever was seen first wins, so both
         # rows land in one group instead of two that never meet.

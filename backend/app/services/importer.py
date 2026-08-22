@@ -174,10 +174,10 @@ def map_headers(headers: list[str]) -> dict[int, str]:
 
 @dataclass
 class ParsedRow:
-    """One company, ready to become a queue entry.
+    """One address, ready to become a queue entry.
 
-    Holds every mailbox that company listed, comma-separated: they go out
-    on one message, addressed to all of them.
+    One per mailbox, so each gets its own message. Several rows may share a
+    company; the outreach log joins them when it writes them down.
     """
 
     position: int
@@ -204,12 +204,11 @@ class ParsedRow:
 
     @property
     def normalized_email(self) -> str:
-        """The comparison key: every address, folded, comma-joined, no spaces.
+        """The comparison key: the address, folded.
 
-        One row can hold several mailboxes. Stored without spaces and always
-        comma-delimited so the duplicate guard can ask "is this exact address
-        one of them" with a padded LIKE, rather than a substring test that
-        would let `a@x.ae` match `sales-a@x.ae`.
+        Still written through the splitter rather than lowercased directly, so
+        a cell that arrives with a stray separator or a display name around it
+        reduces to the same key as the same address typed plainly.
         """
         return ",".join(_addresses_in(self.email or ""))
 
@@ -399,17 +398,22 @@ def _read_table(data: bytes, filename: str) -> tuple[list[str], list[list[str]]]
 
 
 def _addresses_in(cell: str) -> list[str]:
-    """Every address in one cell, in order, without repeats."""
-    found: list[str] = []
-    for piece in ADDRESS_SPLIT.split(cell or ""):
-        candidate = tidy(piece).strip("<>()[]\"' ")
-        if not candidate:
-            continue
-        if EMAIL_RE.match(candidate):
-            key = candidate.casefold()
-            if key not in {f.casefold() for f in found}:
-                found.append(candidate)
-    return found
+    """Every address in one cell, in order, without repeats.
+
+    Reads the cell exactly as the sender will. It used to apply its own,
+    narrower rule and threw away addresses the mail path would have handled
+    perfectly: "info@hakanfoods.com - delivery delayed" and "Purvi LLC
+    <purvillc@purvigroup.com>" were both discarded, so those companies were
+    silently never written to at all — a worse outcome than a bounce, because
+    a bounce at least tells you.
+
+    Sharing the one cleaner also means the address that goes in the queue is
+    character for character the address that goes in the envelope.
+    """
+    from .sender import recipients
+
+    good, _rejected = recipients(cell or "")
+    return good
 
 
 def _join(unions: dict[str, str], domain: str, place: str | None) -> str:
@@ -571,28 +575,19 @@ def parse(data: bytes, filename: str) -> ImportReport:
         if not fresh:
             continue
 
-        # One company, one message, however many mailboxes it lists.
+        # One queue row per address, and so one email per address.
         #
-        # This used to be a row per address, so a firm listing info@ and
-        # sales@ got two separate emails, two entries against the fifty-a-day
-        # limit and two lines in the outreach log that looked to the eye like
-        # the same company entered twice. Both addresses now ride on one
-        # message, addressed to both — which is also what a person writing by
-        # hand would do, and reads far better at the other end than two
-        # identical letters arriving from the same sender.
+        # These briefly shared an envelope: a firm listing info@ and sales@
+        # received a single message addressed to both. It read better, and it
+        # was wrong. Providers reject a whole request over one malformed
+        # recipient, so a single bad address at a company stopped the good one
+        # hearing from us at all — and a bounce then said nothing about which
+        # of the two had failed. Separate messages fail separately.
         #
-        # "The same company" is the mail domain, not the name: grouping on
-        # names once merged "ABC Coffee" in Japan with "ABC Coffee GmbH" in
-        # Germany, two unrelated firms. Two rows sharing a domain are one
-        # business by any reading.
-        existing = row_by_group.get(group)
-        if existing is not None and existing.email:
-            existing.email = f"{existing.email}, {', '.join(fresh)}"
-            continue
-
-        row = build(", ".join(fresh))
-        row_by_group[group] = row
-        report.rows.append(row)
+        # The outreach *log* still shows one row per company; that is done
+        # when the row is written, not here. The queue is about envelopes.
+        for address in fresh:
+            report.rows.append(build(address))
 
     # Addresses, not rows: one row can now carry several.
     report.addresses = sum(len(_addresses_in(r.email)) for r in report.rows if r.email)

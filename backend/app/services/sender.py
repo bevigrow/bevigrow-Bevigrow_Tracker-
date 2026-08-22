@@ -27,6 +27,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import logging
+import re
 import smtplib
 import ssl
 import uuid
@@ -169,21 +170,91 @@ def verify(account: EmailAccount) -> SendOutcome:
         return SendOutcome(ok=False, error=f"Could not reach {account.smtp_host}: {exc}"[:400])
 
 
-def recipients(to_email: str) -> list[str]:
-    """The addresses on one message.
+# Characters a spreadsheet leaves in a cell that are not part of an address.
+# The zero-width ones are the dangerous kind: invisible on screen, and enough
+# on their own to make a perfectly correct-looking address bounce.
+_INVISIBLE = dict.fromkeys(
+    map(ord, "\u200b\u200c\u200d\ufeff\u2060\u00ad"), None
+)
+_SPACES = dict.fromkeys(map(ord, "\u00a0\u2007\u202f\u2009\u3000"), " ")
 
-    A target may carry several mailboxes at the same company — "info@x.ae,
-    sales@x.ae" — and they belong on one email, addressed to both, rather than
-    on two identical emails that read as a mailshot to anyone who sees both
-    copies. Stored as one comma-separated string so a target stays one row,
-    one send, one entry against the daily limit and one line in the log.
+# What an address must look like before this application will send to it.
+# Deliberately stricter than the importer's test, which only decides whether a
+# cell is worth keeping: this one decides whether to hand a string to a mail
+# server, and a string that is not an address can only bounce.
+_STRICT = re.compile(r"^[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
+
+# "Purvi LLC <purvillc@purvigroup.com>" and "<info@x.ae>".
+_ANGLED = re.compile(r"<\s*([^<>\s]+@[^<>\s]+)\s*>")
+
+
+def clean_address(raw: str) -> str | None:
+    """One address, or None if what was given is not one.
+
+    Spreadsheets are where these come from, and a cell holding an address
+    holds other things too: a display name around it, a note typed after it, a
+    `mailto:` prefix, a non-breaking space that looks exactly like a space, a
+    zero-width character that looks like nothing at all. Every one of those
+    reaches the mail server as part of the address and comes back as a bounce.
+
+    Returning None rather than a best guess is the point. An address this
+    cannot vouch for is one the application refuses to send to, and says so,
+    which is a great deal better than discovering it from a bounce a day later.
     """
-    seen: list[str] = []
-    for part in (to_email or "").replace(";", ",").split(","):
-        address = part.strip()
-        if address and address.casefold() not in {a.casefold() for a in seen}:
-            seen.append(address)
-    return seen
+    text = (raw or "").translate(_INVISIBLE).translate(_SPACES).strip()
+    if not text:
+        return None
+
+    # A display name around it: take what is inside the angle brackets.
+    angled = _ANGLED.search(text)
+    if angled:
+        text = angled.group(1)
+
+    text = text.strip().strip("<>").strip()
+    if text.lower().startswith("mailto:"):
+        text = text[7:].strip()
+    # Punctuation a sentence leaves behind: "write to info@x.ae." or "(info@x.ae)".
+    text = text.strip("()[]{}\"'\u2019\u201c\u201d").rstrip(".,;:").strip()
+
+    if not _STRICT.match(text):
+        return None
+    return text
+
+
+def recipients(to_email: str) -> tuple[list[str], list[str]]:
+    """The addresses on one message, and the parts that were not addresses.
+
+    Returns (good, rejected). Rejected entries are never sent to and never
+    silently dropped — the caller records them, because "we never wrote to
+    that company and here is the reason" is a fact worth having.
+
+    Splitting is deliberately generous: a cell can separate addresses with a
+    comma, a semicolon, a slash, a pipe, a newline or just a space, and every
+    one of those has turned up in a real file.
+    """
+    good: list[str] = []
+    rejected: list[str] = []
+    seen: set[str] = set()
+    text = (to_email or "").translate(_INVISIBLE).translate(_SPACES)
+    for chunk in re.split(r"[;,|/\n\r\t]+|\s{1,}", text):
+        piece = chunk.strip()
+        if not piece:
+            continue
+        # A display name is several space-separated words followed by an
+        # address, so splitting on space breaks it up. Anything without an @
+        # in it is part of a name, not an address, and is simply not a
+        # recipient — it is dropped rather than reported.
+        if "@" not in piece:
+            continue
+        address = clean_address(piece)
+        if address is None:
+            rejected.append(piece)
+            continue
+        if address.casefold() in seen:
+            continue
+        seen.add(address.casefold())
+        good.append(address)
+    return good, rejected
 
 
 def build_message(
@@ -203,7 +274,7 @@ def build_message(
     message = EmailMessage()
     message["Subject"] = subject
     message["From"] = formataddr((account.from_name or "", account.from_email))
-    message["To"] = ", ".join(recipients(to_email))
+    message["To"] = ", ".join(recipients(to_email)[0])
     message["Message-ID"] = message_id or make_msgid(domain=account.from_email.split("@")[-1])
     message.set_content(body)
     return message
@@ -266,7 +337,7 @@ def _send_resend(account, to_email: str, subject: str, body: str, message_id: st
         "from": (
             f"{account.from_name} <{account.from_email}>" if account.from_name else account.from_email
         ),
-        "to": recipients(to_email),
+        "to": recipients(to_email)[0],
         "subject": subject,
         "text": body,
         "headers": {"Message-ID": message_id},
@@ -300,7 +371,7 @@ def _send_brevo(account, to_email: str, subject: str, body: str, message_id: str
         return SendOutcome(ok=False, auth_fault=True, error="No Brevo API key stored.")
     payload = {
         "sender": {"email": account.from_email, "name": account.from_name or account.from_email},
-        "to": [{"email": a} for a in recipients(to_email)],
+        "to": [{"email": a} for a in recipients(to_email)[0]],
         "subject": subject,
         "textContent": body,
         "headers": {"Message-ID": message_id},

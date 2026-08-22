@@ -319,10 +319,15 @@ def _log_outreach(
 ) -> Outreach:
     """Write the Log Outreach row, immediately, with the message as sent.
 
-    One row per *address*, so three mailboxes at one company produce three
-    records, each with its own sent status, time, subject and reply — asking
-    "did the buying office ever answer?" is a different question from "did
-    reception?", and one merged row cannot answer either.
+    One row per *company*, not per address. Each mailbox gets its own email —
+    they are separate envelopes and fail separately — but a firm listing
+    info@ and sales@ is one company to read about, and two rows identical in
+    every visible respect look like the same company entered twice.
+
+    So a second address at a company already written to on this campaign
+    appends itself to the existing row instead of making a new one. Whoever
+    replies is matched by their own address regardless, because the reply
+    reader matches on the Message-ID of the individual email that was sent.
 
     The exact personalised text, not the template: six months from now the
     question is "what did we actually say to them", and a template full of
@@ -345,6 +350,30 @@ def _log_outreach(
     label = target.company_name
     if target.location:
         label = f"{target.company_name}, {target.location}"
+    # Already written to at another address today, on this campaign? Then
+    # this is the same company, and it gets the same row.
+    twin = db.scalar(
+        select(Outreach)
+        .join(CampaignTarget, CampaignTarget.outreach_id == Outreach.id)
+        .where(
+            CampaignTarget.campaign_id == campaign.id,
+            Outreach.company_name == label[:200],
+        )
+        .limit(1)
+    )
+    if twin is not None:
+        existing = [
+            a.strip() for a in (twin.email or "").split(",") if a.strip()
+        ]
+        if target.email and target.email.casefold() not in {
+            a.casefold() for a in existing
+        }:
+            existing.append(target.email)
+        twin.email = ", ".join(existing)[:255]
+        twin.contact_point = twin.email[:255]
+        db.commit()
+        return twin
+
     row = Outreach(
         company_name=label[:200],
         contact_person=target.contact_person,

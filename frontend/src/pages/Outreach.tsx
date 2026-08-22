@@ -9,6 +9,7 @@ import {
   Search,
   Send,
   Trash2,
+  Undo2,
 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -43,6 +44,7 @@ import type {
   CountryOption,
   Outreach as FullRow,
   MergeGroup,
+  MergeUndo,
   OutreachRow as Row,
   OutreachInsights as Insights,
   OutreachStats,
@@ -86,13 +88,15 @@ export function Outreach() {
   const [deleting, setDeleting] = useState<Row | null>(null)
 
   const [mergeable, setMergeable] = useState<MergeGroup[]>([])
+  const [undoable, setUndoable] = useState<MergeUndo | null>(null)
+  const [splittable, setSplittable] = useState<MergeGroup[]>([])
   const [merging, setMerging] = useState(false)
   const [combining, setCombining] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [list, s, dupes] = await Promise.all([
+      const [list, s, dupes, undo, splits] = await Promise.all([
         api.listOutreach({
           search: search.trim() || undefined,
           contact_method: method || undefined,
@@ -102,10 +106,14 @@ export function Outreach() {
         }),
         api.outreachStats().catch(() => null),
         api.mergeableOutreach().catch(() => []),
+        api.undoableMerge().catch(() => null),
+        api.splittableOutreach().catch(() => []),
       ])
       setRows(list)
       setStats(s)
       setMergeable(dupes)
+      setUndoable(undo)
+      setSplittable(splits)
     } catch {
       toast.error('Could not load the outreach list.')
     } finally {
@@ -218,6 +226,35 @@ export function Outreach() {
 
   const filtered = search || method || status || country || dueOnly
 
+  const undoCombine = async () => {
+    setCombining(true)
+    try {
+      const back = await api.undoMerge()
+      await load()
+      toast.success(
+        `Put back ${back.rows_removed} row${back.rows_removed === 1 ? '' : 's'}, exactly as they were.`,
+      )
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not undo it.')
+    } finally {
+      setCombining(false)
+    }
+  }
+
+  const split = async () => {
+    setCombining(true)
+    try {
+      const done = await api.splitOutreach()
+      await load()
+      const rows = done.reduce((n, g) => n + g.rows, 0)
+      toast.success(`Separated ${done.length} compan${done.length === 1 ? 'y' : 'ies'} into ${rows} rows.`)
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not separate them.')
+    } finally {
+      setCombining(false)
+    }
+  }
+
   const combine = async () => {
     setCombining(true)
     try {
@@ -253,6 +290,22 @@ export function Outreach() {
             <Button variant="ghost" onClick={() => setMerging(true)} icon={<Combine size={16} />}>
               Combine {mergeable.length} duplicate
               {mergeable.length === 1 ? '' : 's'}
+            </Button>
+          )}
+          {/* Offered until it is used, so a combine can be reconsidered after
+              seeing what it actually did rather than only before. */}
+          {/* No snapshot to replay — a combine from before undo existed. The
+              addresses are all still on the row, so a row each can be rebuilt
+              from what is there. */}
+          {!undoable && splittable.length > 0 && (
+            <Button variant="ghost" onClick={split} disabled={combining} icon={<Undo2 size={16} />}>
+              Separate {splittable.length} combined
+            </Button>
+          )}
+          {undoable && (
+            <Button variant="ghost" onClick={undoCombine} disabled={combining} icon={<Undo2 size={16} />}>
+              Undo combine ({undoable.rows_removed} row
+              {undoable.rows_removed === 1 ? '' : 's'})
             </Button>
           )}
           <Button onClick={() => setCreating(true)} icon={<Plus size={16} />}>

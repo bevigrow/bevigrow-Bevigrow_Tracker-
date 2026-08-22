@@ -16,6 +16,8 @@ import type {
   EmailAccount,
   InboundReply,
   MergeGroup,
+  MergeHistory,
+  MergeUndo,
   ReplySync,
   EmailTemplate,
   ImportReport,
@@ -289,6 +291,11 @@ export const api = {
   outreachStats: () => request<OutreachStats>('/api/outreach/stats'),
   mergeableOutreach: () => request<MergeGroup[]>('/api/outreach/mergeable'),
   mergeOutreach: () => request<MergeGroup[]>('/api/outreach/merge', { method: 'POST' }),
+  undoableMerge: () => request<MergeUndo | null>('/api/outreach/merge/undoable'),
+  undoMerge: () => request<MergeUndo>('/api/outreach/merge/undo', { method: 'POST' }),
+  mergeHistory: () => request<MergeHistory[]>('/api/outreach/merge/history'),
+  splittableOutreach: () => request<MergeGroup[]>('/api/outreach/merge/splittable'),
+  splitOutreach: () => request<MergeGroup[]>('/api/outreach/merge/split', { method: 'POST' }),
   createOutreach: (body: Record<string, unknown>) =>
     request<Outreach>('/api/outreach', { method: 'POST', body: JSON.stringify(body) }),
   updateOutreach: (id: number, body: Record<string, unknown>) =>

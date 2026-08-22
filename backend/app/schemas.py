@@ -760,6 +760,36 @@ class OutreachStats(BaseModel):
     by_method: dict[str, int]
 
 
+class MergeUndoOut(BaseModel):
+    """A combine that can still be put back."""
+
+    id: int
+    at: datetime
+    companies: int
+    rows_removed: int
+
+
+class MergedInto(BaseModel):
+    """One company as it was combined: what went in, what came out."""
+
+    company_name: str
+    country: str | None = None
+    # The addresses that had their own row before, and the single row now.
+    absorbed_emails: list[str] = []
+    kept_email: str | None = None
+
+
+class MergeHistoryOut(BaseModel):
+    """One press of Combine, and every company it touched."""
+
+    id: int
+    at: datetime
+    companies: int
+    rows_removed: int
+    undone: bool
+    details: list[MergedInto] = []
+
+
 class MergeGroup(BaseModel):
     """One company that appears on more than one row, and its addresses."""
 

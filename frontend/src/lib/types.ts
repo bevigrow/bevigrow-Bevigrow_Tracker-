@@ -554,3 +554,29 @@ export interface MergeGroup {
   emails: string[]
   ids: number[]
 }
+
+/** A combine that has not been undone yet. */
+export interface MergeUndo {
+  id: number
+  at: string
+  companies: number
+  rows_removed: number
+}
+
+/** One company as it was combined: the rows that went in, the row that came out. */
+export interface MergedInto {
+  company_name: string
+  country: string | null
+  absorbed_emails: string[]
+  kept_email: string | null
+}
+
+/** One press of Combine. */
+export interface MergeHistory {
+  id: number
+  at: string
+  companies: number
+  rows_removed: number
+  undone: boolean
+  details: MergedInto[]
+}

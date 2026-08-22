@@ -6,6 +6,7 @@ become one. Keeping them apart means neither form is half-empty.
 """
 from __future__ import annotations
 
+import json
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -17,6 +18,7 @@ from ..deps import get_current_user
 from ..models import (
     OUTREACH_CLOSED,
     CampaignTarget,
+    MergeSnapshot,
     Contact,
     ContactMethod,
     InboundReply,
@@ -29,6 +31,9 @@ from ..schemas import (
     ContactOut,
     OutreachCreate,
     MergeGroup,
+    MergeHistoryOut,
+    MergeUndoOut,
+    MergedInto,
     OutreachGroup,
     OutreachInsights,
     OutreachListOut,
@@ -213,10 +218,17 @@ def merge_duplicates(db: Session = Depends(get_db), _: User = Depends(get_curren
     that survives, so no reply is orphaned by the tidy-up.
     """
     done: list[MergeGroup] = []
+    # Everything this call is about to change, recorded whole before it
+    # changes. Written first so that an undo restores the exact prior state
+    # rather than a reconstruction of it.
+    snapshot: list[dict] = []
     for rows in _mergeable(db):
         keeper, *rest = sorted(
             rows, key=lambda r: (r.contacted_on or date.max, r.id)
         )
+        # Taken now, as values, not as a reference: the keeper is about to be
+        # written over, and a reference would capture the new state.
+        keeper_before = _snapshot_row(keeper)
         addresses: list[str] = []
         for row in rows:
             for part in (row.email or "").replace(";", ",").split(","):
@@ -240,7 +252,29 @@ def merge_duplicates(db: Session = Depends(get_db), _: User = Depends(get_curren
             None if keeper.status == OutreachStatus.replied else (min(pending) if pending else None)
         )
 
+        entry = {
+            "keeper_id": keeper.id,
+            # The surviving row as it was, so undo does not leave it holding
+            # the combined addresses of rows that exist again.
+            "keeper_before": keeper_before,
+            "absorbed": [],
+        }
         for row in rest:
+            moved_replies = [
+                r.id for r in db.scalars(
+                    select(InboundReply).where(InboundReply.outreach_id == row.id)
+                )
+            ]
+            moved_targets = [
+                t.id for t in db.scalars(
+                    select(CampaignTarget).where(CampaignTarget.outreach_id == row.id)
+                )
+            ]
+            entry["absorbed"].append({
+                "row": _snapshot_row(row),
+                "replies": moved_replies,
+                "targets": moved_targets,
+            })
             db.query(InboundReply).filter(InboundReply.outreach_id == row.id).update(
                 {InboundReply.outreach_id: keeper.id}, synchronize_session=False
             )
@@ -248,6 +282,7 @@ def merge_duplicates(db: Session = Depends(get_db), _: User = Depends(get_curren
                 {CampaignTarget.outreach_id: keeper.id}, synchronize_session=False
             )
             db.delete(row)
+        snapshot.append(entry)
 
         done.append(
             MergeGroup(
@@ -258,8 +293,255 @@ def merge_duplicates(db: Session = Depends(get_db), _: User = Depends(get_curren
                 ids=[keeper.id],
             )
         )
+    if snapshot:
+        db.add(
+            MergeSnapshot(
+                companies=len(snapshot),
+                rows_removed=sum(len(e["absorbed"]) for e in snapshot),
+                payload=json.dumps(snapshot, default=str),
+            )
+        )
     db.commit()
     return done
+
+
+# The columns worth putting back. Deliberately explicit: a blanket dump of the
+# table would restore ids and timestamps that mean nothing once the row has
+# been deleted, and would silently break the day a column is added.
+_RESTORE_FIELDS = (
+    "company_name", "contact_person", "website", "email", "country",
+    "contact_method", "contact_point", "contacted_on", "message_sent",
+    "status", "their_reply", "replied_on", "next_action", "next_follow_up",
+    "notes", "follow_ups_sent", "owner_id", "quote_id", "contacted_at",
+)
+
+
+def _snapshot_row(row: Outreach) -> dict:
+    out: dict = {"id": row.id}
+    for field_name in _RESTORE_FIELDS:
+        value = getattr(row, field_name, None)
+        if hasattr(value, "value"):      # an enum
+            value = value.value
+        out[field_name] = value
+    return out
+
+
+@router.get("/merge/undoable", response_model=MergeUndoOut | None)
+def last_merge(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """The most recent combine, if it can still be reversed."""
+    row = db.scalar(
+        select(MergeSnapshot)
+        .where(MergeSnapshot.undone.is_(False))
+        .order_by(MergeSnapshot.id.desc())
+        .limit(1)
+    )
+    if row is None:
+        return None
+    return MergeUndoOut(
+        id=row.id, at=row.at, companies=row.companies, rows_removed=row.rows_removed
+    )
+
+
+@router.post("/merge/undo", response_model=MergeUndoOut)
+def undo_merge(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Put back the rows the last combine removed.
+
+    The absorbed rows are recreated with their own addresses and their own
+    dates, the surviving row is returned to the values it had, and every reply
+    and campaign target that was re-pointed goes back to the row it came from.
+
+    Restored rows get new ids — the old ones are gone and reusing them would
+    be a lie about which row this is. Anything that referenced them by id is
+    re-pointed explicitly, which is why the ids were recorded.
+    """
+    snap = db.scalar(
+        select(MergeSnapshot)
+        .where(MergeSnapshot.undone.is_(False))
+        .order_by(MergeSnapshot.id.desc())
+        .limit(1)
+    )
+    if snap is None:
+        raise HTTPException(status_code=404, detail="There is no combine to undo.")
+
+    restored = 0
+    for entry in json.loads(snap.payload):
+        keeper = db.get(Outreach, entry["keeper_id"])
+        if keeper is not None:
+            for field_name, value in entry["keeper_before"].items():
+                if field_name == "id":
+                    continue
+                if field_name == "status" and value:
+                    value = OutreachStatus(value)
+                elif field_name == "contact_method" and value:
+                    value = ContactMethod(value)
+                elif field_name in ("contacted_on", "replied_on", "next_follow_up") and value:
+                    value = date.fromisoformat(str(value)[:10])
+                setattr(keeper, field_name, value)
+
+        for absorbed in entry["absorbed"]:
+            data = dict(absorbed["row"])
+            data.pop("id", None)
+            if data.get("status"):
+                data["status"] = OutreachStatus(data["status"])
+            if data.get("contact_method"):
+                data["contact_method"] = ContactMethod(data["contact_method"])
+            for field_name in ("contacted_on", "replied_on", "next_follow_up"):
+                if data.get(field_name):
+                    data[field_name] = date.fromisoformat(str(data[field_name])[:10])
+            data.pop("contacted_at", None)
+            row = Outreach(**data)
+            db.add(row)
+            db.flush()
+            restored += 1
+            if absorbed["replies"]:
+                db.query(InboundReply).filter(InboundReply.id.in_(absorbed["replies"])).update(
+                    {InboundReply.outreach_id: row.id}, synchronize_session=False
+                )
+            if absorbed["targets"]:
+                db.query(CampaignTarget).filter(CampaignTarget.id.in_(absorbed["targets"])).update(
+                    {CampaignTarget.outreach_id: row.id}, synchronize_session=False
+                )
+
+    snap.undone = True
+    db.commit()
+    return MergeUndoOut(
+        id=snap.id, at=snap.at, companies=snap.companies, rows_removed=restored
+    )
+
+
+@router.get("/merge/splittable", response_model=list[MergeGroup])
+def list_splittable(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Rows holding more than one address, which can be given a row each."""
+    out: list[MergeGroup] = []
+    for row in db.scalars(select(Outreach).order_by(func.lower(Outreach.company_name))):
+        parts = [p.strip() for p in (row.email or "").replace(";", ",").split(",") if p.strip()]
+        if len(parts) > 1:
+            out.append(
+                MergeGroup(
+                    company_name=row.company_name or "",
+                    country=row.country,
+                    rows=len(parts),
+                    emails=parts,
+                    ids=[row.id],
+                )
+            )
+    return out
+
+
+@router.post("/merge/split", response_model=list[MergeGroup])
+def split_combined(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Give every address on a combined row its own row again.
+
+    The undo above replays a snapshot and is exact. This is the fallback for a
+    combine performed before snapshots existed: no record of the original rows
+    survives, but nothing was actually lost either — every address is still
+    sitting in the combined row, so a row per address can be rebuilt from what
+    is there.
+
+    What it cannot recover is the differences between the original rows. Notes
+    and replies were concatenated when they were joined, so each rebuilt row
+    receives the combined text rather than only its own share, and each gets
+    the surviving status and dates. The addresses, the count and the company
+    are exactly right; the per-row detail is a copy rather than a restoration,
+    and saying so is the point of it being a separate button.
+    """
+    out: list[MergeGroup] = []
+    for row in list(db.scalars(select(Outreach))):
+        parts: list[str] = []
+        for chunk in (row.email or "").replace(";", ",").split(","):
+            one = chunk.strip()
+            if one and one.casefold() not in {p.casefold() for p in parts}:
+                parts.append(one)
+        if len(parts) < 2:
+            continue
+
+        # The first address stays on the row that already exists, so anything
+        # pointing at it — a reply, a campaign target, a quote — keeps working.
+        row.email = parts[0][:255]
+        row.contact_point = parts[0][:255]
+        for address in parts[1:]:
+            db.add(
+                Outreach(
+                    company_name=row.company_name,
+                    contact_person=row.contact_person,
+                    website=row.website,
+                    email=address[:255],
+                    country=row.country,
+                    contact_method=row.contact_method,
+                    contact_point=address[:255],
+                    contacted_on=row.contacted_on,
+                    message_sent=row.message_sent,
+                    status=row.status,
+                    their_reply=row.their_reply,
+                    replied_on=row.replied_on,
+                    next_action=row.next_action,
+                    next_follow_up=row.next_follow_up,
+                    notes=row.notes,
+                    owner_id=row.owner_id,
+                )
+            )
+        out.append(
+            MergeGroup(
+                company_name=row.company_name or "",
+                country=row.country,
+                rows=len(parts),
+                emails=parts,
+                ids=[row.id],
+            )
+        )
+    db.commit()
+    return out
+
+
+@router.get("/merge/history", response_model=list[MergeHistoryOut])
+def merge_history(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+    limit: int = Query(default=20, ge=1, le=100),
+):
+    """Every combine, and exactly which addresses went into which company.
+
+    Kept because combining deletes rows, and "what happened to the other
+    Bombay row" is a question worth being able to answer months later without
+    reasoning backwards from a comma-separated cell. Entries that were undone
+    stay in the list, marked, since an undo is also something that happened.
+    """
+    out: list[MergeHistoryOut] = []
+    for snap in db.scalars(
+        select(MergeSnapshot).order_by(MergeSnapshot.id.desc()).limit(limit)
+    ):
+        details: list[MergedInto] = []
+        for entry in json.loads(snap.payload or "[]"):
+            before = entry.get("keeper_before") or {}
+            keeper = db.get(Outreach, entry.get("keeper_id"))
+            absorbed = [
+                a["row"].get("email")
+                for a in entry.get("absorbed", [])
+                if a.get("row", {}).get("email")
+            ]
+            # The keeper's own address belongs at the front: it was one of the
+            # rows that went in, not a separate thing the merge produced.
+            if before.get("email"):
+                absorbed.insert(0, before["email"])
+            details.append(
+                MergedInto(
+                    company_name=before.get("company_name") or "",
+                    country=before.get("country"),
+                    absorbed_emails=absorbed,
+                    kept_email=keeper.email if keeper is not None else None,
+                )
+            )
+        out.append(
+            MergeHistoryOut(
+                id=snap.id,
+                at=snap.at,
+                companies=snap.companies,
+                rows_removed=snap.rows_removed,
+                undone=snap.undone,
+                details=details,
+            )
+        )
+    return out
 
 
 @router.get("/stats", response_model=OutreachStats)

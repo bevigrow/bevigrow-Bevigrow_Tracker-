@@ -459,6 +459,31 @@ class MailProvider(str, enum.Enum):
     brevo = "brevo"
 
 
+class MergeSnapshot(Base):
+    """Every row a combine removed, kept whole so it can be put back.
+
+    Combining companies deletes rows, and a deletion a person cannot reverse
+    is one they have to be brave to attempt. The entire absorbed row is
+    serialised here before it goes, along with the surviving row's own values
+    as they were, so undo restores the exact state rather than an
+    approximation of it.
+
+    One snapshot per combine, not per row, because undo means "put back what
+    that button did" — a half-undone merge would be worse than either state.
+    """
+
+    __tablename__ = "merge_snapshots"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    # How many companies were combined, for the button's label.
+    companies: Mapped[int] = mapped_column(Integer, default=0)
+    rows_removed: Mapped[int] = mapped_column(Integer, default=0)
+    # [{keeper: {...}, absorbed: [{...}], replies: [ids], targets: [ids]}, ...]
+    payload: Mapped[str] = mapped_column(Text, default="[]")
+    undone: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+
+
 class SendLedger(Base):
     """Every decision the agent ever made, kept forever.
 

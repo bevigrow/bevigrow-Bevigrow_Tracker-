@@ -7,7 +7,7 @@
  * written to those companies this morning. This page is the memory that
  * outlives the campaign.
  */
-import { CalendarDays, Copy, Inbox, Mailbox, RotateCcw, Trash2 } from 'lucide-react'
+import { CalendarDays, Combine, Copy, Inbox, Mailbox, RotateCcw, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
@@ -34,6 +34,7 @@ import type {
   DailyReport,
   DuplicateGroup,
   InboundReply,
+  MergeHistory,
   TrendReport,
 } from '../lib/types'
 import { CATEGORICAL } from '../lib/viz'
@@ -71,10 +72,11 @@ export function OutreachReport() {
   const [trends, setTrends] = useState<TrendReport | null>(null)
   const [funnel, setFunnel] = useState<{ stage: string; count: number }[]>([])
   const [replies, setReplies] = useState<InboundReply[]>([])
+  const [merges, setMerges] = useState<MergeHistory[]>([])
 
   const load = useCallback(async () => {
     try {
-      const [r, d, b, t, dash, inbox] = await Promise.all([
+      const [r, d, b, t, dash, inbox, joined] = await Promise.all([
         api.dailyReport(60),
         api.duplicateReport().catch(() => []),
         api.listCampaigns(true).catch(() => []),
@@ -83,6 +85,7 @@ export function OutreachReport() {
         // sides of the business; this page only borrows it.
         api.dashboard().catch(() => null),
         api.listReplies().catch(() => []),
+        api.mergeHistory().catch(() => []),
       ])
       setReport(r)
       setDupes(d)
@@ -90,6 +93,7 @@ export function OutreachReport() {
       setTrends(t)
       setFunnel(dash?.funnel ?? [])
       setReplies(inbox)
+      setMerges(joined)
     } catch {
       toast.error('Could not load the report.')
     } finally {
@@ -288,6 +292,9 @@ export function OutreachReport() {
 
       {/* ------------------------------------------------------- what came back */}
       {replies.length > 0 && <RepliesReceived replies={replies} onChanged={load} />}
+
+      {/* --------------------------------------------- what was combined */}
+      {merges.length > 0 && <CombinedCompanies merges={merges} />}
 
       {/* ------------------------------------------------ same name report */}
       {dupes.length > 0 && (
@@ -635,6 +642,78 @@ function RepliesReceived({
           ))}
         </div>
       )}
+    </Card>
+  )
+}
+
+
+/* ------------------------------------------------------ combined companies */
+
+/** What Combine did, and to which addresses.
+ *
+ * Combining deletes rows, so "what happened to the other Bombay row" has to
+ * be answerable months later without reasoning backwards from a
+ * comma-separated cell. Each entry names the addresses that had their own row
+ * and the single row they became. Undone combines stay listed and are marked
+ * as such — an undo is also something that happened.
+ */
+function CombinedCompanies({ merges }: { merges: MergeHistory[] }) {
+  return (
+    <Card>
+      <div className="mb-3 flex items-center gap-2.5">
+        <Combine size={17} className="text-gold" />
+        <div>
+          <h2 className="font-display text-lg text-latte">Companies combined</h2>
+          <p className="text-[11px] text-latte/45">
+            One company written to at several addresses, joined into a single row.
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {merges.map((m) => (
+          <div
+            key={m.id}
+            className={`rounded-lg border px-3.5 py-3 ${
+              m.undone
+                ? 'border-caramel/15 bg-bean/20 opacity-60'
+                : 'border-caramel/20 bg-bean/30'
+            }`}
+          >
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+              <span className="text-[12.5px] text-latte/80">
+                {m.companies} compan{m.companies === 1 ? 'y' : 'ies'} · {m.rows_removed} row
+                {m.rows_removed === 1 ? '' : 's'} removed
+              </span>
+              <span className="text-[11px] text-latte/40">
+                {formatDateTime(m.at)}
+                {m.undone && ' · put back again'}
+              </span>
+            </div>
+
+            <div className="mt-2 space-y-2">
+              {m.details.map((d) => (
+                <div key={`${m.id}-${d.company_name}`} className="text-[12px] leading-relaxed">
+                  <p className="text-latte/75">
+                    {d.company_name}
+                    {d.country && <span className="text-latte/35"> · {d.country}</span>}
+                  </p>
+                  {/* The addresses that each had a row, then the one row. */}
+                  <p className="mt-0.5 break-words text-latte/45">
+                    {d.absorbed_emails.join('  +  ')}
+                  </p>
+                  {!m.undone && d.kept_email && (
+                    <p className="mt-0.5 break-words text-latte/60">
+                      <span className="text-gold/70">→ </span>
+                      {d.kept_email}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
     </Card>
   )
 }

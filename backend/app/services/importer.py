@@ -114,7 +114,12 @@ FREE_MAIL = {
 }
 
 
-def company_key(email: str | None, website: str | None, name: str | None) -> str:
+def company_key(
+    email: str | None,
+    website: str | None,
+    name: str | None,
+    location: str | None = None,
+) -> str:
     """What counts as "the same company" for grouping.
 
     The mail domain when it identifies a business, the company name when it
@@ -122,11 +127,31 @@ def company_key(email: str | None, website: str | None, name: str | None) -> str
     note, the duplicate report — has to use this one answer, or two screens
     will disagree about how many companies there are and both will be
     defensible.
+
+    The location belongs in the name half of that, and has to be supplied
+    when it is held in its own column. The send history keeps the name and
+    the location apart; the outreach log writes them into one string. Reading
+    the two without reconciling them gave "VBS_TESTING" and "VBS_TESTING,
+    Salem" different keys, so a company recorded in both places counted twice
+    — and doubling is the one arithmetic error nobody forgives in a number
+    that reports how many firms they have reached.
+
+    It is joined rather than discarded because two firms of one name in two
+    cities are two firms, and dropping the town would merge them.
     """
     domain = domain_of(email, website)
     if domain and domain not in FREE_MAIL:
         return domain
-    return normalize_company(name) or (domain or (email or "").casefold() or "?")
+    label = (name or "").strip()
+    place = (location or "").strip()
+    # Appended unless the name already ends with it, which is how the log
+    # composes the two. Testing for the word anywhere in the name was wrong:
+    # "Yercaud Estates" in Yercaud contains its town in the middle of its own
+    # name, so the location was skipped on one side and appended on the other,
+    # and the same firm ended up with two keys.
+    if place and not label.casefold().rstrip(" ,").endswith(place.casefold()):
+        label = f"{label}, {place}" if label else place
+    return normalize_company(label) or (domain or (email or "").casefold() or "?")
 
 
 # --------------------------------------------------------------- the columns
@@ -557,7 +582,10 @@ def parse(data: bytes, filename: str) -> ImportReport:
         if norm and where:
             place_key = f"{norm}@@{where}@@{normalize_email(values.get('country'))}"
         group = company_key(
-            emails[0] if emails else None, values.get("website"), company
+            emails[0] if emails else None,
+            values.get("website"),
+            company,
+            values.get("location"),
         ) or norm
         # Two keys can name the same firm — the domain on one row, the
         # name-and-place on another. Whichever was seen first wins, so both

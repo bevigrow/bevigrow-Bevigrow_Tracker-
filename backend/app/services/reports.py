@@ -307,7 +307,7 @@ def sent_by_country(db: Session) -> list[dict]:
         # Recomputed rather than trusted: `normalized_company` was written
         # by an older rule that grouped on the domain alone, so rows stored
         # before this would have every gmail company under one key.
-        key = company_key(entry.email, entry.website, entry.company_name)
+        key = company_key(entry.email, entry.website, entry.company_name, entry.location)
         from_ledger.add((canon((entry.country or "").strip()) or "unknown", key))
         note(entry.country, key, 1)
 

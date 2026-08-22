@@ -1,7 +1,6 @@
 import {
   CircleSlash,
   Clock,
-  Combine,
   FilePlus2,
   Globe,
   MailCheck,
@@ -9,7 +8,6 @@ import {
   Search,
   Send,
   Trash2,
-  Undo2,
 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -45,7 +43,6 @@ import type {
   Outreach as FullRow,
   MergeGroup,
   CountrySent,
-  MergeUndo,
   OutreachRow as Row,
   OutreachInsights as Insights,
   OutreachStats,
@@ -222,12 +219,8 @@ export function Outreach() {
   const [creating, setCreating] = useState(false)
   const [deleting, setDeleting] = useState<Row | null>(null)
 
-  const [mergeable, setMergeable] = useState<MergeGroup[]>([])
-  const [undoable, setUndoable] = useState<MergeUndo | null>(null)
-  const [splittable, setSplittable] = useState<MergeGroup[]>([])
   const [unlogged, setUnlogged] = useState<MergeGroup[]>([])
   const [byCountry, setByCountry] = useState<CountrySent[]>([])
-  const [merging, setMerging] = useState(false)
   const [combining, setCombining] = useState(false)
 
   const load = useCallback(async () => {
@@ -278,31 +271,20 @@ export function Outreach() {
     return () => window.clearTimeout(id)
   }, [load])
 
-  /** Whether anything can be combined, separated or put back.
+  /** Whether any email went out without leaving a row in the log.
    *
-   * Deliberately not part of `load`. These three answer questions about the
-   * whole log and cannot change from typing in the search box, but they were
-   * being re-asked on every debounced keystroke — five requests where one was
-   * needed, each paying the round trip to a database in another region. They
-   * are fetched once, and again only after a combine or an undo has actually
-   * changed the answer.
+   * Deliberately not part of `load`. It asks a question about the whole log
+   * and cannot change from typing in the search box, so re-asking it on every
+   * debounced keystroke would pay a round trip to another region for an
+   * answer that had not moved.
    */
-  const refreshCombineState = useCallback(async () => {
-    const [dupes, undo, splits, gaps] = await Promise.all([
-      api.mergeableOutreach().catch(() => []),
-      api.undoableMerge().catch(() => null),
-      api.splittableOutreach().catch(() => []),
-      api.unloggedOutreach().catch(() => []),
-    ])
-    setMergeable(dupes)
-    setUndoable(undo)
-    setSplittable(splits)
-    setUnlogged(gaps)
+  const refreshGaps = useCallback(async () => {
+    setUnlogged(await api.unloggedOutreach().catch(() => []))
   }, [])
 
   useEffect(() => {
-    void refreshCombineState()
-  }, [refreshCombineState])
+    void refreshGaps()
+  }, [refreshGaps])
 
   useEffect(() => {
     // Every country the app knows, so the picker still offers one whose only
@@ -390,63 +372,16 @@ export function Outreach() {
 
   const filtered = search || method || status || country || dueOnly || period
 
-  const undoCombine = async () => {
-    setCombining(true)
-    try {
-      const back = await api.undoMerge()
-      await Promise.all([load(), refreshCombineState()])
-      toast.success(
-        `Put back ${back.rows_removed} row${back.rows_removed === 1 ? '' : 's'}, exactly as they were.`,
-      )
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not undo it.')
-    } finally {
-      setCombining(false)
-    }
-  }
-
-  const split = async () => {
-    setCombining(true)
-    try {
-      const done = await api.splitOutreach()
-      await Promise.all([load(), refreshCombineState()])
-      const rows = done.reduce((n, g) => n + g.rows, 0)
-      toast.success(`Separated ${done.length} compan${done.length === 1 ? 'y' : 'ies'} into ${rows} rows.`)
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not separate them.')
-    } finally {
-      setCombining(false)
-    }
-  }
-
   const relog = async () => {
     setCombining(true)
     try {
       const made = await api.relogOutreach()
-      await Promise.all([load(), refreshCombineState()])
+      await Promise.all([load(), refreshGaps()])
       toast.success(
         `Added ${made.length} compan${made.length === 1 ? 'y' : 'ies'} back to the log.`,
       )
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not rebuild the rows.')
-    } finally {
-      setCombining(false)
-    }
-  }
-
-  const combine = async () => {
-    setCombining(true)
-    try {
-      const done = await api.mergeOutreach()
-      setMerging(false)
-      await Promise.all([load(), refreshCombineState()])
-      toast.success(
-        done.length
-          ? `Combined ${done.length} compan${done.length === 1 ? 'y' : 'ies'}.`
-          : 'Nothing needed combining.',
-      )
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not combine them.')
     } finally {
       setCombining(false)
     }
@@ -470,8 +405,6 @@ export function Outreach() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {/* Only offered when there is something to combine, so it is not a
-              button that does nothing on most days. */}
           {/* Emailed, but with no row in the log. The send history is kept
               separately and cannot be deleted, so a gap between the two is
               both detectable and repairable — and a company that was written
@@ -481,50 +414,11 @@ export function Outreach() {
               Add {unlogged.length} missing to the log
             </Button>
           )}
-          {mergeable.length > 0 && (
-            <Button variant="ghost" onClick={() => setMerging(true)} icon={<Combine size={16} />}>
-              Combine {mergeable.length} duplicate
-              {mergeable.length === 1 ? '' : 's'}
-            </Button>
-          )}
-          {/* Offered until it is used, so a combine can be reconsidered after
-              seeing what it actually did rather than only before. */}
-          {/* No snapshot to replay — a combine from before undo existed. The
-              addresses are all still on the row, so a row each can be rebuilt
-              from what is there. */}
-          {!undoable && splittable.length > 0 && (
-            <Button variant="ghost" onClick={split} disabled={combining} icon={<Undo2 size={16} />}>
-              Separate {splittable.length} combined
-            </Button>
-          )}
-          {undoable && (
-            <Button variant="ghost" onClick={undoCombine} disabled={combining} icon={<Undo2 size={16} />}>
-              Undo combine ({undoable.rows_removed} row
-              {undoable.rows_removed === 1 ? '' : 's'})
-            </Button>
-          )}
           <Button onClick={() => setCreating(true)} icon={<Plus size={16} />}>
             Log Outreach
           </Button>
         </div>
       </div>
-
-      <ConfirmDialog
-        open={merging}
-        onCancel={() => setMerging(false)}
-        onConfirm={combine}
-        confirmLabel={combining ? 'Combining…' : 'Combine them'}
-        title="Combine these into one row each?"
-        message={
-          mergeable
-            .map((g) => `${g.company_name}\n   ${g.emails.join(', ')}`)
-            .join('\n\n') +
-          '\n\nEach of these is one company written to at more than one address. ' +
-          'Combining leaves one row each, with the addresses on one line. Dates, statuses, ' +
-          'replies and notes are kept — the earliest date and the most informative status wins. ' +
-          'This cannot be undone; new imports already do it automatically.'
-        }
-      />
 
       <CountryNote rows={byCountry} />
 

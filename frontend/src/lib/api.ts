@@ -17,8 +17,6 @@ import type {
   EmailAccount,
   InboundReply,
   MergeGroup,
-  MergeHistory,
-  MergeUndo,
   ReplySync,
   EmailTemplate,
   ImportReport,
@@ -290,16 +288,9 @@ export const api = {
   /** The full record, including the message we sent — fetched when you open one. */
   getOutreach: (id: number) => request<Outreach>(`/api/outreach/${id}`),
   outreachStats: () => request<OutreachStats>('/api/outreach/stats'),
-  mergeableOutreach: () => request<MergeGroup[]>('/api/outreach/mergeable'),
-  mergeOutreach: () => request<MergeGroup[]>('/api/outreach/merge', { method: 'POST' }),
-  undoableMerge: () => request<MergeUndo | null>('/api/outreach/merge/undoable'),
-  undoMerge: () => request<MergeUndo>('/api/outreach/merge/undo', { method: 'POST' }),
   sentByCountry: () => request<CountrySent[]>('/api/campaigns/report/countries'),
-  mergeHistory: () => request<MergeHistory[]>('/api/outreach/merge/history'),
   unloggedOutreach: () => request<MergeGroup[]>('/api/outreach/unlogged'),
   relogOutreach: () => request<MergeGroup[]>('/api/outreach/relog', { method: 'POST' }),
-  splittableOutreach: () => request<MergeGroup[]>('/api/outreach/merge/splittable'),
-  splitOutreach: () => request<MergeGroup[]>('/api/outreach/merge/split', { method: 'POST' }),
   createOutreach: (body: Record<string, unknown>) =>
     request<Outreach>('/api/outreach', { method: 'POST', body: JSON.stringify(body) }),
   updateOutreach: (id: number, body: Record<string, unknown>) =>

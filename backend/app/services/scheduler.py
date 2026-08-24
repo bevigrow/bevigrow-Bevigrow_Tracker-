@@ -78,9 +78,14 @@ DORMANT_SECONDS = 6 * 60 * 60
 # Set when something happens that the loop should look at at once.
 _wake = threading.Event()
 
-# The inbox is read on its own clock, far slower than the send loop: a
-# reply that lands at 10:00 and is noticed at 10:05 has cost nothing,
-# whereas logging into IMAP every three seconds would be rude and slow.
+# How often the inbox is read without being asked. Zero, by default, means
+# never: pressing Check now is the only thing that reads it.
+#
+# Reading on a timer costs a database query on that timer, whether or not any
+# reply arrived, and that is what keeps a serverless database from ever
+# suspending. The reply itself is not urgent — noticing at four o'clock that
+# somebody wrote at eleven changes nothing about what happens next — so this
+# is a poor thing to spend a compute quota on.
 REPLY_CHECK_SECONDS = settings.OUTREACH_REPLY_CHECK_SECONDS
 _last_reply_check = 0.0
 # When the sender last actually moved a queue, and what it did. Kept so the

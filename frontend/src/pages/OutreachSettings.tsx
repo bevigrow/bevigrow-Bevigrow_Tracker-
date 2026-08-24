@@ -406,7 +406,7 @@ function ReplyTracking({
           <div>
             <h2 className="font-display text-lg text-latte">Reply tracking</h2>
             <p className="text-[11px] text-latte/45">
-              When somebody answers, their record updates itself.
+              Press Check now and every reply updates its own record.
             </p>
           </div>
         </div>
@@ -462,7 +462,7 @@ function ReplyTracking({
                 }}
                 disabled={busy}
               >
-                {enabled ? 'Pause checking' : 'Resume checking'}
+                {enabled ? 'Turn off reply reading' : 'Turn reply reading on'}
               </Button>
             </>
           )}
@@ -483,7 +483,9 @@ function ReplyTracking({
 
       <p className="mt-4 flex items-start gap-2 rounded-lg border border-caramel/20 bg-bean/30 px-3 py-2.5 text-[12px] leading-relaxed text-latte/55">
         <ShieldCheck size={14} className="mt-0.5 shrink-0 text-gold/70" />
-        Replies are read every five minutes. A matched reply marks the company{' '}
+        Replies are read when you press <span className="text-latte/75">Check now</span> —
+        nothing is read on a timer, because reading on a timer keeps the database awake
+        and a free plan does not survive that. A matched reply marks the company{' '}
         <span className="text-latte/75">Replied</span>, saves what they wrote, records how long they
         took and stops any follow-up to them. Nothing is ever written back — answering is done in
         Gmail, by you.

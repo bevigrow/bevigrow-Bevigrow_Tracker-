@@ -98,8 +98,15 @@ class Settings(BaseSettings):
     # Shared secret for the heartbeat endpoint, so a cron can advance the queue
     # without a login. Blank disables that endpoint entirely.
     OUTREACH_TICK_TOKEN: str = ""
-    # How often the mailbox is read, in seconds. Zero turns it off.
-    OUTREACH_REPLY_CHECK_SECONDS: int = 300
+    # How often the mailbox is read on its own, in seconds. Zero — the
+    # default — means never: replies are read when somebody presses Check now.
+    #
+    # Off by default because reading the inbox on a timer means a database
+    # query on that timer, and on a serverless database billed by compute
+    # time that is enough to keep it awake permanently. A free plan does not
+    # survive it. Set this to 300 on a paid plan if replies should appear
+    # without anyone asking.
+    OUTREACH_REPLY_CHECK_SECONDS: int = 0
 
     @property
     def google_enabled(self) -> bool:

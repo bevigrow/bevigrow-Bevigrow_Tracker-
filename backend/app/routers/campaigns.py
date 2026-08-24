@@ -448,6 +448,10 @@ def start_campaign(
         cm.start(db, campaign)
     except cm.TransitionError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # The sender waits longer and longer while there is nothing to do, so it
+    # has to be told that there now is. Otherwise pressing Start could sit for
+    # minutes before anything happened, which is not what a button means.
+    scheduler.nudge()
     return _status(db, campaign)
 
 

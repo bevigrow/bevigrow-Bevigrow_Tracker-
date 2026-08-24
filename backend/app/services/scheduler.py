@@ -42,6 +42,30 @@ PACE_SECONDS = settings.OUTREACH_PACE_SECONDS
 # pressing Start feels immediate.
 IDLE_SECONDS = 10
 
+# How long the loop will wait between looks when there is nothing to send.
+#
+# It used to ask every ten seconds regardless, which on a serverless database
+# is not a small thing: Neon suspends its compute after a few minutes without
+# a query and bills for the time it is awake. A query every ten seconds means
+# it never suspends, so an application with nothing to do bills twenty-four
+# hours a day — and eventually exhausts the plan, at which point the database
+# refuses connections and every page reports itself broken.
+#
+# So an idle loop slows down: ten seconds, then twice that, up to a quarter
+# of an hour. Fifteen minutes rather than five, because five is exactly the
+# window Neon waits before suspending — a query every five minutes keeps it
+# awake just as surely as one every ten seconds, and costs the same.
+#
+# A campaign starting resets it immediately, so nothing waits fifteen minutes
+# to begin: pressing Start wakes the loop through `nudge()` rather than being
+# noticed on the next poll. While a campaign is actually sending the loop
+# stays on its fast path, so this changes nothing about how quickly mail
+# goes out.
+IDLE_MAX_SECONDS = 900
+
+# Set when something happens that the loop should look at at once.
+_wake = threading.Event()
+
 # The inbox is read on its own clock, far slower than the send loop: a
 # reply that lands at 10:00 and is noticed at 10:05 has cost nothing,
 # whereas logging into IMAP every three seconds would be rude and slow.
@@ -207,6 +231,7 @@ def _paced() -> float:
 
 def _loop() -> None:
     log.info("Outreach scheduler started (pace %.1fs)", PACE_SECONDS)
+    idle_wait = IDLE_SECONDS
     while not _stop.is_set():
         try:
             try:
@@ -215,14 +240,31 @@ def _loop() -> None:
                 log.warning("Reply check failed: %s", exc)
             result = advance_once()
             if result["action"] == "idle":
-                _stop.wait(IDLE_SECONDS)
+                # Nothing to do. Wait longer each time, so an application
+                # sitting idle overnight asks a handful of times rather than
+                # eight thousand.
+                idle_wait = min(max(IDLE_SECONDS, idle_wait * 2), IDLE_MAX_SECONDS)
+                _wake.wait(idle_wait)
+                _wake.clear()
             else:
                 log.info("Scheduler: %s — %s", result["action"], result["message"])
+                idle_wait = IDLE_SECONDS
                 _stop.wait(_paced())
         except Exception as exc:  # noqa: BLE001 - a loop that dies stops the product
             log.exception("Scheduler step failed: %s", exc)
             _stop.wait(30)
     log.info("Outreach scheduler stopped")
+
+
+def nudge() -> None:
+    """Tell the loop to look now rather than after its next wait.
+
+    Pressing Start, or approving a draft, means there is certainly work — and
+    waiting up to five minutes to notice would be a strange way to answer a
+    button. This is what lets the idle wait grow long without making the
+    application feel slow.
+    """
+    _wake.set()
 
 
 def start() -> None:

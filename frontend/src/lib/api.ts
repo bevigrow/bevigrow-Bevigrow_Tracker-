@@ -107,11 +107,40 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     )
   }
 
-  let res: Response
-  try {
-    res = await fetch(`${API_BASE}${path}`, { ...init, headers })
-  } catch {
-    throw new ApiError('Cannot reach the BeviGrow server. Check your connection.', 0)
+  // Ride over a sleeping server rather than reporting it as a broken one.
+  //
+  // The backend is on a plan that stops the instance after fifteen idle
+  // minutes; the next request wakes it and takes a while, and any request
+  // racing that wake-up fails outright. So does every request during the
+  // thirty seconds a deploy takes. From inside the browser all of those look
+  // identical to no internet, and telling somebody to check their connection
+  // when the connection is fine is the least useful thing this could say.
+  //
+  // Three attempts, backing off, and only for a request that never reached
+  // the server. An HTTP error — 400, 404, 500 — is an answer, and answers are
+  // never retried: sending the same POST twice because the first attempt
+  // returned 500 is how one saved record becomes two.
+  const attempts = 3
+  let res: Response | null = null
+  let lastFailure: unknown = null
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      res = await fetch(`${API_BASE}${path}`, { ...init, headers })
+      break
+    } catch (err) {
+      lastFailure = err
+      if (attempt < attempts - 1) {
+        await new Promise((r) => setTimeout(r, 1200 * (attempt + 1)))
+      }
+    }
+  }
+  if (!res) {
+    void lastFailure
+    throw new ApiError(
+      'The BeviGrow server did not answer. It may be waking up — wait a few ' +
+        'seconds and try again. If it keeps happening, check your connection.',
+      0,
+    )
   }
 
   // A 401 from the login endpoint means "wrong credentials", not "session

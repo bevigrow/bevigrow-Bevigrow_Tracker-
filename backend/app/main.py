@@ -122,15 +122,34 @@ def root():
 
 
 @app.get("/api/health", tags=["health"])
-def health():
-    """Liveness + database connectivity probe for Render."""
-    db_ok = True
-    try:
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
-    except Exception as exc:  # noqa: BLE001 - report, don't crash the probe
-        log.error("Health check DB error: %s", exc)
-        db_ok = False
+def health(db: bool = False):
+    """Is the application up — and, only if asked, is the database reachable?
+
+    The database check is off by default, and that is the whole point of this
+    endpoint's design.
+
+    Render calls this continuously as its health check. It used to run
+    SELECT 1 on every call, which meant a query against a serverless database
+    every few seconds, for ever, whether or not anybody was using the
+    application. Neon suspends after five minutes without a query and bills
+    for the time it is awake — so this endpoint alone kept the compute
+    running twenty-four hours a day and worked steadily through the plan's
+    quota. Nothing in the product was doing anything; the health check was.
+
+    So the default answer is about this process, which is what a health check
+    is for: if it responds, the service is alive and Render should keep it.
+    Ask for /api/health?db=true to test the database as well, which is worth
+    doing by hand and never on a timer.
+    """
+    db_ok: bool | None = None
+    if db:
+        db_ok = True
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+        except Exception as exc:  # noqa: BLE001 - report, don't crash the probe
+            log.error("Health check DB error: %s", exc)
+            db_ok = False
 
     # Whether anything is driving the send queue. A campaign stuck at nought
     # sent looks the same whether the sender is working slowly, was switched
@@ -142,8 +161,14 @@ def health():
         sender_state = {"error": str(exc)[:200]}
 
     return {
-        "status": "ok" if db_ok else "degraded",
-        "database": "connected" if db_ok else "unreachable",
+        "status": "ok" if db_ok is not False else "degraded",
+        "database": (
+            "not checked (add ?db=true)"
+            if db_ok is None
+            else "connected"
+            if db_ok
+            else "unreachable"
+        ),
         "ai_model": settings.AI_MODEL,
         "environment": settings.ENVIRONMENT,
         "sender": sender_state,

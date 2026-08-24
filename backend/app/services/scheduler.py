@@ -63,17 +63,21 @@ IDLE_SECONDS = 10
 # goes out.
 IDLE_MAX_SECONDS = 900
 
-# What the loop waits when there is not even a campaign to watch.
+# There is no timer for "nothing is running".
 #
-# Nothing needs doing and nothing will need doing until a person does
-# something, and anything a person does goes through the API — which wakes
-# the database anyway and nudges this loop on the way past. So the loop stops
-# asking entirely.
+# When no campaign is running the loop waits on `_wake` with no deadline at
+# all: it makes no query, and the database is left to suspend. Nothing needs
+# doing, and nothing will need doing until a person does something — which
+# arrives through the API, wakes the database as a side effect, and nudges
+# this loop on the way past.
 #
-# Not forever, only because a campaign that used up its daily allowance has to
-# notice the next day arriving. Six hours finds that without keeping a
-# serverless database awake for it.
-DORMANT_SECONDS = 6 * 60 * 60
+# There was a six-hour wake here, so that a campaign which used up its daily
+# allowance would notice the next day arriving unattended. That is a real
+# thing to give up, and it was given up deliberately: four queries a day is
+# not nothing when the plan is measured in compute hours, and a campaign
+# resumes the moment the app is next opened anyway. `is_workable` still lets
+# a parked campaign continue the next day; it just has to be looked at rather
+# than waited for.
 
 # Set when something happens that the loop should look at at once.
 _wake = threading.Event()
@@ -267,10 +271,14 @@ def _loop() -> None:
             result = advance_once()
             if result["action"] == "idle":
                 if result.get("nothing_to_watch"):
-                    # No campaign at all. Stop asking: the database is left
-                    # asleep until somebody opens the app, and opening the app
-                    # nudges this loop as a side effect of the request.
-                    idle_wait = DORMANT_SECONDS
+                    # No campaign at all. Stop asking entirely — wait with no
+                    # deadline, make no query, and let the database suspend.
+                    # Only a person can end this wait, and using the app is
+                    # what does it.
+                    _wake.wait()
+                    _wake.clear()
+                    idle_wait = IDLE_SECONDS
+                    continue
                 else:
                     # A campaign is running but has nothing to send this
                     # second — waiting on the day's allowance, say. Worth

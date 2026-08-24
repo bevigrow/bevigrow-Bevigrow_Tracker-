@@ -23,7 +23,15 @@ name: Outreach heartbeat
 
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    # Disabled. A ten-minute heartbeat is a database query every ten minutes,
+    # which is precisely what stops a serverless database suspending — the
+    # cost this project cannot carry on a free plan. Campaigns therefore
+    # progress while the app is open and pause when it is not, which is the
+    # trade that was chosen knowingly.
+    #
+    # To turn it back on, uncomment the line below and set OUTREACH_TICK_TOKEN
+    # in Render and as a repository secret.
+    # - cron: '*/10 * * * *'
   workflow_dispatch: {}
 
 concurrency:

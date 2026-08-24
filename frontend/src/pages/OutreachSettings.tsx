@@ -11,7 +11,9 @@ import {
   KeyRound,
   Mail,
   Plus,
+  Play,
   RefreshCw,
+  Square,
   ShieldCheck,
   TriangleAlert,
 } from 'lucide-react'
@@ -320,6 +322,13 @@ function ReplyTracking({
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [checking, setChecking] = useState(false)
+  // Reading the inbox on a repeat, for as long as this page is open and the
+  // switch is on. Deliberately not a server-side timer: a background task
+  // that reads mail every minute is a database query every minute whether or
+  // not anyone is there, which is what exhausted the plan. Driven from here,
+  // it cannot outlive the tab it was started in.
+  const [reading, setReading] = useState(false)
+  const [readCount, setReadCount] = useState(0)
 
   if (!account)
     return (
@@ -379,6 +388,40 @@ function ReplyTracking({
     })
     toast.success('Inbox connected. Replies will be picked up automatically.')
   }
+
+  useEffect(() => {
+    if (!reading) return
+    let cancelled = false
+
+    const once = async () => {
+      try {
+        const r = await api.checkReplies()
+        if (cancelled) return
+        setReadCount((n) => n + 1)
+        if (r.error) {
+          toast.error(r.error)
+          setReading(false)
+        } else if (r.stored) {
+          toast.success(
+            `${r.stored} new: ${r.matched} matched to a company, ${r.unmatched} need a look.`,
+          )
+          await onSaved()
+        }
+      } catch (err) {
+        if (cancelled) return
+        toast.error(err instanceof ApiError ? err.message : 'Could not read the mailbox.')
+        setReading(false)
+      }
+    }
+
+    void once()
+    const timer = window.setInterval(() => void once(), 60_000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reading])
 
   const checkNow = async () => {
     setChecking(true)
@@ -449,10 +492,36 @@ function ReplyTracking({
           </Button>
           {connected && (
             <>
-              <Button type="button" variant="ghost" onClick={checkNow} disabled={checking}>
+              <Button type="button" variant="ghost" onClick={checkNow} disabled={checking || reading}>
                 <RefreshCw size={14} className={checking ? 'animate-spin' : undefined} />
                 {checking ? 'Reading…' : 'Check now'}
               </Button>
+              {/* Keep reading, once a minute, until told to stop. Closing the
+                  page stops it too — nothing carries on server-side. */}
+              <Button
+                type="button"
+                variant={reading ? 'primary' : 'ghost'}
+                onClick={() => {
+                  setReadCount(0)
+                  setReading((v) => !v)
+                }}
+              >
+                {reading ? (
+                  <>
+                    <Square size={13} /> Stop reading
+                  </>
+                ) : (
+                  <>
+                    <Play size={13} /> Keep reading
+                  </>
+                )}
+              </Button>
+              {reading && (
+                <span className="text-[11px] text-emerald-300/80">
+                  Watching the inbox — checked {readCount} time{readCount === 1 ? '' : 's'}. Stays
+                  on only while this page is open.
+                </span>
+              )}
               <Button
                 type="button"
                 variant="ghost"

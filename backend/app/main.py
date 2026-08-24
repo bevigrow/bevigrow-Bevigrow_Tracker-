@@ -75,6 +75,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def _wake_the_sender(request, call_next):
+    """A person using the app is the signal that work may exist.
+
+    The sender goes dormant when no campaign is running, so that a quiet
+    night costs no database time at all. What brings it back is this: every
+    request that is not a health probe nudges it. The request has woken the
+    database regardless, so the nudge is free, and it means a campaign
+    started from the UI begins at once rather than when a timer next fires.
+    """
+    response = await call_next(request)
+    if not request.url.path.startswith(("/api/health", "/api/campaigns/tick")):
+        try:
+            from .services import scheduler
+            scheduler.nudge()
+        except Exception:  # noqa: BLE001 - never break a request over this
+            pass
+    return response
+
+
 app.include_router(auth.router)
 app.include_router(auth.users_router)
 app.include_router(contacts.router)

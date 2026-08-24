@@ -63,6 +63,18 @@ IDLE_SECONDS = 10
 # goes out.
 IDLE_MAX_SECONDS = 900
 
+# What the loop waits when there is not even a campaign to watch.
+#
+# Nothing needs doing and nothing will need doing until a person does
+# something, and anything a person does goes through the API — which wakes
+# the database anyway and nudges this loop on the way past. So the loop stops
+# asking entirely.
+#
+# Not forever, only because a campaign that used up its daily allowance has to
+# notice the next day arriving. Six hours finds that without keeping a
+# serverless database awake for it.
+DORMANT_SECONDS = 6 * 60 * 60
+
 # Set when something happens that the loop should look at at once.
 _wake = threading.Event()
 
@@ -146,7 +158,16 @@ def advance_once() -> dict:
         with SessionLocal() as db:
             campaigns = running_campaigns(db)
             if not campaigns:
-                return {"action": "idle", "message": "No campaign is running."}
+                # "Nothing is running" and "something is running but has
+                # nothing to send this second" are both idle, and the loop
+                # must treat them very differently: one is worth looking at
+                # again shortly, the other is worth not looking at until
+                # somebody asks.
+                return {
+                    "action": "idle",
+                    "message": "No campaign is running.",
+                    "nothing_to_watch": True,
+                }
 
             account = engine.active_account(db)
             if account is None:
@@ -240,10 +261,16 @@ def _loop() -> None:
                 log.warning("Reply check failed: %s", exc)
             result = advance_once()
             if result["action"] == "idle":
-                # Nothing to do. Wait longer each time, so an application
-                # sitting idle overnight asks a handful of times rather than
-                # eight thousand.
-                idle_wait = min(max(IDLE_SECONDS, idle_wait * 2), IDLE_MAX_SECONDS)
+                if result.get("nothing_to_watch"):
+                    # No campaign at all. Stop asking: the database is left
+                    # asleep until somebody opens the app, and opening the app
+                    # nudges this loop as a side effect of the request.
+                    idle_wait = DORMANT_SECONDS
+                else:
+                    # A campaign is running but has nothing to send this
+                    # second — waiting on the day's allowance, say. Worth
+                    # looking again soon, backing off as it stays quiet.
+                    idle_wait = min(max(IDLE_SECONDS, idle_wait * 2), IDLE_MAX_SECONDS)
                 _wake.wait(idle_wait)
                 _wake.clear()
             else:

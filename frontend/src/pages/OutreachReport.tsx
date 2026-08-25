@@ -12,6 +12,9 @@ import {
   Copy,
   Inbox,
   Mailbox,
+  Play,
+  RefreshCw,
+  Square,
   RotateCcw,
   SkipForward,
   Trash2,
@@ -523,7 +526,61 @@ function RepliesReceived({
 }) {
   const toast = useToast()
   const [showHandled, setShowHandled] = useState(false)
+  const [checking, setChecking] = useState(false)
+  // Reading on a repeat, for as long as this page is open and the switch is
+  // on. Deliberately here rather than on the server: a background reader is a
+  // database query every minute whether or not anybody is there, and that is
+  // what exhausted the database's allowance once already. Started from a page,
+  // it cannot outlive the tab.
+  const [reading, setReading] = useState(false)
+  const [reads, setReads] = useState(0)
   const visible = showHandled ? replies : replies.filter((r) => !r.handled)
+
+  const readInbox = useCallback(async () => {
+    const r = await api.checkReplies()
+    setReads((n) => n + 1)
+    if (r.error) throw new Error(r.error)
+    if (r.stored) {
+      toast.success(
+        `${r.stored} new: ${r.matched} matched to a company, ${r.unmatched} need a look.`,
+      )
+      await onChanged()
+    }
+    return r
+  }, [onChanged, toast])
+
+  const checkNow = async () => {
+    setChecking(true)
+    try {
+      const r = await readInbox()
+      if (!r.stored) toast.success(`Read ${r.checked} messages — nothing new.`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not read the mailbox.')
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!reading) return
+    let stopped = false
+    const once = async () => {
+      try {
+        await readInbox()
+      } catch (err) {
+        if (stopped) return
+        toast.error(err instanceof Error ? err.message : 'Could not read the mailbox.')
+        setReading(false)
+      }
+    }
+    void once()
+    const timer = window.setInterval(() => void once(), 60_000)
+    return () => {
+      stopped = true
+      window.clearInterval(timer)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reading])
   const ignore = async (r: InboundReply) => {
     try {
       await api.markReplyHandled(r.id, true)
@@ -541,15 +598,47 @@ function RepliesReceived({
           <div>
             <h2 className="font-display text-lg text-latte">What came back</h2>
             <p className="text-[11px] text-latte/45">
-              Replies to the outreach you sent. Other mail in the inbox is left
-              alone.
+              Replies to the outreach you sent. Nothing is read on a timer — press a
+              button below.
             </p>
           </div>
         </div>
-        <Button variant="ghost" onClick={() => setShowHandled((v) => !v)}>
-          {showHandled ? 'Hide dealt-with' : 'Show all'}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="ghost" onClick={checkNow} disabled={checking || reading}>
+            <RefreshCw size={14} className={checking ? 'animate-spin' : undefined} />
+            {checking ? 'Reading…' : 'Check now'}
+          </Button>
+          {/* Keeps reading once a minute until stopped. Closing this page stops
+              it too — nothing carries on server-side. */}
+          <Button
+            variant={reading ? 'primary' : 'ghost'}
+            onClick={() => {
+              setReads(0)
+              setReading((v) => !v)
+            }}
+          >
+            {reading ? (
+              <>
+                <Square size={13} /> Stop reading
+              </>
+            ) : (
+              <>
+                <Play size={13} /> Start reading
+              </>
+            )}
+          </Button>
+          <Button variant="ghost" onClick={() => setShowHandled((v) => !v)}>
+            {showHandled ? 'Hide dealt-with' : 'Show all'}
+          </Button>
+        </div>
       </div>
+
+      {reading && (
+        <p className="mb-3 rounded-lg border border-emerald-400/25 bg-emerald-400/[0.07] px-3 py-2 text-[11.5px] text-emerald-300/90">
+          Reading the inbox every minute — checked {reads} time{reads === 1 ? '' : 's'}. This runs
+          only while the page is open; closing the tab stops it.
+        </p>
+      )}
 
       {visible.length === 0 ? (
         <EmptyState

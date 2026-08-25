@@ -36,11 +36,21 @@ def active_provider() -> str | None:
     if settings.AI_PROVIDER == "anthropic" and settings.ANTHROPIC_API_KEY.strip():
         return "anthropic"
     if settings.AI_PROVIDER == "auto":
-        # Prefer the free one.
+        # Gemini or nothing.
+        #
+        # This used to fall through to Anthropic when no Gemini key was
+        # present, which is a paid API reached by default — an application
+        # deployed with one key set and not the other quietly started billing
+        # per reply summary, and nothing on any screen said so. A cost is not
+        # something to arrive at automatically.
+        #
+        # With no Gemini key the answer is None, and every AI feature falls
+        # back to its built-in rules: replies are still classified, the log is
+        # still updated, sending is untouched. Only the written summaries go
+        # quiet. Anthropic is still available, but it has to be asked for —
+        # set AI_PROVIDER=anthropic deliberately.
         if settings.GEMINI_API_KEY.strip():
             return "gemini"
-        if settings.ANTHROPIC_API_KEY.strip():
-            return "anthropic"
     return None
 
 

@@ -347,6 +347,15 @@ class CampaignTarget(Base):
         ForeignKey("outreach.id", ondelete="SET NULL")
     )
 
+    # Resend approval tracking (for previously contacted recipients)
+    is_resend_approved: Mapped[bool] = mapped_column(Boolean, default=False)
+    resend_reason: Mapped[str | None] = mapped_column(String(100))
+    resend_notes: Mapped[str | None] = mapped_column(String(500))
+    approved_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
@@ -929,3 +938,70 @@ class Outreach(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
+
+
+class ResendReason(str, enum.Enum):
+    """Why a previously contacted email is being resent."""
+
+    wrong_company_name = "wrong_company_name"
+    wrong_contact_name = "wrong_contact_name"
+    wrong_company_info = "wrong_company_info"
+    wrong_country = "wrong_country"
+    wrong_personalization = "wrong_personalization"
+    wrong_email_content = "wrong_email_content"
+    data_correction = "data_correction"
+    user_requested = "user_requested"
+    other = "other"
+
+
+class ApprovedResend(Base):
+    """Track user-approved resends to previously contacted recipients.
+
+    When a previously contacted email address needs to be resent because of
+    a data correction or intentional follow-up, record the approval here.
+    This audit trail prevents confusion about why an email was sent twice
+    to the same recipient.
+    """
+
+    __tablename__ = "approved_resends"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # Reference to the original send
+    original_send_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    original_send_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # Campaign information
+    campaign_id: Mapped[int] = mapped_column(ForeignKey("campaigns.id"), index=True)
+    target_id: Mapped[int] = mapped_column(ForeignKey("campaign_targets.id"), index=True)
+
+    # Recipient details
+    email: Mapped[str] = mapped_column(String(255), index=True)
+    company_name: Mapped[str] = mapped_column(String(200))
+    original_company_name: Mapped[str | None] = mapped_column(String(200))
+    contact_person: Mapped[str | None] = mapped_column(String(150))
+    country: Mapped[str | None] = mapped_column(String(100))
+
+    # Email content comparison
+    original_subject: Mapped[str | None] = mapped_column(String(300))
+    new_subject: Mapped[str | None] = mapped_column(String(300))
+    original_body_preview: Mapped[str | None] = mapped_column(Text)
+    new_body_preview: Mapped[str | None] = mapped_column(Text)
+
+    # Resend details
+    reason: Mapped[ResendReason] = mapped_column(
+        Enum(ResendReason, native_enum=False), default=ResendReason.other
+    )
+    reason_notes: Mapped[str | None] = mapped_column(String(500))
+
+    # Approval tracking
+    approved_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    approved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    # Send result
+    resend_status: Mapped[str] = mapped_column(String(20), default="pending")  # pending, sent, failed
+    new_send_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error_message: Mapped[str | None] = mapped_column(String(400))
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

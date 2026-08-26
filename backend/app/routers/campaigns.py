@@ -55,7 +55,7 @@ from ..schemas import (
 from ..services import assistant
 from ..services import campaigns as cm
 from ..services import engine, importer, replies as reply_service
-from ..services import reports, scheduler, sender, templating
+from ..services import reports, scheduler, sender, templating, presend_review
 
 log = logging.getLogger("bevigrow.campaigns.api")
 
@@ -359,6 +359,94 @@ def campaign_status(
     campaign_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)
 ):
     return _status(db, _get(db, campaign_id))
+
+
+@router.get("/{campaign_id}/presend-review")
+def get_presend_review(
+    campaign_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)
+):
+    """Get a detailed review of all recipients before sending.
+
+    Analyzes each target, detects previously contacted recipients,
+    identifies data changes, and flags records requiring user review.
+    """
+    _get(db, campaign_id)  # Verify campaign exists
+    review = presend_review.get_review(db, campaign_id)
+    return {
+        "total_recipients": review.total_recipients,
+        "new_contacts": review.new_contacts,
+        "previously_contacted": review.previously_contacted,
+        "potential_duplicates": review.potential_duplicates,
+        "data_mismatches": review.data_mismatches,
+        "requires_review": review.requires_review,
+        "reviews": [
+            {
+                "target_id": r.target_id,
+                "company_name": r.company_name,
+                "email": r.email,
+                "contact_person": r.contact_person,
+                "country": r.country,
+                "is_new": r.is_new,
+                "is_previously_contacted": r.is_previously_contacted,
+                "is_potential_duplicate": r.is_potential_duplicate,
+                "has_data_changes": r.has_data_changes,
+                "previous_send_date": r.previous_send_date.isoformat() if r.previous_send_date else None,
+                "previous_subject": r.previous_subject,
+                "previous_company_name": r.previous_company_name,
+                "company_name_changed": r.company_name_changed,
+                "contact_name_changed": r.contact_name_changed,
+                "country_changed": r.country_changed,
+                "issues": r.issues,
+                "user_approved": r.user_approved,
+                "approval_reason": r.approval_reason,
+            }
+            for r in review.reviews
+        ],
+    }
+
+
+@router.post("/{campaign_id}/presend-review/approve-resend")
+def approve_resend(
+    campaign_id: int,
+    target_id: int = Query(...),
+    reason: str = Query(..., min_length=1, max_length=100),
+    reason_notes: str | None = Query(default=None, max_length=500),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Approve a previously contacted recipient for resend.
+
+    Marks a flagged recipient as approved for sending despite previous contact.
+    Records the reason for the resend in audit trail.
+    """
+    campaign = _get(db, campaign_id)
+    target = db.get(CampaignTarget, target_id)
+
+    if target is None or target.campaign_id != campaign_id:
+        raise HTTPException(status_code=404, detail="Target not in this campaign")
+
+    if target.state != TargetState.pending:
+        raise HTTPException(
+            status_code=400,
+            detail="Only pending targets can be approved for resend"
+        )
+
+    # Mark approval in a temporary field (will be used during send)
+    # We'll add a field to CampaignTarget for this
+    target.is_resend_approved = True
+    target.resend_reason = reason
+    target.resend_notes = reason_notes
+    target.approved_by_id = user.id
+    target.approved_at = datetime.now(timezone.utc)
+
+    db.commit()
+    return {
+        "target_id": target_id,
+        "approved": True,
+        "reason": reason,
+        "approved_by": user.email,
+        "approved_at": target.approved_at.isoformat(),
+    }
 
 
 @router.patch("/{campaign_id}", response_model=CampaignStatusOut)

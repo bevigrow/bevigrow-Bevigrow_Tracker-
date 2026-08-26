@@ -146,7 +146,11 @@ def step(db: Session, campaign: Campaign, *, account: EmailAccount | None = None
         return StepOutcome("skipped", f"{target.company_name} has no email address.", target)
 
     # --- already spoken to --------------------------------------------------
-    verdict = duplicates.check(db, target, allow_recontact=campaign.allow_recontact)
+    verdict = duplicates.check(
+        db, target,
+        allow_recontact=campaign.allow_recontact,
+        allow_resend=target.is_resend_approved
+    )
     if verdict.is_duplicate:
         target.state = TargetState.duplicate
         target.skip_reason = verdict.reason

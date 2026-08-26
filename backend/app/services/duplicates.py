@@ -53,7 +53,7 @@ def _holds(column, address: str):
     return padded.like(f"%,{address},%")
 
 
-def check(db: Session, target: CampaignTarget, *, allow_recontact: bool = False) -> Verdict:
+def check(db: Session, target: CampaignTarget, *, allow_recontact: bool = False, allow_resend: bool = False) -> Verdict:
     """Decide whether this target may be emailed.
 
     A target can carry several mailboxes at one company — "info@x.ae,
@@ -67,7 +67,14 @@ def check(db: Session, target: CampaignTarget, *, allow_recontact: bool = False)
     spoken before" rules and nothing else: an address that has already been
     sent to *by this same campaign* is still refused, so a follow-up cannot
     double-send within itself.
+
+    `allow_resend` is when a user has explicitly approved a resend to a
+    previously contacted recipient (for data corrections or intentional resends).
     """
+    # If user explicitly approved this resend, allow it
+    if allow_resend and target.is_resend_approved:
+        return Verdict(is_duplicate=False)
+
     addresses = [
         _fold(part)
         for part in (target.email or "").replace(";", ",").split(",")

@@ -3,12 +3,17 @@ from __future__ import with_statement
 
 import logging
 import os
+import sys
 from logging.config import fileConfig
+from pathlib import Path
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
+
+# Add parent directory to path so we can import app
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # this is the Alembic Config object
 config = context.config

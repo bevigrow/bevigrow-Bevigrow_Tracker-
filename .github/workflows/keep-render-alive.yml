@@ -1,0 +1,24 @@
+name: Keep Render Instances Alive
+
+on:
+  schedule:
+    # Run every 5 minutes to prevent Render free tier from sleeping
+    - cron: '*/5 * * * *'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  ping-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping backend health check
+        run: |
+          curl -f https://bevigrow-backend-dkay.onrender.com/api/health || exit 1
+        continue-on-error: true
+
+  ping-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping frontend
+        run: |
+          curl -f https://bevigrow-frontend-dkay.onrender.com/ || exit 1
+        continue-on-error: true

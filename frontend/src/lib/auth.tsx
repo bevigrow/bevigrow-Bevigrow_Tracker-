@@ -27,6 +27,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   // Restore the session from a stored token on first mount.
+  // If there's no token, stop loading immediately so the login page renders fast.
   useEffect(() => {
     let cancelled = false
     const token = tokenStore.get()
@@ -34,6 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false)
       return
     }
+    // Token exists — verify it asynchronously without blocking the UI
     api
       .me()
       .then((u) => {

@@ -23,6 +23,13 @@ const ATTEMPT_TONE: Record<string, string> = {
   unverified: 'text-gold',
 }
 
+interface DuplicateWarning {
+  targetId: number
+  reason: string | null
+  companySeen: string | null
+  userConfirmed: boolean
+}
+
 export function CampaignDetail() {
   const { id } = useParams()
   const campaignId = Number(id)
@@ -34,6 +41,7 @@ export function CampaignDetail() {
   const [events, setEvents] = useState<CampaignEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [acting, setActing] = useState<number | null>(null)
+  const [duplicateWarning, setDuplicateWarning] = useState<DuplicateWarning | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -58,16 +66,38 @@ export function CampaignDetail() {
     void load()
   }, [load])
 
-  const approve = async (target: CampaignTarget) => {
+  const approve = async (target: CampaignTarget, confirmed = false) => {
+    if (!confirmed) {
+      setActing(target.id)
+      try {
+        const check = await api.checkTargetDuplicates(campaignId, target.id)
+        if (check.is_duplicate) {
+          setDuplicateWarning({
+            targetId: target.id,
+            reason: check.reason,
+            companySeen: check.company_seen_before,
+            userConfirmed: false,
+          })
+          setActing(null)
+          return
+        }
+      } catch (err) {
+        toast.error(err instanceof ApiError ? err.message : 'Could not check that email.')
+        setActing(null)
+        return
+      }
+    }
+
     setActing(target.id)
     try {
-      const result = await api.approveTarget(campaignId, target.id)
+      const result = await api.approveTarget(campaignId, target.id, confirmed)
       toast.success(result.steps[0]?.message ?? 'Sent.')
       await load()
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not send that one.')
     } finally {
       setActing(null)
+      setDuplicateWarning(null)
     }
   }
 
@@ -98,6 +128,60 @@ export function CampaignDetail() {
 
   return (
     <div className="space-y-6">
+      {/* ------- Duplicate warning dialog ------- */}
+      {duplicateWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <Card className="max-w-md">
+            <h3 className="font-display text-lg text-latte">Email already sent</h3>
+            <p className="mt-2 text-sm text-latte/75">
+              {duplicateWarning.reason || 'This address has already received an email from us.'}
+            </p>
+            {duplicateWarning.companySeen && (
+              <p className="mt-2 text-xs text-latte/50">
+                We have also worked with this company before.
+              </p>
+            )}
+            <div className="mt-4 flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="dup-confirm"
+                checked={duplicateWarning.userConfirmed}
+                onChange={(e) => {
+                  setDuplicateWarning({ ...duplicateWarning, userConfirmed: e.target.checked })
+                }}
+                className="h-4 w-4 cursor-pointer rounded border border-caramel/20 bg-bean/50 accent-gold"
+              />
+              <label htmlFor="dup-confirm" className="cursor-pointer text-sm text-latte/70">
+                It's ok, I know. Send anyway.
+              </label>
+            </div>
+            <div className="mt-5 flex gap-3">
+              <Button
+                variant="ghost"
+                onClick={() => setDuplicateWarning(null)}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  if (duplicateWarning) {
+                    const target = drafts.find((d) => d.id === duplicateWarning.targetId)
+                    if (target) {
+                      void approve(target, true)
+                    }
+                  }
+                }}
+                disabled={!duplicateWarning.userConfirmed}
+                loading={acting === duplicateWarning.targetId}
+                className="flex-1"
+              >
+                Send
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
       <div>
         <Link
           to="/app/outreach/campaigns"

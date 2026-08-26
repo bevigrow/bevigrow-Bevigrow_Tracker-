@@ -411,8 +411,16 @@ export const api = {
     request<SendAttempt[]>(`/api/campaigns/${id}/attempts${qs({ limit })}`),
   campaignEvents: (id: number, limit = 50) =>
     request<CampaignEvent[]>(`/api/campaigns/${id}/events${qs({ limit })}`),
-  approveTarget: (id: number, targetId: number) =>
-    request<StepResult>(`/api/campaigns/${id}/targets/${targetId}/approve`, { method: 'POST' }),
+  checkTargetDuplicates: (id: number, targetId: number) =>
+    request<{ is_duplicate: boolean; reason: string | null; company_seen_before: string | null; outreach_id: number | null }>(
+      `/api/campaigns/${id}/targets/${targetId}/check-duplicates`,
+      { method: 'POST' },
+    ),
+  approveTarget: (id: number, targetId: number, confirmed = false) =>
+    request<StepResult>(
+      `/api/campaigns/${id}/targets/${targetId}/approve${qs({ confirmed })}`,
+      { method: 'POST' },
+    ),
   skipTarget: (id: number, targetId: number, reason: string) =>
     request<StepResult>(
       `/api/campaigns/${id}/targets/${targetId}/skip${qs({ reason })}`,

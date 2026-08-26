@@ -565,10 +565,38 @@ def events(
     return [EventOut.model_validate(r) for r in rows]
 
 
+@router.post("/{campaign_id}/targets/{target_id}/check-duplicates")
+def check_duplicates(
+    campaign_id: int,
+    target_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Check if this email was already sent before approving.
+
+    Returns info about any prior sends so the user can decide whether to proceed.
+    """
+    from ..services import duplicates
+
+    campaign = _get(db, campaign_id)
+    target = db.get(CampaignTarget, target_id)
+    if target is None or target.campaign_id != campaign.id:
+        raise HTTPException(status_code=404, detail="Not in this campaign")
+
+    verdict = duplicates.check(db, target, allow_recontact=campaign.allow_recontact)
+    return {
+        "is_duplicate": verdict.is_duplicate,
+        "reason": verdict.reason,
+        "company_seen_before": verdict.company_seen_before,
+        "outreach_id": verdict.outreach_id,
+    }
+
+
 @router.post("/{campaign_id}/targets/{target_id}/approve", response_model=StepResultOut)
 def approve(
     campaign_id: int,
     target_id: int,
+    confirmed: bool = Query(default=False, description="Confirm to send even if already contacted"),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -577,13 +605,27 @@ def approve(
     Goes through the same quota reservation and the same crash-safety as an
     automatic send — an approval is a shortcut past the waiting, not past the
     limit.
+
+    Pass `confirmed=true` to override any duplicate warnings.
     """
+    from ..services import duplicates
+
     campaign = _get(db, campaign_id)
     target = db.get(CampaignTarget, target_id)
     if target is None or target.campaign_id != campaign.id:
         raise HTTPException(status_code=404, detail="Not in this campaign")
     if target.state != TargetState.awaiting_approval:
         raise HTTPException(status_code=400, detail="That draft is not waiting for approval.")
+
+    # Check for duplicates unless explicitly confirmed
+    if not confirmed:
+        verdict = duplicates.check(db, target, allow_recontact=campaign.allow_recontact)
+        if verdict.is_duplicate:
+            raise HTTPException(
+                status_code=409,
+                detail=verdict.reason or "This address was already contacted."
+            )
+
     account = engine.active_account(db)
     if account is None:
         raise HTTPException(status_code=400, detail="Connect a sending mailbox first.")

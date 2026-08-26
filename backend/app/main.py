@@ -35,7 +35,16 @@ async def lifespan(app: FastAPI):
     log.info("Starting BeviGrow API in %s mode", settings.ENVIRONMENT)
     log.info("Database: %s", "PostgreSQL (Neon)" if not settings.is_sqlite else "SQLite (local dev)")
     log.info("AI model: %s", settings.AI_MODEL)
-    seed.run()
+
+    # Non-blocking startup: seed operations run in background
+    import threading
+    def _init_async():
+        try:
+            seed.run()
+        except Exception as exc:
+            log.error('Seed failed: %s', exc)
+    threading.Thread(target=_init_async, daemon=True).start()
+
     # An attempt left mid-flight by a restart must be settled before any
     # queue moves again, or it would be picked up and sent a second time.
     try:

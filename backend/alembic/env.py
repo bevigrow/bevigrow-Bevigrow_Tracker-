@@ -46,6 +46,10 @@ def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
     url = os.environ.get("DATABASE_URL") or config.get_main_option("sqlalchemy.url")
 
+    # Rewrite postgresql:// to postgresql+psycopg:// for psycopg3 driver
+    if url and url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+psycopg://", 1)
+
     connectable = create_engine(url, poolclass=pool.NullPool)
 
     with connectable.connect() as connection:

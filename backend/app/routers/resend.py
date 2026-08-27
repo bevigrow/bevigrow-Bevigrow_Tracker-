@@ -22,7 +22,7 @@ from ..database import get_db
 from ..deps import get_current_user
 from ..models import User, Outreach, Campaign, CampaignTarget, CampaignStatus, SendMode, TargetState, EmailTemplate
 from ..services import campaigns as cm
-from ..services import templating
+from ..services import templating, importer
 
 log = logging.getLogger("bevigrow.resend")
 
@@ -112,8 +112,12 @@ def preview_email(
         raise HTTPException(status_code=500, detail=f"Preview error: {str(e)}")
 
 
-def parse_file(file: UploadFile) -> list[dict]:
-    """Parse CSV or XLSX file and return list of rows."""
+def parse_file(file: UploadFile) -> tuple[list[dict], dict[int, str]]:
+    """Parse CSV or XLSX file and return list of rows with column mapping.
+
+    Uses the same smart column mapping as New Campaign for consistency.
+    Returns (mapped_rows, header_mapping) where header_mapping is used to map raw columns.
+    """
     print(f"[PARSE] START: {file.filename if file else 'None'}", flush=True)
     log.info(f"parse_file called for: {file.filename if file else 'None'}")
     try:
@@ -131,6 +135,8 @@ def parse_file(file: UploadFile) -> list[dict]:
             raise ValueError("File is empty")
 
         filename = file.filename.lower()
+        headers: list[str] = []
+        raw_rows: list[list] = []
 
         if filename.endswith(('.xlsx', '.xls')):
             try:
@@ -139,16 +145,13 @@ def parse_file(file: UploadFile) -> list[dict]:
                 if not ws:
                     raise ValueError("Workbook has no sheets")
 
-                headers = None
-                rows = []
                 for row_idx, row in enumerate(ws.iter_rows(values_only=True), 1):
                     if row_idx == 1:
-                        headers = [str(h).lower().strip() if h else f'col_{i}' for i, h in enumerate(row)]
+                        headers = [str(h) if h else f'col_{i}' for i, h in enumerate(row)]
                         continue
                     if not any(row):
                         continue
-                    rows.append(dict(zip(headers or [], row)))
-                return rows
+                    raw_rows.append(list(row))
             except Exception as e:
                 log.error(f"Excel parsing error: {e}", exc_info=True)
                 raise ValueError(f"Excel file error: {str(e)}")
@@ -158,11 +161,39 @@ def parse_file(file: UploadFile) -> list[dict]:
                 reader = csv.DictReader(StringIO(text_content))
                 if not reader.fieldnames:
                     raise ValueError("CSV has no headers")
-                rows = [row for row in reader if row and any(row.values())]
-                return rows
+                headers = list(reader.fieldnames or [])
+                raw_rows = [list(row.values()) for row in reader if row and any(row.values())]
             except Exception as e:
                 log.error(f"CSV parsing error: {e}", exc_info=True)
                 raise ValueError(f"CSV file error: {str(e)}")
+
+        if not headers:
+            raise ValueError("File has no headers")
+
+        # Use same column mapping as New Campaign
+        header_mapping = importer.map_headers(headers)
+
+        # Convert raw rows to mapped dictionaries
+        mapped_rows = []
+        for raw_row in raw_rows:
+            mapped = {}
+            for col_idx, value in enumerate(raw_row):
+                field_name = header_mapping.get(col_idx)
+                if not field_name or not value:
+                    continue
+                text = str(value).strip() if value is not None else ""
+                if text:
+                    if field_name.startswith("extra:"):
+                        if "extra" not in mapped:
+                            mapped["extra"] = {}
+                        mapped["extra"][field_name.split(":", 1)[1]] = text
+                    else:
+                        mapped[field_name] = text
+            if mapped:  # Only include non-empty rows
+                mapped_rows.append(mapped)
+
+        return mapped_rows, header_mapping
+
     except ValueError:
         raise
     except Exception as e:
@@ -170,24 +201,13 @@ def parse_file(file: UploadFile) -> list[dict]:
         raise ValueError(f"File parsing error: {str(e)}")
 
 
-def extract_email_field(row: dict) -> str | None:
-    """Extract email from row, trying common field names and any field with @."""
-    # Try standard email field names first
-    email_fields = ['email', 'e-mail', 'mail', 'recipient_email', 'contact_email', 'email_address']
-    for field in email_fields:
-        value = row.get(field)
-        if value:
-            cleaned = str(value).strip().lower()
-            if '@' in cleaned:
-                return cleaned
-
-    # If no standard field found, look for any column containing an email (has @)
-    for field, value in row.items():
-        if value and '@' in str(value):
-            cleaned = str(value).strip().lower()
-            if '@' in cleaned:
-                return cleaned
-
+def extract_email_field(row: dict, mapped_row: dict) -> str | None:
+    """Extract email from mapped row."""
+    email = mapped_row.get('email')
+    if email:
+        cleaned = str(email).strip().lower()
+        if '@' in cleaned:
+            return cleaned
     return None
 
 
@@ -253,7 +273,7 @@ def _resend_review_impl(file: UploadFile, db: Session):
     try:
         print(f"[IMPL] Calling parse_file", flush=True)
         log.info(f"[IMPL] 2. Calling parse_file")
-        rows = parse_file(file)
+        rows, header_map = parse_file(file)
         print(f"[IMPL] Got {len(rows)} rows from parse_file", flush=True)
         log.info(f"[IMPL] 3. Parsed {len(rows)} rows from file")
     except ValueError as e:
@@ -280,24 +300,18 @@ def _resend_review_impl(file: UploadFile, db: Session):
     previously_contacted = 0
 
     # Process each row - resend campaign accepts ALL emails, tracks if previously contacted
-    for idx, row in enumerate(rows):
+    for idx, mapped_row in enumerate(rows):
         try:
-            email = extract_email_field(row)
+            email = extract_email_field(mapped_row, mapped_row)
             if not email:
                 log.debug(f"Row {idx}: No email field found")
                 continue
 
-            company = (row.get('company') or row.get('company_name') or 'Unknown')
-            contact_person = row.get('contact_person') or row.get('contact')
+            company = mapped_row.get('company_name') or 'Unknown'
+            contact_person = mapped_row.get('contact_person')
 
             # Check if previously contacted (informational only, not a filter)
-            try:
-                history = check_contact_history(db, email)
-                log.debug(f"Email {email}: is_in_history={history['is_in_history']}")
-            except Exception as history_error:
-                print(f"[IMPL] History check failed for {email}: {history_error}", flush=True)
-                log.error(f"Failed to check history for {email}: {history_error}")
-                history = {'email': email, 'is_in_history': False, 'last_sent_date': None}
+            history = check_contact_history(db, email)
 
             recipient = {
                 'email': email,
@@ -366,7 +380,7 @@ def _resend_send_impl(file: UploadFile, campaign_name: str, template_id: int, se
 
     try:
         log.info(f"[IMPL] 3. Parsing file")
-        rows = parse_file(file)
+        rows, header_map = parse_file(file)
         log.info(f"[IMPL] 4. Successfully parsed {len(rows)} rows for send")
     except ValueError as e:
         log.warning(f"File parse error: {e}")
@@ -380,16 +394,16 @@ def _resend_send_impl(file: UploadFile, campaign_name: str, template_id: int, se
     resend_targets = []
     position = 0
 
-    for idx, row in enumerate(rows):
+    for idx, mapped_row in enumerate(rows):
         try:
-            email = extract_email_field(row)
+            email = extract_email_field(mapped_row, mapped_row)
             if not email:
                 log.debug(f"Row {idx}: No email field, skipping")
                 continue
 
             # Resend campaign: add ALL emails, no history or duplicate check
-            company = (row.get('company') or row.get('company_name') or 'Unknown')
-            contact_person = row.get('contact_person') or row.get('contact')
+            company = mapped_row.get('company_name') or 'Unknown'
+            contact_person = mapped_row.get('contact_person')
 
             resend_targets.append({
                 'position': position,

@@ -26,6 +26,7 @@ import {
 } from '../components/ui'
 import { CountryInput, forgetCountries, knownCountries } from '../components/CountryInput'
 import { OutreachInsights } from '../components/OutreachInsights'
+import ResendCampaign from '../components/ResendCampaign'
 import { ApiError, api } from '../lib/api'
 import {
   METHOD_META,
@@ -376,6 +377,7 @@ export function Outreach() {
           <Button onClick={() => setCreating(true)} icon={<Plus size={16} />}>
             Log Outreach
           </Button>
+          <ResendCampaign />
         </div>
       </div>
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 import csv
 import json
 import logging
+from datetime import datetime, timezone
 from io import StringIO, BytesIO
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -456,6 +457,26 @@ def _resend_send_impl(file: UploadFile, campaign_name: str, template_id: int, se
         for target in resend_targets
     ]
     db.add_all(targets)
+    db.flush()  # Flush to get target IDs
+
+    # Log each resend to Outreach table (same as New Campaign)
+    outreach_records = []
+    for target in targets:
+        outreach = Outreach(
+            email=target.email,
+            company_name=target.company_name,
+            contact_person=target.contact_person,
+            contacted_on=datetime.now(timezone.utc).date(),
+            contact_method="email",
+            message_subject=template.subject or "Email",
+            message_body=template.body or "Message",
+            owner_id=user.id,
+            status="contacted",
+            ai_summary=f"Resent via campaign '{campaign_name}' ({sending_mode} mode)",
+        )
+        outreach_records.append(outreach)
+
+    db.add_all(outreach_records)
 
     # Record the resend event (same format as New Campaign "imported")
     cm.record(

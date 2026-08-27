@@ -37,7 +37,7 @@ def parse_file(file: UploadFile) -> list[dict]:
 
         filename = file.filename.lower()
 
-        if filename.endswith('.xlsx') or filename.endswith('.xls'):
+        if filename.endswith(('.xlsx', '.xls')):
             try:
                 wb = load_workbook(BytesIO(content))
                 ws = wb.active
@@ -50,39 +50,38 @@ def parse_file(file: UploadFile) -> list[dict]:
                     if row_idx == 1:
                         headers = [str(h).lower().strip() if h else f'col_{i}' for i, h in enumerate(row)]
                         continue
-                    if not any(row):  # Skip empty rows
+                    if not any(row):
                         continue
                     rows.append(dict(zip(headers or [], row)))
                 return rows
             except Exception as e:
-                log.error(f"Failed to parse Excel file: {e}", exc_info=True)
-                raise ValueError(f"Excel parsing error: {str(e)}")
+                log.error(f"Excel parsing error: {e}", exc_info=True)
+                raise ValueError(f"Excel file error: {str(e)}")
         else:
-            # CSV/TSV
             try:
                 text_content = content.decode('utf-8', errors='replace')
                 reader = csv.DictReader(StringIO(text_content))
                 if not reader.fieldnames:
                     raise ValueError("CSV has no headers")
-                rows = []
-                for row in reader:
-                    if row and any(row.values()):
-                        rows.append(row)
+                rows = [row for row in reader if row and any(row.values())]
                 return rows
             except Exception as e:
-                log.error(f"Failed to parse CSV file: {e}", exc_info=True)
-                raise ValueError(f"CSV parsing error: {str(e)}")
-    except Exception as e:
-        log.error(f"Failed to parse file {file.filename if file else 'unknown'}: {e}", exc_info=True)
+                log.error(f"CSV parsing error: {e}", exc_info=True)
+                raise ValueError(f"CSV file error: {str(e)}")
+    except ValueError:
         raise
+    except Exception as e:
+        log.error(f"File parsing error: {e}", exc_info=True)
+        raise ValueError(f"File parsing error: {str(e)}")
 
 
 def extract_email_field(row: dict) -> str | None:
     """Extract email from row, trying common field names."""
-    email_fields = ['email', 'e-mail', 'mail', 'recipient_email', 'contact_email']
+    email_fields = ['email', 'e-mail', 'mail', 'recipient_email', 'contact_email', 'email_address']
     for field in email_fields:
-        if field in row and row[field]:
-            return str(row[field]).strip().lower()
+        value = row.get(field)
+        if value:
+            return str(value).strip().lower()
     return None
 
 
@@ -95,15 +94,11 @@ def check_contact_history(db: Session, email: str) -> dict:
         return {
             'email': email,
             'is_in_history': outreach is not None,
-            'last_sent_date': outreach.contacted_on.isoformat() if outreach and outreach.contacted_on else None,
+            'last_sent_date': str(outreach.contacted_on) if outreach and outreach.contacted_on else None,
         }
     except Exception as e:
-        log.error(f"Failed to check contact history for {email}: {e}", exc_info=True)
-        return {
-            'email': email,
-            'is_in_history': False,
-            'last_sent_date': None,
-        }
+        log.warning(f"Contact history check failed for {email}: {e}")
+        return {'email': email, 'is_in_history': False, 'last_sent_date': None}
 
 
 @router.post("/review")
@@ -113,13 +108,17 @@ def resend_review(
     _: User = Depends(get_current_user),
 ):
     """Analyze uploaded file and identify previously contacted recipients."""
-    log.info(f"Starting resend review for file: {file.filename}")
+    log.info(f"Processing resend review for: {file.filename if file else 'unknown'}")
 
     try:
         # Parse file
-        log.info("Parsing file...")
-        rows = parse_file(file)
-        log.info(f"Parsed {len(rows)} rows from file")
+        try:
+            rows = parse_file(file)
+        except ValueError as e:
+            log.warning(f"File parse error: {e}")
+            raise HTTPException(status_code=400, detail=str(e))
+
+        log.info(f"Parsed {len(rows)} rows")
 
         if not rows:
             return {
@@ -138,7 +137,7 @@ def resend_review(
                 if not email:
                     continue
 
-                company = row.get('company') or row.get('company_name') or 'Unknown'
+                company = (row.get('company') or row.get('company_name') or 'Unknown')
                 contact_person = row.get('contact_person') or row.get('contact')
 
                 # Check history
@@ -146,7 +145,7 @@ def resend_review(
 
                 recipient = {
                     'email': email,
-                    'company_name': str(company),
+                    'company_name': str(company) if company else 'Unknown',
                     'contact_person': str(contact_person) if contact_person else None,
                     'is_in_history': history['is_in_history'],
                     'last_sent_date': history['last_sent_date'],
@@ -156,10 +155,10 @@ def resend_review(
                 if history['is_in_history']:
                     previously_contacted += 1
             except Exception as row_error:
-                log.warning(f"Row {idx}: {row_error}")
+                log.warning(f"Row {idx} processing error: {row_error}")
                 continue
 
-        log.info(f"Review complete: {len(recipients)} recipients, {previously_contacted} previously contacted")
+        log.info(f"Review complete: {len(recipients)} total, {previously_contacted} previously contacted")
         return {
             'total_recipients': len(recipients),
             'previously_contacted': previously_contacted,
@@ -168,8 +167,8 @@ def resend_review(
     except HTTPException:
         raise
     except Exception as e:
-        log.error(f"Resend review failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+        log.error(f"Resend review error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Error processing file")
 
 
 @router.post("/send")
@@ -181,8 +180,14 @@ def resend_send(
     user: User = Depends(get_current_user),
 ):
     """Queue resend for previously contacted recipients."""
+    log.info(f"Queuing resend: mode={sending_mode}, reason={resend_reason}")
+
     try:
-        rows = parse_file(file)
+        try:
+            rows = parse_file(file)
+        except ValueError as e:
+            log.warning(f"File parse error: {e}")
+            raise HTTPException(status_code=400, detail=str(e))
 
         if not rows:
             return {
@@ -195,22 +200,29 @@ def resend_send(
         queued_count = 0
 
         for row in rows:
-            email = extract_email_field(row)
-            if not email:
+            try:
+                email = extract_email_field(row)
+                if not email:
+                    continue
+
+                history = check_contact_history(db, email)
+                if not history['is_in_history']:
+                    continue
+
+                queued_count += 1
+            except Exception as e:
+                log.warning(f"Row queuing error: {e}")
                 continue
 
-            history = check_contact_history(db, email)
-            if not history['is_in_history']:
-                continue
-
-            queued_count += 1
-
+        log.info(f"Queued {queued_count} recipients for resend")
         return {
             'queued_count': queued_count,
             'sending_mode': sending_mode,
             'resend_reason': resend_reason,
             'status': 'queued',
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        log.error(f"Error in resend send: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error queuing resend: {str(e)}")
+        log.error(f"Resend send error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Error queuing resend")

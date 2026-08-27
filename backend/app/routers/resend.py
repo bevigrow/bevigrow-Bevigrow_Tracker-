@@ -92,7 +92,11 @@ def resend_review(
         rows = parse_file(file)
 
         if not rows:
-            raise HTTPException(status_code=400, detail="File is empty or invalid")
+            return {
+                'total_recipients': 0,
+                'previously_contacted': 0,
+                'recipients': [],
+            }
 
         recipients = []
         previously_contacted = 0
@@ -102,14 +106,14 @@ def resend_review(
             if not email:
                 continue
 
-            company = row.get('company', row.get('company_name', 'Unknown'))
-            contact_person = row.get('contact_person', row.get('contact', ''))
+            company = row.get('company') or row.get('company_name') or 'Unknown'
+            contact_person = row.get('contact_person') or row.get('contact') or None
 
             history = check_contact_history(db, email)
 
             recipient = {
                 'email': email,
-                'company_name': str(company) if company else 'Unknown',
+                'company_name': str(company),
                 'contact_person': str(contact_person) if contact_person else None,
                 'is_in_history': history['is_in_history'],
                 'last_sent_date': history['last_sent_date'],
@@ -124,11 +128,9 @@ def resend_review(
             'previously_contacted': previously_contacted,
             'recipients': recipients,
         }
-    except HTTPException:
-        raise
     except Exception as e:
-        log.error(f"Error in resend review: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        log.error(f"Error in resend review: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
 
 
 @router.post("/send")
@@ -144,7 +146,12 @@ def resend_send(
         rows = parse_file(file)
 
         if not rows:
-            raise HTTPException(status_code=400, detail="File is empty or invalid")
+            return {
+                'queued_count': 0,
+                'sending_mode': sending_mode,
+                'resend_reason': resend_reason,
+                'status': 'queued',
+            }
 
         queued_count = 0
 
@@ -165,8 +172,6 @@ def resend_send(
             'resend_reason': resend_reason,
             'status': 'queued',
         }
-    except HTTPException:
-        raise
     except Exception as e:
-        log.error(f"Error in resend send: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        log.error(f"Error in resend send: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error queuing resend: {str(e)}")

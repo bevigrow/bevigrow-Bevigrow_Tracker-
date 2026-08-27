@@ -36,6 +36,13 @@ def resend_health():
     return {"status": "ok", "router": "resend"}
 
 
+@router.post("/review-simple")
+def review_simple():
+    """Simplest test endpoint — no dependencies."""
+    print("[SIMPLE] Called", flush=True)
+    return {"test": "ok", "message": "Simple endpoint works"}
+
+
 
 
 @router.get("/templates")

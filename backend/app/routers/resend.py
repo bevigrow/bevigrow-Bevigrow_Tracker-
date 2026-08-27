@@ -188,34 +188,33 @@ def resend_review(
     _: User = Depends(get_current_user),
 ):
     """Analyze uploaded file and identify previously contacted recipients."""
-    print(f"[REVIEW] START: {file.filename if file else 'unknown'}")
-    log.info(f"[REVIEW] START: {file.filename if file else 'unknown'}")
+    print(f"[REVIEW] START: file={file.filename if file else 'None'}")
+
+    if not file:
+        print("[REVIEW] ERROR: file is None")
+        return {"error": "No file provided", "total_recipients": 0, "previously_contacted": 0, "recipients": []}
+
+    if not file.filename:
+        print("[REVIEW] ERROR: file.filename is empty")
+        return {"error": "File has no name", "total_recipients": 0, "previously_contacted": 0, "recipients": []}
 
     try:
-        print(f"[REVIEW] File: {file}, DB: {db}")
-        log.info(f"[REVIEW] Calling impl")
-
+        print(f"[REVIEW] Parsing file: {file.filename}")
         result = _resend_review_impl(file, db)
-
-        print(f"[REVIEW] SUCCESS: Got result")
-        log.info(f"[REVIEW] SUCCESS")
+        print(f"[REVIEW] SUCCESS: {len(result.get('recipients', []))} recipients")
         return result
 
-    except HTTPException as e:
-        print(f"[REVIEW] HTTPException: {e.status_code} - {e.detail}")
-        log.error(f"[REVIEW] HTTPException: {e.status_code} - {e.detail}")
-        raise
     except Exception as e:
-        print(f"[REVIEW] EXCEPTION: {type(e).__name__}: {str(e)[:200]}")
-        log.error(f"[REVIEW] EXCEPTION: {type(e).__name__}: {e}", exc_info=True)
+        print(f"[REVIEW] ERROR: {type(e).__name__}: {str(e)[:200]}")
+        import traceback
+        traceback.print_exc()
 
-        error_response = {
-            "error": f"Server error: {type(e).__name__}",
-            "detail": str(e)[:300],
-            "message": "Check Render logs for details",
+        return {
+            "error": str(e)[:200],
+            "total_recipients": 0,
+            "previously_contacted": 0,
+            "recipients": []
         }
-        print(f"[REVIEW] RETURNING ERROR: {error_response}")
-        return error_response
 
 
 def _resend_review_impl(file: UploadFile, db: Session):

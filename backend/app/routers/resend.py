@@ -449,6 +449,7 @@ def _resend_send_impl(file: UploadFile, campaign_name: str, template_id: int, se
     log.info(f"Created resend campaign ID {campaign.id}: '{campaign_name}'")
 
     # Create CampaignTarget rows for each resend recipient
+    # Mark as is_resend_approved so duplicate check doesn't block them
     targets = [
         CampaignTarget(
             campaign_id=campaign.id,
@@ -458,6 +459,9 @@ def _resend_send_impl(file: UploadFile, campaign_name: str, template_id: int, se
             contact_person=target['contact_person'],
             state=TargetState.pending,
             resend_reason=target['resend_reason'],
+            is_resend_approved=True,  # Auto-approve resends to bypass duplicate check
+            approved_by_id=user.id,
+            approved_at=datetime.now(timezone.utc),
         )
         for target in resend_targets
     ]

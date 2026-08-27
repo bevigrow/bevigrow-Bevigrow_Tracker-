@@ -59,7 +59,7 @@ export default function ResendCampaign() {
     setStep('select');
     setLoading(true);
     try {
-      const data = await api.get<Campaign[]>('/campaigns/completed');
+      const data = await api.get<Campaign[]>('/api/campaigns/completed');
       setCampaigns(data);
     } catch (error) {
       alert(`Failed to load campaigns: ${error}`);
@@ -123,7 +123,7 @@ export default function ResendCampaign() {
     if (!selectedCampaign) return;
     setSending(true);
     try {
-      const data = await api.post(`/campaigns/${selectedCampaign.id}/execute-resend`, {
+      const data = await api.post(`/api/campaigns/${selectedCampaign.id}/execute-resend`, {
         approved_target_ids: Array.from(approved),
         resend_reason: 'User-approved resend',
       });

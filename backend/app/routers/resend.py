@@ -142,7 +142,7 @@ def parse_file(file: UploadFile) -> tuple[list[dict], dict]:
         print(f"  - Invalid emails: {report.invalid_emails}", flush=True)
 
         # Convert ParsedRow objects to dicts for our use
-        # Include ONLY rows that have a valid email (skip_reason is None)
+        # MANDATORY: email + company_name (both required for resend)
         mapped_rows = []
         skipped_count = 0
         for idx, parsed_row in enumerate(report.rows):
@@ -153,6 +153,12 @@ def parse_file(file: UploadFile) -> tuple[list[dict], dict]:
 
             if not parsed_row.email:
                 print(f"[PARSE] Row {idx}: NO EMAIL but no skip_reason?!", flush=True)
+                skipped_count += 1
+                continue
+
+            # RESEND MANDATORY: Company name must be present (not Unnamed company)
+            if not parsed_row.company_name or parsed_row.company_name == "Unnamed company":
+                print(f"[PARSE] Row {idx}: NO COMPANY NAME - {parsed_row.email}", flush=True)
                 skipped_count += 1
                 continue
 

@@ -179,7 +179,11 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
         "alt email", "alternate email", "info email", "general email",
         "email id", "emailid", "email_id",
     ),
-    "website": ("website", "web", "url", "site", "web address", "webpage", "homepage", "domain"),
+    "website": (
+        "website", "web", "url", "site", "web address", "webpage", "homepage", "domain",
+        "website url", "website address", "web site", "web url", "webiste", "site url",
+        "company website", "business website", "org website", "organization website",
+    ),
     "country": ("country", "nation", "market"),
     "location": ("location", "city", "address", "region", "state", "town", "province"),
     "contact_person": (

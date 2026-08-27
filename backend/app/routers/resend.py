@@ -19,6 +19,12 @@ log = logging.getLogger("bevigrow.resend")
 router = APIRouter(prefix="/api/resend", tags=["resend"])
 
 
+@router.get("/health")
+def resend_health():
+    """Health check for resend router."""
+    return {"status": "ok", "router": "resend"}
+
+
 def parse_file(file: UploadFile) -> list[dict]:
     """Parse CSV or XLSX file and return list of rows."""
     try:
@@ -107,11 +113,13 @@ def resend_review(
     _: User = Depends(get_current_user),
 ):
     """Analyze uploaded file and identify previously contacted recipients."""
+    log.info(f"Starting resend review for file: {file.filename}")
+
     try:
-        try:
-            rows = parse_file(file)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+        # Parse file
+        log.info("Parsing file...")
+        rows = parse_file(file)
+        log.info(f"Parsed {len(rows)} rows from file")
 
         if not rows:
             return {
@@ -123,15 +131,17 @@ def resend_review(
         recipients = []
         previously_contacted = 0
 
-        for row in rows:
+        # Process each row
+        for idx, row in enumerate(rows):
             try:
                 email = extract_email_field(row)
                 if not email:
                     continue
 
                 company = row.get('company') or row.get('company_name') or 'Unknown'
-                contact_person = row.get('contact_person') or row.get('contact') or None
+                contact_person = row.get('contact_person') or row.get('contact')
 
+                # Check history
                 history = check_contact_history(db, email)
 
                 recipient = {
@@ -146,9 +156,10 @@ def resend_review(
                 if history['is_in_history']:
                     previously_contacted += 1
             except Exception as row_error:
-                log.warning(f"Skipping row due to error: {row_error}")
+                log.warning(f"Row {idx}: {row_error}")
                 continue
 
+        log.info(f"Review complete: {len(recipients)} recipients, {previously_contacted} previously contacted")
         return {
             'total_recipients': len(recipients),
             'previously_contacted': previously_contacted,
@@ -157,8 +168,8 @@ def resend_review(
     except HTTPException:
         raise
     except Exception as e:
-        log.error(f"Unhandled error in resend review: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+        log.error(f"Resend review failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 
 @router.post("/send")

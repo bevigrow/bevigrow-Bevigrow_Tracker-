@@ -114,13 +114,13 @@ def resend_review(
         # Parse file
         try:
             rows = parse_file(file)
+            log.info(f"Successfully parsed {len(rows)} rows from file")
         except ValueError as e:
             log.warning(f"File parse error: {e}")
             raise HTTPException(status_code=400, detail=str(e))
 
-        log.info(f"Parsed {len(rows)} rows")
-
         if not rows:
+            log.info("File contained no rows, returning empty review")
             return {
                 'total_recipients': 0,
                 'previously_contacted': 0,
@@ -135,13 +135,19 @@ def resend_review(
             try:
                 email = extract_email_field(row)
                 if not email:
+                    log.debug(f"Row {idx}: No email field found")
                     continue
 
                 company = (row.get('company') or row.get('company_name') or 'Unknown')
                 contact_person = row.get('contact_person') or row.get('contact')
 
                 # Check history
-                history = check_contact_history(db, email)
+                try:
+                    history = check_contact_history(db, email)
+                    log.debug(f"Email {email}: is_in_history={history['is_in_history']}")
+                except Exception as history_error:
+                    log.error(f"Failed to check history for {email}: {history_error}")
+                    history = {'email': email, 'is_in_history': False, 'last_sent_date': None}
 
                 recipient = {
                     'email': email,
@@ -155,20 +161,22 @@ def resend_review(
                 if history['is_in_history']:
                     previously_contacted += 1
             except Exception as row_error:
-                log.warning(f"Row {idx} processing error: {row_error}")
+                log.warning(f"Row {idx} processing error: {row_error}", exc_info=True)
                 continue
 
         log.info(f"Review complete: {len(recipients)} total, {previously_contacted} previously contacted")
-        return {
+        result = {
             'total_recipients': len(recipients),
             'previously_contacted': previously_contacted,
             'recipients': recipients,
         }
+        log.debug(f"Returning review result: {result}")
+        return result
     except HTTPException:
         raise
     except Exception as e:
         log.error(f"Resend review error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Error processing file")
+        raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
 
 
 @router.post("/send")
@@ -180,16 +188,18 @@ def resend_send(
     user: User = Depends(get_current_user),
 ):
     """Queue resend for previously contacted recipients."""
-    log.info(f"Queuing resend: mode={sending_mode}, reason={resend_reason}")
+    log.info(f"Queuing resend: mode={sending_mode}, reason={resend_reason}, user={user.email}")
 
     try:
         try:
             rows = parse_file(file)
+            log.info(f"Successfully parsed {len(rows)} rows for send")
         except ValueError as e:
             log.warning(f"File parse error: {e}")
             raise HTTPException(status_code=400, detail=str(e))
 
         if not rows:
+            log.info("File contained no rows, returning empty send result")
             return {
                 'queued_count': 0,
                 'sending_mode': sending_mode,
@@ -199,30 +209,40 @@ def resend_send(
 
         queued_count = 0
 
-        for row in rows:
+        for idx, row in enumerate(rows):
             try:
                 email = extract_email_field(row)
                 if not email:
+                    log.debug(f"Row {idx}: No email field")
                     continue
 
-                history = check_contact_history(db, email)
+                try:
+                    history = check_contact_history(db, email)
+                except Exception as history_error:
+                    log.error(f"Failed to check history for {email}: {history_error}")
+                    continue
+
                 if not history['is_in_history']:
+                    log.debug(f"Email {email}: not in history, skipping")
                     continue
 
                 queued_count += 1
+                log.debug(f"Email {email}: queued for resend")
             except Exception as e:
-                log.warning(f"Row queuing error: {e}")
+                log.warning(f"Row {idx} queuing error: {e}", exc_info=True)
                 continue
 
         log.info(f"Queued {queued_count} recipients for resend")
-        return {
+        result = {
             'queued_count': queued_count,
             'sending_mode': sending_mode,
             'resend_reason': resend_reason,
             'status': 'queued',
         }
+        log.debug(f"Returning send result: {result}")
+        return result
     except HTTPException:
         raise
     except Exception as e:
         log.error(f"Resend send error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Error queuing resend")
+        raise HTTPException(status_code=500, detail=f"Error queuing resend: {str(e)}")

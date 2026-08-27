@@ -49,11 +49,29 @@ export default function ResendCampaign() {
         method: 'POST',
         body: formData,
       });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json() as ResendReview;
-      setReview(data);
+
+      // Get response text first to debug issues
+      const responseText = await response.text();
+      console.error(`API Response [${response.status}]: ${responseText}`);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${responseText || 'No response body'}`);
+      }
+
+      if (!responseText) {
+        throw new Error('Empty response from server');
+      }
+
+      try {
+        const data = JSON.parse(responseText) as ResendReview;
+        setReview(data);
+      } catch (jsonError) {
+        throw new Error(`Invalid JSON response: ${responseText.substring(0, 200)}`);
+      }
     } catch (error) {
-      alert(`Failed to load review: ${error}`);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      alert(`Failed to load review:\n\n${errorMsg}`);
+      console.error('Review error:', error);
       setStep('upload');
     } finally {
       setLoading(false);
@@ -73,12 +91,29 @@ export default function ResendCampaign() {
         method: 'POST',
         body: formData,
       });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json();
-      setResult(data);
-      setStep('sending');
+
+      const responseText = await response.text();
+      console.error(`Send API Response [${response.status}]: ${responseText}`);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${responseText || 'No response body'}`);
+      }
+
+      if (!responseText) {
+        throw new Error('Empty response from server');
+      }
+
+      try {
+        const data = JSON.parse(responseText);
+        setResult(data);
+        setStep('sending');
+      } catch (jsonError) {
+        throw new Error(`Invalid JSON response: ${responseText.substring(0, 200)}`);
+      }
     } catch (error) {
-      alert(`Resend failed: ${error}`);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      alert(`Resend failed:\n\n${errorMsg}`);
+      console.error('Send error:', error);
       setSending(false);
     }
   };

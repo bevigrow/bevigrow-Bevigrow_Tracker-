@@ -385,29 +385,45 @@ def resend_send(
 
 def _resend_send_impl(file: UploadFile, campaign_name: str, template_id: int, sending_mode: str, resend_reason: str, db: Session, user):
     """Create a resend campaign and queue ALL targets from file (no duplicate check)."""
+    print(f"[SEND] ========== START RESEND SEND ==========", flush=True)
+    print(f"[SEND] Campaign: {campaign_name}, Template: {template_id}, Mode: {sending_mode}", flush=True)
     log.info(f"[IMPL] 1. Validating template {template_id}")
 
     # Validate template exists (reuse New Campaign's template system)
     template = db.get(EmailTemplate, template_id)
     if not template:
         log.warning(f"Template {template_id} not found")
+        print(f"[SEND] ERROR: Template {template_id} not found", flush=True)
         raise HTTPException(status_code=404, detail="Email template not found")
 
     log.info(f"[IMPL] 2. Template validated: {template.name}")
+    print(f"[SEND] Template OK: {template.name}", flush=True)
 
     try:
+        print(f"[SEND] Parsing file: {file.filename}", flush=True)
         log.info(f"[IMPL] 3. Parsing file")
         rows, header_map = parse_file(file)
+        print(f"[SEND] Parsed {len(rows)} rows from file", flush=True)
         log.info(f"[IMPL] 4. Successfully parsed {len(rows)} rows for send")
+
+        if not rows:
+            print(f"[SEND] ERROR: File has no rows after parsing!", flush=True)
     except ValueError as e:
+        print(f"[SEND] ERROR parsing file: {e}", flush=True)
         log.warning(f"File parse error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"[SEND] UNEXPECTED ERROR parsing: {type(e).__name__}: {e}", flush=True)
+        log.error(f"Unexpected parse error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Parse error: {str(e)[:100]}")
 
     if not rows:
+        print(f"[SEND] ERROR: File has no rows - cannot create campaign", flush=True)
         log.info(f"No rows in file for campaign '{campaign_name}'")
         raise HTTPException(status_code=400, detail="File contains no contacts.")
 
     # Collect resend targets - ALL emails from file (no duplicate check, no history check)
+    print(f"[SEND] Processing {len(rows)} rows to extract emails", flush=True)
     log.info(f"[SEND] Processing {len(rows)} rows from file")
     resend_targets = []
     position = 0
@@ -416,8 +432,10 @@ def _resend_send_impl(file: UploadFile, campaign_name: str, template_id: int, se
         try:
             email = extract_email_field(mapped_row)
             if not email:
+                print(f"[SEND] Row {idx}: No email found. Data: {mapped_row}", flush=True)
                 log.debug(f"Row {idx}: No email field found in {mapped_row}")
                 continue
+            print(f"[SEND] Row {idx}: Email found: {email}", flush=True)
             log.debug(f"Row {idx}: Found email {email}")
 
             # Resend campaign: add ALL emails, no history or duplicate check
@@ -432,13 +450,17 @@ def _resend_send_impl(file: UploadFile, campaign_name: str, template_id: int, se
                 'resend_reason': resend_reason[:255] if resend_reason else None,
             })
             position += 1
+            print(f"[SEND] Row {idx}: ADDED target #{position} - {email}", flush=True)
             log.debug(f"Email {email}: added to resend queue (no duplicate check)")
 
         except Exception as e:
             log.warning(f"Row {idx} processing error: {e}", exc_info=True)
             continue
 
+    print(f"[SEND] Final: {len(resend_targets)} targets to queue", flush=True)
+
     if not resend_targets:
+        print(f"[SEND] ERROR: No valid emails extracted from {len(rows)} rows!", flush=True)
         log.warning(f"No valid emails found for resend campaign '{campaign_name}'")
         raise HTTPException(
             status_code=400,

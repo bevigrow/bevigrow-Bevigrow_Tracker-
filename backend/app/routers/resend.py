@@ -115,113 +115,81 @@ def preview_email(
         raise HTTPException(status_code=500, detail=f"Preview error: {str(e)}")
 
 
-def parse_file(file: UploadFile) -> tuple[list[dict], dict[int, str]]:
-    """Parse CSV or XLSX file and return list of rows with column mapping.
+def parse_file(file: UploadFile) -> tuple[list[dict], dict]:
+    """Parse CSV or XLSX file using importer's proven logic from New Campaign.
 
-    Uses the same smart column mapping as New Campaign for consistency.
-    Returns (mapped_rows, header_mapping) where header_mapping is used to map raw columns.
+    Returns list of mapped rows with email, company_name, country, etc.
     """
-    print(f"[PARSE] START: {file.filename if file else 'None'}", flush=True)
-    log.info(f"parse_file called for: {file.filename if file else 'None'}")
+    print(f"[PARSE] START: {file.filename}", flush=True)
+
     try:
         if not file or not file.filename:
-            print("[PARSE] ERROR: file or filename is None", flush=True)
             raise ValueError("No file provided")
 
-        print(f"[PARSE] Reading file: {file.filename}", flush=True)
         content = file.file.read()
-        print(f"[PARSE] Read {len(content)} bytes", flush=True)
-        log.info(f"Read {len(content)} bytes from file")
-
         if not content:
-            print("[PARSE] ERROR: Content is empty after read", flush=True)
             raise ValueError("File is empty")
 
-        filename = file.filename.lower()
-        headers: list[str] = []
-        raw_rows: list[list] = []
+        print(f"[PARSE] Calling importer.parse()", flush=True)
+        # Use the PROVEN importer from New Campaign
+        report = importer.parse(content, file.filename)
 
-        if filename.endswith(('.xlsx', '.xls')):
-            try:
-                wb = load_workbook(BytesIO(content))
-                ws = wb.active
-                if not ws:
-                    raise ValueError("Workbook has no sheets")
+        print(f"[PARSE] Importer stats:", flush=True)
+        print(f"  - Total rows from importer: {len(report.rows)}", flush=True)
+        print(f"  - Total addresses found: {report.addresses}", flush=True)
+        print(f"  - File rows: {report.file_rows}", flush=True)
+        print(f"  - Without email: {report.without_email}", flush=True)
+        print(f"  - Invalid emails: {report.invalid_emails}", flush=True)
 
-                for row_idx, row in enumerate(ws.iter_rows(values_only=True), 1):
-                    if row_idx == 1:
-                        headers = [str(h) if h else f'col_{i}' for i, h in enumerate(row)]
-                        continue
-                    if not any(row):
-                        continue
-                    raw_rows.append(list(row))
-            except Exception as e:
-                log.error(f"Excel parsing error: {e}", exc_info=True)
-                raise ValueError(f"Excel file error: {str(e)}")
-        else:
-            try:
-                text_content = content.decode('utf-8', errors='replace')
-                reader = csv.DictReader(StringIO(text_content))
-                if not reader.fieldnames:
-                    raise ValueError("CSV has no headers")
-                headers = list(reader.fieldnames or [])
-                raw_rows = [list(row.values()) for row in reader if row and any(row.values())]
-            except Exception as e:
-                log.error(f"CSV parsing error: {e}", exc_info=True)
-                raise ValueError(f"CSV file error: {str(e)}")
-
-        if not headers:
-            raise ValueError("File has no headers")
-
-        # Use same column mapping as New Campaign
-        header_mapping = importer.map_headers(headers)
-
-        # Convert raw rows to mapped dictionaries
+        # Convert ParsedRow objects to dicts for our use
+        # Include ONLY rows that have a valid email (skip_reason is None)
         mapped_rows = []
-        for raw_row in raw_rows:
-            mapped = {}
-            for col_idx, value in enumerate(raw_row):
-                field_name = header_mapping.get(col_idx)
-                if not field_name or not value:
-                    continue
-                text = str(value).strip() if value is not None else ""
-                if text:
-                    if field_name.startswith("extra:"):
-                        if "extra" not in mapped:
-                            mapped["extra"] = {}
-                        mapped["extra"][field_name.split(":", 1)[1]] = text
-                    else:
-                        mapped[field_name] = text
-            if mapped:  # Only include non-empty rows
-                mapped_rows.append(mapped)
+        skipped_count = 0
+        for idx, parsed_row in enumerate(report.rows):
+            if parsed_row.skip_reason:
+                print(f"[PARSE] Row {idx}: SKIPPED - {parsed_row.skip_reason}", flush=True)
+                skipped_count += 1
+                continue
 
-        return mapped_rows, header_mapping
+            if not parsed_row.email:
+                print(f"[PARSE] Row {idx}: NO EMAIL but no skip_reason?!", flush=True)
+                skipped_count += 1
+                continue
+
+            mapped = {
+                'email': parsed_row.email,
+                'company_name': parsed_row.company_name,
+                'contact_person': parsed_row.contact_person,
+                'country': parsed_row.country,
+                'location': parsed_row.location,
+                'category': parsed_row.category,
+                'website': parsed_row.website,
+                'phone': parsed_row.phone,
+                'linkedin': parsed_row.linkedin,
+                'contact_form': parsed_row.contact_form,
+            }
+            # Remove None values
+            mapped = {k: v for k, v in mapped.items() if v is not None}
+            mapped_rows.append(mapped)
+            print(f"[PARSE] Row {idx}: OK - {parsed_row.email} / {parsed_row.company_name}", flush=True)
+
+        print(f"[PARSE] Final: {len(mapped_rows)} with emails, {skipped_count} skipped", flush=True)
+        log.info(f"Parsed {len(mapped_rows)} valid rows from {file.filename} (skipped {skipped_count})")
+        return mapped_rows, {}
 
     except ValueError:
         raise
     except Exception as e:
         log.error(f"File parsing error: {e}", exc_info=True)
+        print(f"[PARSE] ERROR: {type(e).__name__}: {e}", flush=True)
         raise ValueError(f"File parsing error: {str(e)}")
 
 
 def extract_email_field(mapped_row: dict) -> str | None:
-    """Extract email from mapped row."""
-    # Try standard field name first
+    """Extract email from row (importer already validated it)."""
     email = mapped_row.get('email')
     if email:
-        cleaned = str(email).strip().lower()
-        if '@' in cleaned:
-            return cleaned
-
-    # Check extra fields in case email wasn't mapped to standard name
-    extra = mapped_row.get('extra', {})
-    if isinstance(extra, dict):
-        for field_name, value in extra.items():
-            if value and '@' in str(value):
-                cleaned = str(value).strip().lower()
-                if '@' in cleaned:
-                    return cleaned
-
+        return str(email).strip().lower()
     return None
 
 

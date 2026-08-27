@@ -22,6 +22,7 @@ from .routers import (
     documents,
     outreach,
     reminders,
+    resend,
 )
 
 logging.basicConfig(
@@ -126,6 +127,7 @@ app.include_router(reminders.router)
 app.include_router(dashboard.router)
 app.include_router(outreach.router)
 app.include_router(ai_routes.router)
+app.include_router(resend.router)
 
 
 @app.get("/", tags=["health"])

@@ -204,13 +204,24 @@ def parse_file(file: UploadFile) -> tuple[list[dict], dict[int, str]]:
         raise ValueError(f"File parsing error: {str(e)}")
 
 
-def extract_email_field(row: dict, mapped_row: dict) -> str | None:
+def extract_email_field(mapped_row: dict) -> str | None:
     """Extract email from mapped row."""
+    # Try standard field name first
     email = mapped_row.get('email')
     if email:
         cleaned = str(email).strip().lower()
         if '@' in cleaned:
             return cleaned
+
+    # Check extra fields in case email wasn't mapped to standard name
+    extra = mapped_row.get('extra', {})
+    if isinstance(extra, dict):
+        for field_name, value in extra.items():
+            if value and '@' in str(value):
+                cleaned = str(value).strip().lower()
+                if '@' in cleaned:
+                    return cleaned
+
     return None
 
 
@@ -305,7 +316,7 @@ def _resend_review_impl(file: UploadFile, db: Session):
     # Process each row - resend campaign accepts ALL emails, tracks if previously contacted
     for idx, mapped_row in enumerate(rows):
         try:
-            email = extract_email_field(mapped_row, mapped_row)
+            email = extract_email_field(mapped_row)
             if not email:
                 log.debug(f"Row {idx}: No email field found")
                 continue
@@ -397,15 +408,17 @@ def _resend_send_impl(file: UploadFile, campaign_name: str, template_id: int, se
         raise HTTPException(status_code=400, detail="File contains no contacts.")
 
     # Collect resend targets - ALL emails from file (no duplicate check, no history check)
+    log.info(f"[SEND] Processing {len(rows)} rows from file")
     resend_targets = []
     position = 0
 
     for idx, mapped_row in enumerate(rows):
         try:
-            email = extract_email_field(mapped_row, mapped_row)
+            email = extract_email_field(mapped_row)
             if not email:
-                log.debug(f"Row {idx}: No email field, skipping")
+                log.debug(f"Row {idx}: No email field found in {mapped_row}")
                 continue
+            log.debug(f"Row {idx}: Found email {email}")
 
             # Resend campaign: add ALL emails, no history or duplicate check
             company = mapped_row.get('company_name') or 'Unknown'

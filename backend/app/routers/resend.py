@@ -32,7 +32,15 @@ router = APIRouter(prefix="/api/resend", tags=["resend"])
 @router.get("/health")
 def resend_health():
     """Health check for resend router."""
+    print("[HEALTH] Resend router health check called", flush=True)
     return {"status": "ok", "router": "resend"}
+
+
+@router.post("/review-test")
+def review_test():
+    """Test endpoint without dependencies."""
+    print("[TEST] Review test endpoint called", flush=True)
+    return JSONResponse(status_code=200, content={"test": "ok", "message": "Review test endpoint works"})
 
 
 @router.get("/templates")

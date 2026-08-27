@@ -23,7 +23,7 @@ from ..database import get_db
 from ..deps import get_current_user
 from ..models import User, Outreach, Campaign, CampaignTarget, CampaignStatus, SendMode, TargetState, EmailTemplate, ContactMethod, OutreachStatus
 from ..services import campaigns as cm
-from ..services import templating, importer, scheduler
+from ..services import templating, importer
 
 log = logging.getLogger("bevigrow.resend")
 
@@ -503,19 +503,17 @@ def _resend_send_impl(file: UploadFile, campaign_name: str, template_id: int, se
     log.info(f"Queued {len(resend_targets)} targets for resend campaign '{campaign_name}'")
     log.info(f"[SEND] Campaign {campaign.id} committed with {len(targets)} targets")
 
-    # Auto-start if automatic mode
-    if sending_mode == "automatic":
-        try:
-            log.info(f"[SEND] Auto-starting campaign {campaign.id} in automatic mode")
-            scheduler.tick(1)  # Process one step to start sending
-            log.info(f"[SEND] Campaign {campaign.id} started")
-        except Exception as e:
-            log.warning(f"[SEND] Failed to auto-start campaign: {e}")
+    # Don't auto-start - let user start manually like New Campaign
+    # Scheduler will pick up draft campaigns when user clicks Start
+
+    # Verify targets were actually created
+    target_count = db.query(CampaignTarget).filter(CampaignTarget.campaign_id == campaign.id).count()
+    log.info(f"[SEND] Verified {target_count} targets in database for campaign {campaign.id}")
 
     return {
         'campaign_id': campaign.id,
         'campaign_name': campaign_name,
-        'queued_count': len(resend_targets),
+        'queued_count': target_count,  # Use verified count from DB
         'sending_mode': sending_mode,
         'resend_reason': resend_reason,
         'status': 'draft',

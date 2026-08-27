@@ -56,7 +56,7 @@ export default function ResendCampaign() {
     setStep('select');
     setLoading(true);
     try {
-      const data = await api.get('/campaigns/completed');
+      const data = await api.get<Campaign[]>('/campaigns/completed');
       setCampaigns(data);
     } catch (error) {
       alert(`Failed to load campaigns: ${error}`);
@@ -70,7 +70,7 @@ export default function ResendCampaign() {
     setStep('review');
     setLoading(true);
     try {
-      const data = await api.get(`/campaigns/${selectedCampaign.id}/resend-review`);
+      const data = await api.get<ResendReview>(`/campaigns/${selectedCampaign.id}/resend-review`);
       setReview(data);
     } catch (error) {
       alert(`Failed to load review: ${error}`);

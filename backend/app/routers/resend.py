@@ -22,34 +22,53 @@ router = APIRouter(prefix="/api/resend", tags=["resend"])
 def parse_file(file: UploadFile) -> list[dict]:
     """Parse CSV or XLSX file and return list of rows."""
     try:
+        if not file or not file.filename:
+            raise ValueError("No file provided")
+
         content = file.file.read()
+        if not content:
+            raise ValueError("File is empty")
 
-        if file.filename.endswith('.xlsx') or file.filename.endswith('.xls'):
-            wb = load_workbook(BytesIO(content))
-            ws = wb.active
+        filename = file.filename.lower()
 
-            headers = None
-            rows = []
-            for row_idx, row in enumerate(ws.iter_rows(values_only=True), 1):
-                if row_idx == 1:
-                    headers = [str(h).lower().strip() if h else f'col_{i}' for i, h in enumerate(row)]
-                    continue
-                if not any(row):  # Skip empty rows
-                    continue
-                rows.append(dict(zip(headers, row)))
-            return rows
+        if filename.endswith('.xlsx') or filename.endswith('.xls'):
+            try:
+                wb = load_workbook(BytesIO(content))
+                ws = wb.active
+                if not ws:
+                    raise ValueError("Workbook has no sheets")
+
+                headers = None
+                rows = []
+                for row_idx, row in enumerate(ws.iter_rows(values_only=True), 1):
+                    if row_idx == 1:
+                        headers = [str(h).lower().strip() if h else f'col_{i}' for i, h in enumerate(row)]
+                        continue
+                    if not any(row):  # Skip empty rows
+                        continue
+                    rows.append(dict(zip(headers or [], row)))
+                return rows
+            except Exception as e:
+                log.error(f"Failed to parse Excel file: {e}", exc_info=True)
+                raise ValueError(f"Excel parsing error: {str(e)}")
         else:
             # CSV/TSV
-            text_content = content.decode('utf-8')
-            reader = csv.DictReader(StringIO(text_content))
-            rows = []
-            for row in reader:
-                if row:
-                    rows.append(row)
-            return rows
+            try:
+                text_content = content.decode('utf-8', errors='replace')
+                reader = csv.DictReader(StringIO(text_content))
+                if not reader.fieldnames:
+                    raise ValueError("CSV has no headers")
+                rows = []
+                for row in reader:
+                    if row and any(row.values()):
+                        rows.append(row)
+                return rows
+            except Exception as e:
+                log.error(f"Failed to parse CSV file: {e}", exc_info=True)
+                raise ValueError(f"CSV parsing error: {str(e)}")
     except Exception as e:
-        log.error(f"Failed to parse file: {e}", exc_info=True)
-        raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(e)}")
+        log.error(f"Failed to parse file {file.filename if file else 'unknown'}: {e}", exc_info=True)
+        raise
 
 
 def extract_email_field(row: dict) -> str | None:
@@ -89,7 +108,10 @@ def resend_review(
 ):
     """Analyze uploaded file and identify previously contacted recipients."""
     try:
-        rows = parse_file(file)
+        try:
+            rows = parse_file(file)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
         if not rows:
             return {
@@ -102,35 +124,41 @@ def resend_review(
         previously_contacted = 0
 
         for row in rows:
-            email = extract_email_field(row)
-            if not email:
+            try:
+                email = extract_email_field(row)
+                if not email:
+                    continue
+
+                company = row.get('company') or row.get('company_name') or 'Unknown'
+                contact_person = row.get('contact_person') or row.get('contact') or None
+
+                history = check_contact_history(db, email)
+
+                recipient = {
+                    'email': email,
+                    'company_name': str(company),
+                    'contact_person': str(contact_person) if contact_person else None,
+                    'is_in_history': history['is_in_history'],
+                    'last_sent_date': history['last_sent_date'],
+                }
+                recipients.append(recipient)
+
+                if history['is_in_history']:
+                    previously_contacted += 1
+            except Exception as row_error:
+                log.warning(f"Skipping row due to error: {row_error}")
                 continue
-
-            company = row.get('company') or row.get('company_name') or 'Unknown'
-            contact_person = row.get('contact_person') or row.get('contact') or None
-
-            history = check_contact_history(db, email)
-
-            recipient = {
-                'email': email,
-                'company_name': str(company),
-                'contact_person': str(contact_person) if contact_person else None,
-                'is_in_history': history['is_in_history'],
-                'last_sent_date': history['last_sent_date'],
-            }
-            recipients.append(recipient)
-
-            if history['is_in_history']:
-                previously_contacted += 1
 
         return {
             'total_recipients': len(recipients),
             'previously_contacted': previously_contacted,
             'recipients': recipients,
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        log.error(f"Error in resend review: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
+        log.error(f"Unhandled error in resend review: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
 
 
 @router.post("/send")

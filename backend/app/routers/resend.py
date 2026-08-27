@@ -104,16 +104,20 @@ def preview_email(
 
 def parse_file(file: UploadFile) -> list[dict]:
     """Parse CSV or XLSX file and return list of rows."""
+    print(f"[PARSE] START: {file.filename if file else 'None'}", flush=True)
     log.info(f"parse_file called for: {file.filename if file else 'None'}")
     try:
         if not file or not file.filename:
+            print("[PARSE] ERROR: file or filename is None", flush=True)
             raise ValueError("No file provided")
 
-        log.info(f"Reading file content from {file.filename}")
+        print(f"[PARSE] Reading file: {file.filename}", flush=True)
         content = file.file.read()
+        print(f"[PARSE] Read {len(content)} bytes", flush=True)
         log.info(f"Read {len(content)} bytes from file")
 
         if not content:
+            print("[PARSE] ERROR: Content is empty after read", flush=True)
             raise ValueError("File is empty")
 
         filename = file.filename.lower()
@@ -222,21 +226,27 @@ def resend_review(
 
 def _resend_review_impl(file: UploadFile, db: Session):
     """Implementation of resend review logic."""
+    print(f"[IMPL] START: file={file.filename}", flush=True)
     log.info(f"[IMPL] 1. Started for file: {file.filename}")
 
     # Parse file
     try:
+        print(f"[IMPL] Calling parse_file", flush=True)
         log.info(f"[IMPL] 2. Calling parse_file")
         rows = parse_file(file)
+        print(f"[IMPL] Got {len(rows)} rows from parse_file", flush=True)
         log.info(f"[IMPL] 3. Parsed {len(rows)} rows from file")
     except ValueError as e:
+        print(f"[IMPL] ValueError in parse_file: {e}", flush=True)
         log.warning(f"[IMPL] File parse error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        print(f"[IMPL] Exception in parse_file: {type(e).__name__}: {e}", flush=True)
         log.error(f"[IMPL] Unexpected error in parse_file: {type(e).__name__}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"File parse error: {str(e)[:100]}")
 
     if not rows:
+        print("[IMPL] No rows found after parsing", flush=True)
         log.info("[IMPL] 4. No rows found, returning empty")
         return {
             'total_recipients': 0,
@@ -244,6 +254,7 @@ def _resend_review_impl(file: UploadFile, db: Session):
             'recipients': [],
         }
 
+    print(f"[IMPL] Processing {len(rows)} rows", flush=True)
     log.info(f"[IMPL] 5. Processing {len(rows)} rows")
     recipients = []
     previously_contacted = 0
@@ -264,6 +275,7 @@ def _resend_review_impl(file: UploadFile, db: Session):
                 history = check_contact_history(db, email)
                 log.debug(f"Email {email}: is_in_history={history['is_in_history']}")
             except Exception as history_error:
+                print(f"[IMPL] History check failed for {email}: {history_error}", flush=True)
                 log.error(f"Failed to check history for {email}: {history_error}")
                 history = {'email': email, 'is_in_history': False, 'last_sent_date': None}
 
@@ -279,15 +291,18 @@ def _resend_review_impl(file: UploadFile, db: Session):
             if history['is_in_history']:
                 previously_contacted += 1
         except Exception as row_error:
+            print(f"[IMPL] Row {idx} error: {row_error}", flush=True)
             log.warning(f"Row {idx} processing error: {row_error}", exc_info=True)
             continue
 
+    print(f"[IMPL] DONE: {len(recipients)} recipients, {previously_contacted} previously contacted", flush=True)
     log.info(f"Review complete: {len(recipients)} total, {previously_contacted} previously contacted")
     result = {
         'total_recipients': len(recipients),
         'previously_contacted': previously_contacted,
         'recipients': recipients,
     }
+    print(f"[IMPL] RETURNING: {result}", flush=True)
     log.debug(f"Returning review result: {result}")
     return result
 

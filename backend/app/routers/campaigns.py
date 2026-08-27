@@ -348,6 +348,22 @@ async def import_companies(
     }
 
 
+@router.get("/completed", response_model=list[CampaignStatusOut])
+def list_completed_campaigns(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """List all completed campaigns available for resending."""
+    stmt = (
+        select(Campaign)
+        .where(Campaign.status == CampaignStatus.completed)
+        .where(Campaign.deleted_at.is_(None))
+        .order_by(Campaign.last_activity_at.desc())
+    )
+    rows = db.scalars(stmt).all()
+    return [_status(db, c) for c in rows]
+
+
 @router.get("/{campaign_id}", response_model=CampaignStatusOut)
 def campaign_status(
     campaign_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)
@@ -826,22 +842,6 @@ def heartbeat(token: str = Query(default=""), steps: int = Query(default=12, ge=
     if not hmac.compare_digest(token.strip(), expected):
         raise HTTPException(status_code=403, detail="Bad token.")
     return scheduler.tick(steps)
-
-
-@router.get("/completed", response_model=list[CampaignStatusOut])
-def list_completed_campaigns(
-    db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
-):
-    """List all completed campaigns available for resending."""
-    stmt = (
-        select(Campaign)
-        .where(Campaign.status == CampaignStatus.completed)
-        .where(Campaign.deleted_at.is_(None))
-        .order_by(Campaign.last_activity_at.desc())
-    )
-    rows = db.scalars(stmt).all()
-    return [_status(db, c) for c in rows]
 
 
 @router.get("/{campaign_id}/resend-review")

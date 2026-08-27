@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { RotateCcw } from 'lucide-react';
+import { Button } from './ui';
 import { api } from '../lib/api';
 
 interface Campaign {
@@ -127,12 +129,12 @@ export default function ResendCampaign() {
 
   return (
     <>
-      <button
+      <Button
         onClick={openResendWorkflow}
-        className="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700"
+        icon={<RotateCcw size={16} />}
       >
         Resend Campaign
-      </button>
+      </Button>
 
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
@@ -183,19 +185,22 @@ export default function ResendCampaign() {
                     </div>
                   )}
                   <div className="mt-6 flex gap-3">
-                    <button
+                    <Button
+                      type="button"
+                      variant="ghost"
                       onClick={closeModal}
-                      className="flex-1 px-4 py-2 bg-gray-300 dark:bg-gray-700 text-gray-900 dark:text-white rounded hover:bg-gray-400"
+                      className="flex-1"
                     >
                       Cancel
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      type="button"
                       onClick={continueToReview}
                       disabled={!selectedCampaign || loading}
-                      className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400"
+                      className="flex-1"
                     >
                       Continue to Review
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
@@ -280,22 +285,25 @@ export default function ResendCampaign() {
                   </div>
 
                   <div className="flex gap-3">
-                    <button
+                    <Button
+                      type="button"
+                      variant="ghost"
                       onClick={() => {
                         setStep('select');
                         setApproved(new Set());
                       }}
-                      className="flex-1 px-4 py-2 bg-gray-300 dark:bg-gray-700 text-gray-900 dark:text-white rounded hover:bg-gray-400"
+                      className="flex-1"
                     >
                       Back
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      type="button"
                       onClick={continueToSend}
                       disabled={approved.size === 0}
-                      className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400"
+                      className="flex-1"
                     >
                       Continue to Send
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
@@ -324,19 +332,23 @@ export default function ResendCampaign() {
                   </div>
 
                   <div className="flex gap-3">
-                    <button
+                    <Button
+                      type="button"
+                      variant="ghost"
                       onClick={() => setStep('review')}
-                      className="flex-1 px-4 py-2 bg-gray-300 dark:bg-gray-700 text-gray-900 dark:text-white rounded hover:bg-gray-400"
+                      className="flex-1"
                     >
                       Back
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="danger"
                       onClick={executeResend}
                       disabled={sending}
-                      className="flex-1 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-400"
+                      className="flex-1"
                     >
                       {sending ? 'Sending...' : 'Confirm & Send'}
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
@@ -365,12 +377,13 @@ export default function ResendCampaign() {
                     </div>
                   </div>
 
-                  <button
+                  <Button
+                    type="button"
                     onClick={closeModal}
-                    className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                    className="w-full"
                   >
                     Close
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>

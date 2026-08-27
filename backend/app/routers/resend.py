@@ -23,7 +23,7 @@ from ..database import get_db
 from ..deps import get_current_user
 from ..models import User, Outreach, Campaign, CampaignTarget, CampaignStatus, SendMode, TargetState, EmailTemplate, ContactMethod, OutreachStatus
 from ..services import campaigns as cm
-from ..services import templating, importer
+from ..services import templating, importer, scheduler
 
 log = logging.getLogger("bevigrow.resend")
 
@@ -467,6 +467,7 @@ def _resend_send_impl(file: UploadFile, campaign_name: str, template_id: int, se
     ]
     db.add_all(targets)
     db.flush()  # Flush to get target IDs
+    log.info(f"[SEND] Created {len(targets)} CampaignTarget records for campaign {campaign.id}")
 
     # Log each resend to Outreach table (same as New Campaign)
     outreach_records = []
@@ -500,6 +501,16 @@ def _resend_send_impl(file: UploadFile, campaign_name: str, template_id: int, se
 
     db.commit()
     log.info(f"Queued {len(resend_targets)} targets for resend campaign '{campaign_name}'")
+    log.info(f"[SEND] Campaign {campaign.id} committed with {len(targets)} targets")
+
+    # Auto-start if automatic mode
+    if sending_mode == "automatic":
+        try:
+            log.info(f"[SEND] Auto-starting campaign {campaign.id} in automatic mode")
+            scheduler.tick(1)  # Process one step to start sending
+            log.info(f"[SEND] Campaign {campaign.id} started")
+        except Exception as e:
+            log.warning(f"[SEND] Failed to auto-start campaign: {e}")
 
     return {
         'campaign_id': campaign.id,

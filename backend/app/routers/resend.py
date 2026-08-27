@@ -188,33 +188,34 @@ def resend_review(
     _: User = Depends(get_current_user),
 ):
     """Analyze uploaded file and identify previously contacted recipients."""
-    log.info(f"[REVIEW] 1. Endpoint called for: {file.filename if file else 'unknown'}")
+    print(f"[REVIEW] START: {file.filename if file else 'unknown'}")
+    log.info(f"[REVIEW] START: {file.filename if file else 'unknown'}")
 
     try:
-        log.info(f"[REVIEW] 2. File object: {file}")
-        log.info(f"[REVIEW] 3. DB session: {db}")
+        print(f"[REVIEW] File: {file}, DB: {db}")
+        log.info(f"[REVIEW] Calling impl")
 
-        log.info(f"[REVIEW] 4. Starting _resend_review_impl")
         result = _resend_review_impl(file, db)
 
-        log.info(f"[REVIEW] 5. Got result type: {type(result)}")
-        log.info(f"[REVIEW] 6. Result keys: {result.keys() if isinstance(result, dict) else 'not a dict'}")
-        log.info(f"[REVIEW] 7. Returning result")
+        print(f"[REVIEW] SUCCESS: Got result")
+        log.info(f"[REVIEW] SUCCESS")
         return result
 
     except HTTPException as e:
+        print(f"[REVIEW] HTTPException: {e.status_code} - {e.detail}")
         log.error(f"[REVIEW] HTTPException: {e.status_code} - {e.detail}")
         raise
     except Exception as e:
+        print(f"[REVIEW] EXCEPTION: {type(e).__name__}: {str(e)[:200]}")
         log.error(f"[REVIEW] EXCEPTION: {type(e).__name__}: {e}", exc_info=True)
-        import traceback
-        log.error(f"[REVIEW] TRACEBACK:\n{traceback.format_exc()}")
 
-        return {
+        error_response = {
             "error": f"Server error: {type(e).__name__}",
             "detail": str(e)[:300],
-            "type": type(e).__name__,
+            "message": "Check Render logs for details",
         }
+        print(f"[REVIEW] RETURNING ERROR: {error_response}")
+        return error_response
 
 
 def _resend_review_impl(file: UploadFile, db: Session):

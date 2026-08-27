@@ -23,6 +23,7 @@ export default function ResendCampaign() {
   const [showModal, setShowModal] = useState(false);
   const [step, setStep] = useState<Step>('upload');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [campaignName, setCampaignName] = useState('');
   const [review, setReview] = useState<ResendReview | null>(null);
   const [sendingMode, setSendingMode] = useState<SendingMode>('manual');
   const [loading, setLoading] = useState(false);
@@ -33,13 +34,14 @@ export default function ResendCampaign() {
     setShowModal(true);
     setStep('upload');
     setUploadedFile(null);
+    setCampaignName('');
     setReview(null);
     setSendingMode('manual');
     setResult(null);
   };
 
   const continueToModeSelect = async () => {
-    if (!uploadedFile) return;
+    if (!uploadedFile || !campaignName.trim()) return;
     setStep('mode-select');
     setLoading(true);
     try {
@@ -79,11 +81,12 @@ export default function ResendCampaign() {
   };
 
   const executeResend = async () => {
-    if (!uploadedFile || !review) return;
+    if (!uploadedFile || !review || !campaignName.trim()) return;
     setSending(true);
     try {
       const formData = new FormData();
       formData.append('file', uploadedFile);
+      formData.append('campaign_name', campaignName);
       formData.append('sending_mode', sendingMode);
       formData.append('resend_reason', 'User-approved corrected data resend');
 
@@ -122,6 +125,7 @@ export default function ResendCampaign() {
     setShowModal(false);
     setStep('upload');
     setUploadedFile(null);
+    setCampaignName('');
     setReview(null);
     setSendingMode('manual');
     setResult(null);
@@ -190,6 +194,22 @@ export default function ResendCampaign() {
                     </div>
 
                     <div>
+                      <label className="block text-xs font-medium text-latte/60 uppercase tracking-wide mb-2">
+                        Campaign name
+                      </label>
+                      <input
+                        type="text"
+                        value={campaignName}
+                        onChange={(e) => setCampaignName(e.target.value)}
+                        placeholder="e.g., Coffee Buyers - Updated Info"
+                        className="w-full px-3 py-2 bg-[#1a1410] border border-caramel/25 rounded text-latte placeholder:text-latte/40 focus:outline-none focus:border-caramel/50"
+                      />
+                      <p className="text-xs text-latte/50 mt-2">
+                        Give this resend campaign a descriptive name for your records.
+                      </p>
+                    </div>
+
+                    <div>
                       <p className="text-sm text-gold bg-gold/10 border border-gold/25 p-3 rounded">
                         ℹ️ We'll identify which recipients were previously contacted and show them for resend.
                       </p>
@@ -208,7 +228,7 @@ export default function ResendCampaign() {
                     <Button
                       type="button"
                       onClick={continueToModeSelect}
-                      disabled={!uploadedFile || loading}
+                      disabled={!uploadedFile || !campaignName.trim() || loading}
                       className="flex-1"
                     >
                       {loading ? 'Analyzing...' : 'Continue'}
@@ -332,6 +352,11 @@ export default function ResendCampaign() {
                     <div className="font-semibold text-gold">
                       ✅ Resend Queued Successfully
                     </div>
+                    {result.campaign_name && (
+                      <div className="text-sm text-latte/70 mt-2">
+                        Campaign: <span className="text-latte font-medium">{result.campaign_name}</span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 mb-6">

@@ -182,13 +182,14 @@ def resend_review(
 @router.post("/send")
 def resend_send(
     file: UploadFile = File(...),
+    campaign_name: str = Form(...),
     sending_mode: str = Form(...),
     resend_reason: str = Form(...),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     """Queue resend for previously contacted recipients."""
-    log.info(f"Queuing resend: mode={sending_mode}, reason={resend_reason}, user={user.email}")
+    log.info(f"Queuing resend: campaign={campaign_name}, mode={sending_mode}, reason={resend_reason}, user={user.email}")
 
     try:
         try:
@@ -199,8 +200,9 @@ def resend_send(
             raise HTTPException(status_code=400, detail=str(e))
 
         if not rows:
-            log.info("File contained no rows, returning empty send result")
+            log.info(f"File contained no rows for campaign '{campaign_name}'")
             return {
+                'campaign_name': campaign_name,
                 'queued_count': 0,
                 'sending_mode': sending_mode,
                 'resend_reason': resend_reason,
@@ -232,8 +234,9 @@ def resend_send(
                 log.warning(f"Row {idx} queuing error: {e}", exc_info=True)
                 continue
 
-        log.info(f"Queued {queued_count} recipients for resend")
+        log.info(f"Queued {queued_count} recipients for resend campaign '{campaign_name}'")
         result = {
+            'campaign_name': campaign_name,
             'queued_count': queued_count,
             'sending_mode': sending_mode,
             'resend_reason': resend_reason,

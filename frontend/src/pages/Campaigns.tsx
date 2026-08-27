@@ -12,6 +12,7 @@ import { Link } from 'react-router-dom'
 
 import { OutreachChat } from '../components/OutreachChat'
 import { OutreachSetup } from '../components/OutreachSetup'
+import ResendCampaign from '../components/ResendCampaign'
 import {
   Button,
   Card,
@@ -89,6 +90,7 @@ export function Campaigns() {
           >
             Guide
           </Button>
+          <ResendCampaign />
           <Button
             onClick={() => setCreating(true)}
             icon={<FileUp size={16} />}

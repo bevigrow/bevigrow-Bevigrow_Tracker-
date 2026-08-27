@@ -171,12 +171,23 @@ def parse_file(file: UploadFile) -> list[dict]:
 
 
 def extract_email_field(row: dict) -> str | None:
-    """Extract email from row, trying common field names."""
+    """Extract email from row, trying common field names and any field with @."""
+    # Try standard email field names first
     email_fields = ['email', 'e-mail', 'mail', 'recipient_email', 'contact_email', 'email_address']
     for field in email_fields:
         value = row.get(field)
         if value:
-            return str(value).strip().lower()
+            cleaned = str(value).strip().lower()
+            if '@' in cleaned:
+                return cleaned
+
+    # If no standard field found, look for any column containing an email (has @)
+    for field, value in row.items():
+        if value and '@' in str(value):
+            cleaned = str(value).strip().lower()
+            if '@' in cleaned:
+                return cleaned
+
     return None
 
 

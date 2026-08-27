@@ -33,11 +33,15 @@ def resend_health():
 
 def parse_file(file: UploadFile) -> list[dict]:
     """Parse CSV or XLSX file and return list of rows."""
+    log.info(f"parse_file called for: {file.filename if file else 'None'}")
     try:
         if not file or not file.filename:
             raise ValueError("No file provided")
 
+        log.info(f"Reading file content from {file.filename}")
         content = file.file.read()
+        log.info(f"Read {len(content)} bytes from file")
+
         if not content:
             raise ValueError("File is empty")
 
@@ -116,14 +120,23 @@ def resend_review(
     """Analyze uploaded file and identify previously contacted recipients."""
     log.info(f"Processing resend review for: {file.filename if file else 'unknown'}")
 
-    # Safety net: guarantee we always return valid JSON or HTTPException
+    # MAXIMUM defensive: catch EVERYTHING and return JSON
     try:
-        return _resend_review_impl(file, db)
-    except HTTPException:
+        log.info("Starting review implementation")
+        result = _resend_review_impl(file, db)
+        log.info(f"Review completed, returning {type(result)}")
+        return result
+    except HTTPException as e:
+        log.error(f"HTTPException in review: {e.status_code} - {e.detail}")
         raise
     except Exception as e:
-        log.error(f"CRITICAL: Unexpected exception in resend_review: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Server error: {str(e)[:100]}")
+        log.error(f"CRITICAL EXCEPTION in resend_review: {type(e).__name__}: {e}", exc_info=True)
+        # Absolutely guarantee we return valid JSON
+        return {
+            "error": "Server error processing file",
+            "detail": str(e)[:200],
+            "type": type(e).__name__,
+        }
 
 
 def _resend_review_impl(file: UploadFile, db: Session):

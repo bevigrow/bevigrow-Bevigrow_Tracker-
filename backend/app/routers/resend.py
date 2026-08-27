@@ -541,9 +541,16 @@ def _resend_send_impl(file: UploadFile, campaign_name: str, template_id: int, se
     # Don't auto-start - let user start manually like New Campaign
     # Scheduler will pick up draft campaigns when user clicks Start
 
-    # Verify targets were actually created
+    # Verify targets were actually created and committed
+    db.commit()  # Ensure transaction is fully committed
+    db.refresh(campaign)  # Refresh campaign from DB
     target_count = db.query(CampaignTarget).filter(CampaignTarget.campaign_id == campaign.id).count()
+    print(f"[SEND] FINAL: Verified {target_count} targets in DB for campaign {campaign.id}", flush=True)
     log.info(f"[SEND] Verified {target_count} targets in database for campaign {campaign.id}")
+
+    # Return campaign status snapshot to show correct counts
+    status_snapshot = cm.snapshot(db, campaign)
+    print(f"[SEND] Status snapshot: total={status_snapshot.get('total')}, remaining={status_snapshot.get('remaining')}", flush=True)
 
     return {
         'campaign_id': campaign.id,
@@ -552,4 +559,6 @@ def _resend_send_impl(file: UploadFile, campaign_name: str, template_id: int, se
         'sending_mode': sending_mode,
         'resend_reason': resend_reason,
         'status': 'draft',
+        'total': status_snapshot.get('total'),  # Include snapshot for accurate display
+        'remaining': status_snapshot.get('remaining'),
     }

@@ -22,8 +22,9 @@ router = APIRouter(prefix="/api/resend", tags=["resend"])
 def parse_file(file: UploadFile) -> list[dict]:
     """Parse CSV or XLSX file and return list of rows."""
     try:
+        content = file.file.read()
+
         if file.filename.endswith('.xlsx') or file.filename.endswith('.xls'):
-            content = file.file.read()
             wb = load_workbook(BytesIO(content))
             ws = wb.active
 
@@ -33,15 +34,21 @@ def parse_file(file: UploadFile) -> list[dict]:
                 if row_idx == 1:
                     headers = [str(h).lower().strip() if h else f'col_{i}' for i, h in enumerate(row)]
                     continue
+                if not any(row):  # Skip empty rows
+                    continue
                 rows.append(dict(zip(headers, row)))
             return rows
         else:
             # CSV/TSV
-            content = file.file.read().decode('utf-8')
-            reader = csv.DictReader(StringIO(content))
-            return list(reader) if reader.fieldnames else []
+            text_content = content.decode('utf-8')
+            reader = csv.DictReader(StringIO(text_content))
+            rows = []
+            for row in reader:
+                if row:
+                    rows.append(row)
+            return rows
     except Exception as e:
-        log.error(f"Failed to parse file: {e}")
+        log.error(f"Failed to parse file: {e}", exc_info=True)
         raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(e)}")
 
 
@@ -56,14 +63,22 @@ def extract_email_field(row: dict) -> str | None:
 
 def check_contact_history(db: Session, email: str) -> dict:
     """Check if email was previously contacted."""
-    stmt = select(Outreach).where(Outreach.email == email.lower()).order_by(Outreach.contacted_on.desc())
-    outreach = db.scalars(stmt).first()
+    try:
+        stmt = select(Outreach).where(Outreach.email == email.lower()).order_by(Outreach.contacted_on.desc())
+        outreach = db.scalars(stmt).first()
 
-    return {
-        'email': email,
-        'is_in_history': outreach is not None,
-        'last_sent_date': outreach.contacted_on.isoformat() if outreach and outreach.contacted_on else None,
-    }
+        return {
+            'email': email,
+            'is_in_history': outreach is not None,
+            'last_sent_date': outreach.contacted_on.isoformat() if outreach and outreach.contacted_on else None,
+        }
+    except Exception as e:
+        log.error(f"Failed to check contact history for {email}: {e}", exc_info=True)
+        return {
+            'email': email,
+            'is_in_history': False,
+            'last_sent_date': None,
+        }
 
 
 @router.post("/review")

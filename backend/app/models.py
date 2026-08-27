@@ -16,7 +16,7 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, deferred, mapped_column, relationship
 
 from .database import Base
 
@@ -348,13 +348,14 @@ class CampaignTarget(Base):
     )
 
     # Resend approval tracking (for previously contacted recipients)
-    is_resend_approved: Mapped[bool] = mapped_column(Boolean, default=False)
-    resend_reason: Mapped[str | None] = mapped_column(String(100))
-    resend_notes: Mapped[str | None] = mapped_column(String(500))
-    approved_by_id: Mapped[int | None] = mapped_column(
+    # Deferred: columns added after initial deployment, loaded on-demand only
+    is_resend_approved: Mapped[bool] = deferred(mapped_column(Boolean, default=False))
+    resend_reason: Mapped[str | None] = deferred(mapped_column(String(100)))
+    resend_notes: Mapped[str | None] = deferred(mapped_column(String(500)))
+    approved_by_id: Mapped[int | None] = deferred(mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
-    )
-    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ))
+    approved_at: Mapped[datetime | None] = deferred(mapped_column(DateTime(timezone=True)))
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(

@@ -72,6 +72,7 @@ def preview_email(
     contact_person: str = Form(default=None),
     country: str = Form(default=None),
     category: str = Form(default=None),
+    location: str = Form(default=None),
     template_id: int = Form(...),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
@@ -84,7 +85,7 @@ def preview_email(
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
-    # Create a mock target for preview
+    # Create a mock target for preview with all mapped fields
     mock_target = CampaignTarget(
         id=0,
         campaign_id=0,
@@ -93,6 +94,7 @@ def preview_email(
         company_name=company_name,
         contact_person=contact_person,
         country=country,
+        location=location,
         category=category,
     )
 
@@ -318,6 +320,9 @@ def _resend_review_impl(file: UploadFile, db: Session):
                 'email': email,
                 'company_name': str(company) if company else 'Unknown',
                 'contact_person': str(contact_person) if contact_person else None,
+                'country': mapped_row.get('country'),
+                'location': mapped_row.get('location'),
+                'category': mapped_row.get('category'),
                 'is_in_history': history['is_in_history'],
                 'last_sent_date': history['last_sent_date'],
             }

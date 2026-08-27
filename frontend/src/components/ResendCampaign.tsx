@@ -14,6 +14,9 @@ interface ResendRecipient {
   email: string;
   company_name: string;
   contact_person?: string;
+  country?: string;
+  location?: string;
+  category?: string;
   is_in_history: boolean;
   last_sent_date?: string;
 }
@@ -143,8 +146,9 @@ export default function ResendCampaign() {
       formData.append('email', sampleRecipient.email);
       formData.append('company_name', sampleRecipient.company_name);
       formData.append('contact_person', sampleRecipient.contact_person || '');
-      formData.append('country', '');
-      formData.append('category', '');
+      formData.append('country', sampleRecipient.country || '');
+      formData.append('location', sampleRecipient.location || '');
+      formData.append('category', sampleRecipient.category || '');
       formData.append('template_id', selectedTemplateId.toString());
 
       const headers = new Headers();

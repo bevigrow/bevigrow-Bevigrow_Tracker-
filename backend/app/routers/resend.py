@@ -1,7 +1,12 @@
-"""Resend Campaign endpoints: intentional resend to previously contacted recipients."""
+"""Resend Campaign endpoints: intentional resend to previously contacted recipients.
+
+Integrates with the existing campaign sender pipeline. Creates campaigns that the
+scheduler picks up and processes according to sending mode and daily limits.
+"""
 from __future__ import annotations
 
 import csv
+import json
 import logging
 from io import StringIO, BytesIO
 
@@ -12,7 +17,8 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..deps import get_current_user
-from ..models import User, Outreach
+from ..models import User, Outreach, Campaign, CampaignTarget, CampaignStatus, SendMode, TargetState
+from ..services import campaigns as cm
 
 log = logging.getLogger("bevigrow.resend")
 
@@ -208,7 +214,7 @@ def resend_send(
 
 
 def _resend_send_impl(file: UploadFile, campaign_name: str, sending_mode: str, resend_reason: str, db: Session, user):
-    """Implementation of resend send logic."""
+    """Create a resend campaign and queue targets with existing sender pipeline."""
     try:
         rows = parse_file(file)
         log.info(f"Successfully parsed {len(rows)} rows for send")
@@ -217,24 +223,21 @@ def _resend_send_impl(file: UploadFile, campaign_name: str, sending_mode: str, r
         raise HTTPException(status_code=400, detail=str(e))
 
     if not rows:
-        log.info(f"File contained no rows for campaign '{campaign_name}'")
-        return {
-            'campaign_name': campaign_name,
-            'queued_count': 0,
-            'sending_mode': sending_mode,
-            'resend_reason': resend_reason,
-            'status': 'queued',
-        }
+        log.info(f"No rows in file for campaign '{campaign_name}'")
+        raise HTTPException(status_code=400, detail="File contains no contacts to resend.")
 
-    queued_count = 0
+    # Collect resend targets (only previously contacted)
+    resend_targets = []
+    position = 0
 
     for idx, row in enumerate(rows):
         try:
             email = extract_email_field(row)
             if not email:
-                log.debug(f"Row {idx}: No email field")
+                log.debug(f"Row {idx}: No email field, skipping")
                 continue
 
+            # Check if email was previously contacted
             try:
                 history = check_contact_history(db, email)
             except Exception as history_error:
@@ -245,19 +248,75 @@ def _resend_send_impl(file: UploadFile, campaign_name: str, sending_mode: str, r
                 log.debug(f"Email {email}: not in history, skipping")
                 continue
 
-            queued_count += 1
-            log.debug(f"Email {email}: queued for resend")
+            # This is a target to resend to
+            company = (row.get('company') or row.get('company_name') or 'Unknown')
+            contact_person = row.get('contact_person') or row.get('contact')
+
+            resend_targets.append({
+                'position': position,
+                'email': email,
+                'company_name': str(company) if company else 'Unknown',
+                'contact_person': str(contact_person) if contact_person else None,
+                'resend_reason': resend_reason[:255] if resend_reason else None,  # Truncate to DB limit
+            })
+            position += 1
+            log.debug(f"Email {email}: added to resend queue")
+
         except Exception as e:
-            log.warning(f"Row {idx} queuing error: {e}", exc_info=True)
+            log.warning(f"Row {idx} processing error: {e}", exc_info=True)
             continue
 
-    log.info(f"Queued {queued_count} recipients for resend campaign '{campaign_name}'")
-    result = {
+    if not resend_targets:
+        log.warning(f"No previously contacted recipients found for resend campaign '{campaign_name}'")
+        raise HTTPException(
+            status_code=400,
+            detail="No previously contacted recipients found in this file."
+        )
+
+    # Create Campaign record (integrates with existing sender pipeline)
+    campaign = Campaign(
+        name=campaign_name.strip() or "Untitled resend",
+        mode=SendMode.automatic if sending_mode == "automatic" else SendMode.manual,
+        daily_limit=min(50, cm.HARD_DAILY_CAP),  # Resend respects same 50/day limit
+        owner_id=user.id,
+        status=CampaignStatus.draft,
+        source_filename=file.filename,
+    )
+    db.add(campaign)
+    db.flush()
+    log.info(f"Created resend campaign ID {campaign.id}: '{campaign_name}'")
+
+    # Create CampaignTarget rows for each resend recipient
+    targets = [
+        CampaignTarget(
+            campaign_id=campaign.id,
+            position=target['position'],
+            company_name=target['company_name'],
+            email=target['email'],
+            contact_person=target['contact_person'],
+            state=TargetState.pending,
+            resend_reason=target['resend_reason'],
+        )
+        for target in resend_targets
+    ]
+    db.add_all(targets)
+
+    # Record the resend event
+    cm.record(
+        db,
+        campaign.id,
+        "resend_created",
+        f"Resend campaign for {len(resend_targets)} previously contacted recipients. Reason: {resend_reason}",
+    )
+
+    db.commit()
+    log.info(f"Queued {len(resend_targets)} targets for resend campaign '{campaign_name}'")
+
+    return {
+        'campaign_id': campaign.id,
         'campaign_name': campaign_name,
-        'queued_count': queued_count,
+        'queued_count': len(resend_targets),
         'sending_mode': sending_mode,
         'resend_reason': resend_reason,
-        'status': 'queued',
+        'status': 'draft',
     }
-    log.debug(f"Returning send result: {result}")
-    return result

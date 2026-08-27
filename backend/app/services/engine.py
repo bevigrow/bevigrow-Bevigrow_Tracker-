@@ -397,6 +397,19 @@ def _log_outreach(
         db.commit()
         return twin
 
+    # Build notes - include resend info if this is a resend target
+    time_str = local.strftime('%H:%M')
+    date_str = local.strftime('%d %b %Y')
+    base_notes = 'Sent automatically by campaign “' + campaign.name + '” at ' + time_str + ' on ' + date_str + ' (IST), to ' + target.email + '.'
+
+    if target.is_resend_approved:
+        notes = base_notes + ' [RESEND]'
+        if target.resend_reason:
+            notes = notes + ' Reason: ' + target.resend_reason
+    else:
+        notes = base_notes
+
+    msg_sent = 'Subject: ' + (subject or '') + '\n\n' + (body or '')
     row = Outreach(
         company_name=label[:200],
         contact_person=target.contact_person,
@@ -406,18 +419,11 @@ def _log_outreach(
         contact_method=ContactMethod.email,
         contact_point=target.email,
         contacted_on=cm.sending_day(),
-        message_sent=f"Subject: {subject}\n\n{body}" if subject else body,
+        message_sent=msg_sent,
         status=OutreachStatus.waiting_reply,
-        next_action="Wait for reply",
+        next_action='Wait for reply',
         next_follow_up=_in_a_week(),
-        # `contacted_on` is a date, so the clock time goes here — a campaign
-        # that sends fifty in an afternoon otherwise leaves fifty rows that all
-        # claim to have happened at no particular moment.
-        notes=(
-            f"Sent automatically by campaign “{campaign.name}” "
-            f"at {local.strftime('%H:%M')} on {local.strftime('%d %b %Y')} (IST), "
-            f"to {target.email}."
-        ),
+        notes=notes,
         owner_id=campaign.owner_id,
     )
     db.add(row)

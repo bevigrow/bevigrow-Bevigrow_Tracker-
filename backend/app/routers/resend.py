@@ -478,28 +478,6 @@ def _resend_send_impl(file: UploadFile, campaign_name: str, template_id: int, se
     db.flush()  # Flush to get target IDs
     log.info(f"[SEND] Created {len(targets)} CampaignTarget records for campaign {campaign.id}")
 
-    # Log each resend to Outreach table (same as New Campaign)
-    outreach_records = []
-    for target in targets:
-        # Combine template subject and body for message_sent field
-        message_content = f"Subject: {template.subject or 'Email'}\n\n{template.body or 'Message'}"
-
-        outreach = Outreach(
-            email=target.email,
-            company_name=target.company_name,
-            contact_person=target.contact_person,
-            country=target.country,
-            contacted_on=datetime.now(timezone.utc).date(),
-            contact_method=ContactMethod.email,
-            message_sent=message_content,
-            owner_id=user.id,
-            status=OutreachStatus.waiting_reply,
-            notes=f"Resent via campaign '{campaign_name}' ({sending_mode} mode). Reason: {resend_reason}",
-        )
-        outreach_records.append(outreach)
-
-    db.add_all(outreach_records)
-
     # Record the resend event (same format as New Campaign "imported")
     cm.record(
         db,

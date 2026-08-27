@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..deps import get_current_user
-from ..models import User, Outreach, Campaign, CampaignTarget, CampaignStatus, SendMode, TargetState, EmailTemplate
+from ..models import User, Outreach, Campaign, CampaignTarget, CampaignStatus, SendMode, TargetState, EmailTemplate, ContactMethod, OutreachStatus
 from ..services import campaigns as cm
 from ..services import templating, importer
 
@@ -467,17 +467,20 @@ def _resend_send_impl(file: UploadFile, campaign_name: str, template_id: int, se
     # Log each resend to Outreach table (same as New Campaign)
     outreach_records = []
     for target in targets:
+        # Combine template subject and body for message_sent field
+        message_content = f"Subject: {template.subject or 'Email'}\n\n{template.body or 'Message'}"
+
         outreach = Outreach(
             email=target.email,
             company_name=target.company_name,
             contact_person=target.contact_person,
+            country=target.country,
             contacted_on=datetime.now(timezone.utc).date(),
-            contact_method="email",
-            message_subject=template.subject or "Email",
-            message_body=template.body or "Message",
+            contact_method=ContactMethod.email,
+            message_sent=message_content,
             owner_id=user.id,
-            status="contacted",
-            ai_summary=f"Resent via campaign '{campaign_name}' ({sending_mode} mode)",
+            status=OutreachStatus.waiting_reply,
+            notes=f"Resent via campaign '{campaign_name}' ({sending_mode} mode). Reason: {resend_reason}",
         )
         outreach_records.append(outreach)
 

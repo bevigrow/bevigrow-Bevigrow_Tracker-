@@ -105,7 +105,7 @@ def preview_email(
             "subject": subject,
             "body": body,
             "unfilled_placeholders": unfilled,
-            "can_send": len(unfilled) == 0,
+            "can_send": True,  # Allow sending even with missing placeholders
         }
     except Exception as e:
         log.error(f"Preview error: {e}", exc_info=True)

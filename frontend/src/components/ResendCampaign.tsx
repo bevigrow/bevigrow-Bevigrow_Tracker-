@@ -449,18 +449,12 @@ export default function ResendCampaign() {
 
                   {preview.unfilled_placeholders.length > 0 && (
                     <div className="p-3 bg-gold/10 border border-gold/25 rounded">
-                      <div className="text-sm text-gold">Warning: Missing data</div>
+                      <div className="text-sm text-gold">⚠️ Missing data</div>
                       <div className="text-xs text-gold/70 mt-1">
-                        Placeholders not found: {preview.unfilled_placeholders.join(', ')}
+                        These placeholders will not be filled: {preview.unfilled_placeholders.join(', ')}
                       </div>
-                    </div>
-                  )}
-
-                  {!preview.can_send && (
-                    <div className="p-3 bg-red-500/10 border border-red-500/25 rounded">
-                      <div className="text-sm text-red-400">Cannot send</div>
-                      <div className="text-xs text-red-400/70 mt-1">
-                        Some required placeholders are missing. Add these columns to your file.
+                      <div className="text-xs text-gold/60 mt-1">
+                        They will appear as [placeholder_name] in the email.
                       </div>
                     </div>
                   )}
@@ -472,7 +466,6 @@ export default function ResendCampaign() {
                     <Button
                       type="button"
                       onClick={() => setStep('mode-select')}
-                      disabled={!preview.can_send}
                       className="flex-1"
                     >
                       Continue to Sending Mode

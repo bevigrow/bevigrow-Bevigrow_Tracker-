@@ -552,13 +552,25 @@ def _resend_send_impl(file: UploadFile, campaign_name: str, template_id: int, se
     status_snapshot = cm.snapshot(db, campaign)
     print(f"[SEND] Status snapshot: total={status_snapshot.get('total')}, remaining={status_snapshot.get('remaining')}", flush=True)
 
+    # Auto-start if automatic mode - scheduler needs running status to send
+    if sending_mode == "automatic":
+        print(f"[SEND] Auto-starting campaign {campaign.id} for automatic sending", flush=True)
+        try:
+            campaign = cm.start(db, campaign)
+            db.commit()
+            print(f"[SEND] Campaign {campaign.id} started successfully", flush=True)
+            status_snapshot = cm.snapshot(db, campaign)  # Refresh status after starting
+        except Exception as e:
+            print(f"[SEND] Failed to start campaign: {e}", flush=True)
+            log.warning(f"Failed to auto-start campaign: {e}")
+
     return {
         'campaign_id': campaign.id,
         'campaign_name': campaign_name,
         'queued_count': target_count,  # Use verified count from DB
         'sending_mode': sending_mode,
         'resend_reason': resend_reason,
-        'status': 'draft',
+        'status': campaign.status.value if hasattr(campaign.status, 'value') else str(campaign.status),
         'total': status_snapshot.get('total'),  # Include snapshot for accurate display
         'remaining': status_snapshot.get('remaining'),
     }

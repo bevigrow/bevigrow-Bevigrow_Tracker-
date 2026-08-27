@@ -36,11 +36,6 @@ def resend_health():
     return {"status": "ok", "router": "resend"}
 
 
-@router.get("/review-test")
-def review_test():
-    """Test endpoint without dependencies."""
-    print("[TEST] Review test endpoint called", flush=True)
-    return JSONResponse(status_code=200, content={"test": "ok", "message": "Review test endpoint works"})
 
 
 @router.get("/templates")
@@ -198,7 +193,6 @@ def check_contact_history(db: Session, email: str) -> dict:
 def resend_review(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
 ):
     """Analyze uploaded file and identify previously contacted recipients."""
     print(f"[REVIEW] START: file={file.filename if file else 'None'}", flush=True)

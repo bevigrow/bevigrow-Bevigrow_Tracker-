@@ -37,11 +37,44 @@ def resend_health():
     return {"status": "ok", "router": "resend"}
 
 
-@router.post("/review-simple")
-def review_simple():
-    """Simplest test endpoint — no dependencies."""
-    print("[SIMPLE] Called", flush=True)
-    return {"test": "ok", "message": "Simple endpoint works"}
+@router.post("/debug-parse")
+def debug_parse_file(file: UploadFile = File(...)):
+    """DEBUG: Parse file and return full importer report."""
+    print(f"[DEBUG] Parsing file: {file.filename}", flush=True)
+
+    try:
+        content = file.file.read()
+        report = importer.parse(content, file.filename)
+
+        print(f"[DEBUG] Report: {report.addresses} addresses, {report.without_email} no email, {report.invalid_emails} invalid", flush=True)
+        print(f"[DEBUG] Rows with data:", flush=True)
+        for row in report.rows[:5]:
+            print(f"  - {row.email} / {row.company_name} / skip={row.skip_reason}", flush=True)
+
+        return {
+            "success": True,
+            "file": file.filename,
+            "total_rows": len(report.rows),
+            "addresses_found": report.addresses,
+            "companies": report.companies,
+            "without_email": report.without_email,
+            "invalid_emails": report.invalid_emails,
+            "unmapped_columns": report.unmapped_columns,
+            "sample_rows": [
+                {
+                    "email": r.email,
+                    "company_name": r.company_name,
+                    "country": r.country,
+                    "skip_reason": r.skip_reason,
+                }
+                for r in report.rows[:10]
+            ]
+        }
+    except Exception as e:
+        print(f"[DEBUG] ERROR: {type(e).__name__}: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        return {"error": str(e), "type": type(e).__name__}
 
 
 

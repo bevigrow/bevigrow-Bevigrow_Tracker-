@@ -845,15 +845,16 @@ def heartbeat(token: str = Query(default=""), steps: int = Query(default=12, ge=
     return scheduler.tick(steps)
 
 
-@router.get("/{campaign_id}/resend-review")
-def get_resend_review(
+@router.post("/{campaign_id}/resend-review")
+def post_resend_review(
     campaign_id: int,
+    file: UploadFile,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """Get pre-send review for resending a completed campaign.
+    """Process uploaded corrected data and return pre-send review.
 
-    Shows all previously contacted recipients and detects changes.
+    Shows previously contacted recipients and detects data changes.
     """
     campaign = _get(db, campaign_id)
     if campaign.status != CampaignStatus.completed:

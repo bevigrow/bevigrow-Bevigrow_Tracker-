@@ -40,13 +40,14 @@ interface ResendReview {
   reviews: RecipientReview[];
 }
 
-type Step = 'select' | 'review' | 'approve' | 'sending';
+type Step = 'select' | 'upload' | 'review' | 'approve' | 'sending';
 
 export default function ResendCampaign() {
   const [showModal, setShowModal] = useState(false);
   const [step, setStep] = useState<Step>('select');
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [review, setReview] = useState<ResendReview | null>(null);
   const [approved, setApproved] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(false);
@@ -67,16 +68,32 @@ export default function ResendCampaign() {
     }
   };
 
-  const continueToReview = async () => {
+  const continueToUpload = () => {
     if (!selectedCampaign) return;
+    setStep('upload');
+    setUploadedFile(null);
+  };
+
+  const continueToReview = async () => {
+    if (!selectedCampaign || !uploadedFile) return;
     setStep('review');
     setLoading(true);
     try {
-      const data = await api.get<ResendReview>(`/campaigns/${selectedCampaign.id}/resend-review`);
+      const formData = new FormData();
+      formData.append('file', uploadedFile);
+      const response = await fetch(
+        `/api/campaigns/${selectedCampaign.id}/resend-review`,
+        {
+          method: 'POST',
+          body: formData,
+        }
+      );
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json() as ResendReview;
       setReview(data);
     } catch (error) {
       alert(`Failed to load review: ${error}`);
-      setStep('select');
+      setStep('upload');
     } finally {
       setLoading(false);
     }
@@ -122,6 +139,7 @@ export default function ResendCampaign() {
     setShowModal(false);
     setStep('select');
     setSelectedCampaign(null);
+    setUploadedFile(null);
     setReview(null);
     setApproved(new Set());
     setResult(null);
@@ -142,6 +160,7 @@ export default function ResendCampaign() {
             <div className="sticky top-0 bg-white dark:bg-gray-900 border-b dark:border-gray-700 p-4 flex justify-between items-center">
               <h2 className="text-xl font-bold">
                 {step === 'select' && 'Select Campaign to Resend'}
+                {step === 'upload' && 'Upload Corrected Data'}
                 {step === 'review' && 'Pre-Send Review'}
                 {step === 'approve' && 'Confirm Resend'}
                 {step === 'sending' && 'Resend Complete'}
@@ -195,8 +214,58 @@ export default function ResendCampaign() {
                     </Button>
                     <Button
                       type="button"
-                      onClick={continueToReview}
+                      onClick={continueToUpload}
                       disabled={!selectedCampaign || loading}
+                      className="flex-1"
+                    >
+                      Continue to Upload
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 2: Upload Corrected Data */}
+              {step === 'upload' && selectedCampaign && (
+                <div>
+                  <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 p-4 rounded mb-4">
+                    <div className="font-semibold text-blue-900 dark:text-blue-100">
+                      Upload Corrected Data
+                    </div>
+                    <div className="text-sm text-blue-800 dark:text-blue-200 mt-2">
+                      Upload a CSV or XLSX file with corrected company names and contact info to resend with updated data.
+                    </div>
+                  </div>
+
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium mb-2">
+                      Company File
+                    </label>
+                    <input
+                      type="file"
+                      accept=".csv,.xlsx,.xls,.ods,.tsv"
+                      onChange={(e) => setUploadedFile(e.target.files?.[0] || null)}
+                      className="block w-full text-sm border dark:border-gray-700 rounded p-2"
+                    />
+                    {uploadedFile && (
+                      <div className="text-sm text-green-600 dark:text-green-400 mt-2">
+                        ✓ {uploadedFile.name}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex gap-3">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setStep('select')}
+                      className="flex-1"
+                    >
+                      Back
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={continueToReview}
+                      disabled={!uploadedFile || loading}
                       className="flex-1"
                     >
                       Continue to Review
@@ -205,7 +274,7 @@ export default function ResendCampaign() {
                 </div>
               )}
 
-              {/* STEP 2: Pre-Send Review */}
+              {/* STEP 3: Pre-Send Review */}
               {step === 'review' && review && (
                 <div>
                   <div className="bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 p-4 rounded mb-4">

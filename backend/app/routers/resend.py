@@ -234,7 +234,7 @@ def resend_review(
 
 
 def _resend_review_impl(file: UploadFile, db: Session):
-    """Implementation of resend review logic."""
+    """Implementation of resend review logic - shows ALL recipients in file."""
     print(f"[IMPL] START: file={file.filename}", flush=True)
     log.info(f"[IMPL] 1. Started for file: {file.filename}")
 
@@ -268,7 +268,7 @@ def _resend_review_impl(file: UploadFile, db: Session):
     recipients = []
     previously_contacted = 0
 
-    # Process each row
+    # Process each row - resend campaign accepts ALL emails, tracks if previously contacted
     for idx, row in enumerate(rows):
         try:
             email = extract_email_field(row)
@@ -279,7 +279,7 @@ def _resend_review_impl(file: UploadFile, db: Session):
             company = (row.get('company') or row.get('company_name') or 'Unknown')
             contact_person = row.get('contact_person') or row.get('contact')
 
-            # Check history
+            # Check if previously contacted (informational only, not a filter)
             try:
                 history = check_contact_history(db, email)
                 log.debug(f"Email {email}: is_in_history={history['is_in_history']}")
@@ -342,7 +342,7 @@ def resend_send(
 
 
 def _resend_send_impl(file: UploadFile, campaign_name: str, template_id: int, sending_mode: str, resend_reason: str, db: Session, user):
-    """Create a resend campaign and queue targets with existing sender pipeline."""
+    """Create a resend campaign and queue ALL targets from file (no duplicate check)."""
     log.info(f"[IMPL] 1. Validating template {template_id}")
 
     # Validate template exists (reuse New Campaign's template system)
@@ -363,9 +363,9 @@ def _resend_send_impl(file: UploadFile, campaign_name: str, template_id: int, se
 
     if not rows:
         log.info(f"No rows in file for campaign '{campaign_name}'")
-        raise HTTPException(status_code=400, detail="File contains no contacts to resend.")
+        raise HTTPException(status_code=400, detail="File contains no contacts.")
 
-    # Collect resend targets (only previously contacted)
+    # Collect resend targets - ALL emails from file (no duplicate check, no history check)
     resend_targets = []
     position = 0
 
@@ -376,18 +376,7 @@ def _resend_send_impl(file: UploadFile, campaign_name: str, template_id: int, se
                 log.debug(f"Row {idx}: No email field, skipping")
                 continue
 
-            # Check if email was previously contacted
-            try:
-                history = check_contact_history(db, email)
-            except Exception as history_error:
-                log.error(f"Failed to check history for {email}: {history_error}")
-                continue
-
-            if not history['is_in_history']:
-                log.debug(f"Email {email}: not in history, skipping")
-                continue
-
-            # This is a target to resend to
+            # Resend campaign: add ALL emails, no history or duplicate check
             company = (row.get('company') or row.get('company_name') or 'Unknown')
             contact_person = row.get('contact_person') or row.get('contact')
 
@@ -396,20 +385,20 @@ def _resend_send_impl(file: UploadFile, campaign_name: str, template_id: int, se
                 'email': email,
                 'company_name': str(company) if company else 'Unknown',
                 'contact_person': str(contact_person) if contact_person else None,
-                'resend_reason': resend_reason[:255] if resend_reason else None,  # Truncate to DB limit
+                'resend_reason': resend_reason[:255] if resend_reason else None,
             })
             position += 1
-            log.debug(f"Email {email}: added to resend queue")
+            log.debug(f"Email {email}: added to resend queue (no duplicate check)")
 
         except Exception as e:
             log.warning(f"Row {idx} processing error: {e}", exc_info=True)
             continue
 
     if not resend_targets:
-        log.warning(f"No previously contacted recipients found for resend campaign '{campaign_name}'")
+        log.warning(f"No valid emails found for resend campaign '{campaign_name}'")
         raise HTTPException(
             status_code=400,
-            detail="No previously contacted recipients found in this file."
+            detail="No valid email addresses found in this file."
         )
 
     # Create Campaign record (integrates with existing sender pipeline)

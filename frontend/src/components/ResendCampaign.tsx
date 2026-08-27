@@ -94,8 +94,8 @@ export default function ResendCampaign() {
       }
 
       const data = JSON.parse(responseText) as ResendReview;
-      if (data.previously_contacted === 0) {
-        throw new Error('No previously contacted recipients found in this file');
+      if (data.total_recipients === 0) {
+        throw new Error('No valid email addresses found in this file');
       }
       setReview(data);
     } catch (error) {
@@ -130,7 +130,7 @@ export default function ResendCampaign() {
 
   // Step 3: Email Preview
   const continueToPreview = async () => {
-    if (!selectedTemplateId || !review || review.previously_contacted === 0) return;
+    if (!selectedTemplateId || !review || review.total_recipients === 0) return;
     setStep('preview');
     setLoading(true);
     try {

@@ -13,6 +13,7 @@ import logging
 from io import StringIO, BytesIO
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import JSONResponse
 from openpyxl import load_workbook
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -188,33 +189,35 @@ def resend_review(
     _: User = Depends(get_current_user),
 ):
     """Analyze uploaded file and identify previously contacted recipients."""
-    print(f"[REVIEW] START: file={file.filename if file else 'None'}")
-
-    if not file:
-        print("[REVIEW] ERROR: file is None")
-        return {"error": "No file provided", "total_recipients": 0, "previously_contacted": 0, "recipients": []}
-
-    if not file.filename:
-        print("[REVIEW] ERROR: file.filename is empty")
-        return {"error": "File has no name", "total_recipients": 0, "previously_contacted": 0, "recipients": []}
+    print(f"[REVIEW] START: file={file.filename if file else 'None'}", flush=True)
 
     try:
-        print(f"[REVIEW] Parsing file: {file.filename}")
+        if not file:
+            print("[REVIEW] ERROR: file is None", flush=True)
+            return JSONResponse(status_code=200, content={"error": "No file provided", "total_recipients": 0, "previously_contacted": 0, "recipients": []})
+
+        if not file.filename:
+            print("[REVIEW] ERROR: file.filename is empty", flush=True)
+            return JSONResponse(status_code=200, content={"error": "File has no name", "total_recipients": 0, "previously_contacted": 0, "recipients": []})
+
+        print(f"[REVIEW] Parsing file: {file.filename}", flush=True)
         result = _resend_review_impl(file, db)
-        print(f"[REVIEW] SUCCESS: {len(result.get('recipients', []))} recipients")
-        return result
+        print(f"[REVIEW] SUCCESS: {len(result.get('recipients', []))} recipients", flush=True)
+        return JSONResponse(status_code=200, content=result)
 
     except Exception as e:
-        print(f"[REVIEW] ERROR: {type(e).__name__}: {str(e)[:200]}")
+        print(f"[REVIEW] ERROR: {type(e).__name__}: {str(e)[:200]}", flush=True)
         import traceback
         traceback.print_exc()
 
-        return {
+        error_response = {
             "error": str(e)[:200],
             "total_recipients": 0,
             "previously_contacted": 0,
             "recipients": []
         }
+        print(f"[REVIEW] RETURNING ERROR RESPONSE: {error_response}", flush=True)
+        return JSONResponse(status_code=200, content=error_response)
 
 
 def _resend_review_impl(file: UploadFile, db: Session):

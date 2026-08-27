@@ -457,12 +457,12 @@ def _resend_send_impl(file: UploadFile, campaign_name: str, template_id: int, se
     ]
     db.add_all(targets)
 
-    # Record the resend event
+    # Record the resend event (same format as New Campaign "imported")
     cm.record(
         db,
         campaign.id,
-        "resend_created",
-        f"Resend campaign for {len(resend_targets)} previously contacted recipients. Reason: {resend_reason}",
+        "imported",
+        f"{len(resend_targets)} addresses for resend from {file.filename}. Mode: {sending_mode}. Reason: {resend_reason}",
     )
 
     db.commit()

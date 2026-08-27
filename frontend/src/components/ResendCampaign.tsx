@@ -156,16 +156,16 @@ export default function ResendCampaign() {
 
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-900 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white dark:bg-gray-900 border-b dark:border-gray-700 p-4 flex justify-between items-center">
-              <h2 className="text-xl font-bold">
+          <div className="bg-latte dark:bg-[#1a1410] rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-latte dark:bg-[#1a1410] border-b border-caramel/15 p-4 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-latte dark:text-gold">
                 {step === 'select' && 'Select Campaign to Resend'}
                 {step === 'upload' && 'Upload Corrected Data'}
                 {step === 'review' && 'Pre-Send Review'}
                 {step === 'approve' && 'Confirm Resend'}
                 {step === 'sending' && 'Resend Complete'}
               </h2>
-              <button onClick={closeModal} className="text-2xl">
+              <button onClick={closeModal} className="text-2xl text-latte dark:text-gold hover:text-caramel">
                 ×
               </button>
             </div>
@@ -188,15 +188,15 @@ export default function ResendCampaign() {
                           onClick={() => setSelectedCampaign(campaign)}
                           className={`p-4 border-2 rounded cursor-pointer transition ${
                             selectedCampaign?.id === campaign.id
-                              ? 'border-blue-600 bg-blue-50 dark:bg-blue-950'
-                              : 'border-gray-300 dark:border-gray-600 hover:border-blue-400'
+                              ? 'border-gold bg-gold/10 dark:bg-gold/5'
+                              : 'border-caramel/25 dark:border-caramel/15 hover:border-gold/50'
                           }`}
                         >
-                          <div className="font-semibold">{campaign.name}</div>
-                          <div className="text-sm text-gray-600 dark:text-gray-400">
+                          <div className="font-semibold text-latte dark:text-gold">{campaign.name}</div>
+                          <div className="text-sm text-latte/60 dark:text-latte/50">
                             Completed • {campaign.created_at}
                           </div>
-                          <div className="text-sm mt-2">
+                          <div className="text-sm mt-2 text-latte/70 dark:text-latte/60">
                             {campaign.sent} sent • {campaign.failed} failed • {campaign.total} total
                           </div>
                         </div>
@@ -227,11 +227,11 @@ export default function ResendCampaign() {
               {/* STEP 2: Upload Corrected Data */}
               {step === 'upload' && selectedCampaign && (
                 <div>
-                  <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 p-4 rounded mb-4">
-                    <div className="font-semibold text-blue-900 dark:text-blue-100">
+                  <div className="bg-gold/10 dark:bg-gold/5 border border-gold/25 dark:border-gold/15 p-4 rounded mb-4">
+                    <div className="font-semibold text-gold dark:text-gold">
                       Upload Corrected Data
                     </div>
-                    <div className="text-sm text-blue-800 dark:text-blue-200 mt-2">
+                    <div className="text-sm text-latte/70 dark:text-latte/60 mt-2">
                       Upload a CSV or XLSX file with corrected company names and contact info to resend with updated data.
                     </div>
                   </div>
@@ -277,31 +277,31 @@ export default function ResendCampaign() {
               {/* STEP 3: Pre-Send Review */}
               {step === 'review' && review && (
                 <div>
-                  <div className="bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 p-4 rounded mb-4">
-                    <div className="font-semibold text-yellow-900 dark:text-yellow-100">
+                  <div className="bg-gold/10 dark:bg-gold/5 border border-gold/25 dark:border-gold/15 p-4 rounded mb-4">
+                    <div className="font-semibold text-gold dark:text-gold">
                       ⚠️ Pre-Send Review
                     </div>
-                    <div className="text-sm text-yellow-800 dark:text-yellow-200 mt-2">
+                    <div className="text-sm text-latte/70 dark:text-latte/60 mt-2">
                       {review.previously_contacted} previously contacted recipients detected.
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 mb-6">
-                    <div className="p-3 bg-gray-100 dark:bg-gray-800 rounded">
-                      <div className="text-2xl font-bold">{review.total_recipients}</div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">Total Recipients</div>
+                    <div className="p-3 bg-caramel/10 dark:bg-caramel/5 border border-caramel/15 rounded">
+                      <div className="text-2xl font-bold text-latte dark:text-gold">{review.total_recipients}</div>
+                      <div className="text-sm text-latte/60 dark:text-latte/50">Total Recipients</div>
                     </div>
-                    <div className="p-3 bg-gray-100 dark:bg-gray-800 rounded">
-                      <div className="text-2xl font-bold">{review.previously_contacted}</div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">Previously Contacted</div>
+                    <div className="p-3 bg-caramel/10 dark:bg-caramel/5 border border-caramel/15 rounded">
+                      <div className="text-2xl font-bold text-latte dark:text-gold">{review.previously_contacted}</div>
+                      <div className="text-sm text-latte/60 dark:text-latte/50">Previously Contacted</div>
                     </div>
-                    <div className="p-3 bg-gray-100 dark:bg-gray-800 rounded">
-                      <div className="text-2xl font-bold">{review.data_mismatches}</div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">Data Changes</div>
+                    <div className="p-3 bg-caramel/10 dark:bg-caramel/5 border border-caramel/15 rounded">
+                      <div className="text-2xl font-bold text-latte dark:text-gold">{review.data_mismatches}</div>
+                      <div className="text-sm text-latte/60 dark:text-latte/50">Data Changes</div>
                     </div>
-                    <div className="p-3 bg-gray-100 dark:bg-gray-800 rounded">
-                      <div className="text-2xl font-bold">{review.requires_review}</div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">Requires Review</div>
+                    <div className="p-3 bg-caramel/10 dark:bg-caramel/5 border border-caramel/15 rounded">
+                      <div className="text-2xl font-bold text-latte dark:text-gold">{review.requires_review}</div>
+                      <div className="text-sm text-latte/60 dark:text-latte/50">Requires Review</div>
                     </div>
                   </div>
 
@@ -311,7 +311,7 @@ export default function ResendCampaign() {
                       .map(recipient => (
                         <div
                           key={recipient.target_id}
-                          className="p-3 border dark:border-gray-700 rounded"
+                          className="p-3 border border-caramel/15 dark:border-caramel/10 rounded bg-latte/5 dark:bg-caramel/5"
                         >
                           <div className="flex items-start gap-3">
                             <input
@@ -321,25 +321,25 @@ export default function ResendCampaign() {
                               className="mt-1"
                             />
                             <div className="flex-1">
-                              <div className="font-semibold">{recipient.company_name}</div>
-                              <div className="text-sm text-gray-600 dark:text-gray-400">
+                              <div className="font-semibold text-latte dark:text-gold">{recipient.company_name}</div>
+                              <div className="text-sm text-latte/60 dark:text-latte/50">
                                 {recipient.email}
                               </div>
                               {recipient.previous_company_name &&
                                 recipient.company_name_changed && (
-                                  <div className="text-sm mt-2 p-2 bg-orange-50 dark:bg-orange-950 rounded">
-                                    <span className="text-orange-700 dark:text-orange-200">
+                                  <div className="text-sm mt-2 p-2 bg-caramel/10 dark:bg-caramel/5 border border-caramel/25 rounded">
+                                    <span className="text-latte/70 dark:text-gold/80">
                                       Previous: {recipient.previous_company_name}
                                     </span>
                                   </div>
                                 )}
                               {recipient.previous_send_date && (
-                                <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                                <div className="text-xs text-latte/50 dark:text-latte/40 mt-2">
                                   Last sent: {new Date(recipient.previous_send_date).toLocaleString()}
                                 </div>
                               )}
                               {recipient.issues.length > 0 && (
-                                <div className="text-xs text-red-600 dark:text-red-400 mt-2">
+                                <div className="text-xs text-gold/70 dark:text-gold/60 mt-2">
                                   Issues: {recipient.issues.join(', ')}
                                 </div>
                               )}
@@ -349,7 +349,7 @@ export default function ResendCampaign() {
                       ))}
                   </div>
 
-                  <div className="text-sm font-semibold text-blue-600 dark:text-blue-400 mb-6">
+                  <div className="text-sm font-semibold text-gold dark:text-gold mb-6">
                     {approved.size} recipient(s) selected for resend
                   </div>
 
@@ -380,23 +380,23 @@ export default function ResendCampaign() {
               {/* STEP 3: Confirm Resend */}
               {step === 'approve' && selectedCampaign && (
                 <div>
-                  <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 p-4 rounded mb-6">
-                    <div className="font-semibold text-blue-900 dark:text-blue-100">
+                  <div className="bg-gold/10 dark:bg-gold/5 border border-gold/25 dark:border-gold/15 p-4 rounded mb-6">
+                    <div className="font-semibold text-gold dark:text-gold">
                       Confirm Resend
                     </div>
-                    <div className="text-sm text-blue-800 dark:text-blue-200 mt-2">
+                    <div className="text-sm text-latte/70 dark:text-latte/60 mt-2">
                       You are about to resend {approved.size} email(s) from{' '}
                       <strong>{selectedCampaign.name}</strong>.
                     </div>
-                    <div className="text-sm text-blue-800 dark:text-blue-200 mt-2">
+                    <div className="text-sm text-latte/70 dark:text-latte/60 mt-2">
                       These recipients were previously contacted.
                     </div>
                   </div>
 
-                  <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded mb-6">
+                  <div className="p-4 bg-caramel/10 dark:bg-caramel/5 border border-caramel/15 rounded mb-6">
                     <div className="text-center">
-                      <div className="text-3xl font-bold">{approved.size}</div>
-                      <div className="text-gray-600 dark:text-gray-400">approved resend(s)</div>
+                      <div className="text-3xl font-bold text-latte dark:text-gold">{approved.size}</div>
+                      <div className="text-latte/60 dark:text-latte/50">approved resend(s)</div>
                     </div>
                   </div>
 
@@ -425,24 +425,24 @@ export default function ResendCampaign() {
               {/* STEP 4: Complete */}
               {step === 'sending' && result && (
                 <div>
-                  <div className="bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 p-4 rounded mb-4">
-                    <div className="font-semibold text-green-900 dark:text-green-100">
+                  <div className="bg-gold/10 dark:bg-gold/5 border border-gold/25 dark:border-gold/15 p-4 rounded mb-4">
+                    <div className="font-semibold text-gold dark:text-gold">
                       ✅ Resend Complete
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 mb-6">
-                    <div className="p-3 bg-green-100 dark:bg-green-900 rounded">
-                      <div className="text-2xl font-bold text-green-700 dark:text-green-300">
+                    <div className="p-3 bg-caramel/10 dark:bg-caramel/5 border border-caramel/15 rounded">
+                      <div className="text-2xl font-bold text-latte dark:text-gold">
                         {result.sent_count}
                       </div>
-                      <div className="text-sm text-green-700 dark:text-green-300">Sent</div>
+                      <div className="text-sm text-latte/60 dark:text-latte/50">Sent</div>
                     </div>
-                    <div className="p-3 bg-red-100 dark:bg-red-900 rounded">
-                      <div className="text-2xl font-bold text-red-700 dark:text-red-300">
+                    <div className="p-3 bg-gold/10 dark:bg-gold/5 border border-gold/15 rounded">
+                      <div className="text-2xl font-bold text-latte dark:text-gold">
                         {result.failed_count}
                       </div>
-                      <div className="text-sm text-red-700 dark:text-red-300">Failed</div>
+                      <div className="text-sm text-latte/60 dark:text-latte/50">Failed</div>
                     </div>
                   </div>
 

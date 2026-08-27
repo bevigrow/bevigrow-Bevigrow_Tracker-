@@ -2,6 +2,8 @@
 
 Integrates with the existing campaign sender pipeline. Creates campaigns that the
 scheduler picks up and processes according to sending mode and daily limits.
+
+Reuses New Campaign's template, placeholder, and sending components for full feature parity.
 """
 from __future__ import annotations
 
@@ -17,8 +19,9 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..deps import get_current_user
-from ..models import User, Outreach, Campaign, CampaignTarget, CampaignStatus, SendMode, TargetState
+from ..models import User, Outreach, Campaign, CampaignTarget, CampaignStatus, SendMode, TargetState, EmailTemplate
 from ..services import campaigns as cm
+from ..services import templating
 
 log = logging.getLogger("bevigrow.resend")
 
@@ -29,6 +32,73 @@ router = APIRouter(prefix="/api/resend", tags=["resend"])
 def resend_health():
     """Health check for resend router."""
     return {"status": "ok", "router": "resend"}
+
+
+@router.get("/templates")
+def list_templates(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Get available email templates for Resend Campaign (reuses New Campaign templates)."""
+    stmt = select(EmailTemplate).order_by(EmailTemplate.created_at.desc())
+    templates = db.scalars(stmt).all()
+    return [
+        {
+            "id": t.id,
+            "name": t.name,
+            "subject": t.subject,
+            "placeholders": list(set(
+                m.group(1) or m.group(2) or m.group(3) or m.group(4) or m.group(5)
+                for m in templating.PLACEHOLDER.finditer(f"{t.subject or ''}\n{t.body or ''}")
+            )),
+        }
+        for t in templates
+    ]
+
+
+@router.post("/preview")
+def preview_email(
+    email: str = Form(...),
+    company_name: str = Form(...),
+    contact_person: str = Form(default=None),
+    country: str = Form(default=None),
+    category: str = Form(default=None),
+    template_id: int = Form(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Preview filled email for a single recipient (placeholder substitution only)."""
+    log.info(f"Previewing template {template_id} for {email}")
+
+    # Get template
+    template = db.get(EmailTemplate, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    # Create a mock target for preview
+    mock_target = CampaignTarget(
+        id=0,
+        campaign_id=0,
+        position=0,
+        email=email,
+        company_name=company_name,
+        contact_person=contact_person,
+        country=country,
+        category=category,
+    )
+
+    try:
+        subject, unfilled_subject = templating.fill(template.subject or "", mock_target)
+        body, unfilled_body = templating.fill(template.body or "", mock_target)
+
+        unfilled = sorted(set(unfilled_subject + unfilled_body))
+
+        return {
+            "subject": subject,
+            "body": body,
+            "unfilled_placeholders": unfilled,
+            "can_send": len(unfilled) == 0,
+        }
+    except Exception as e:
+        log.error(f"Preview error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Preview error: {str(e)}")
 
 
 def parse_file(file: UploadFile) -> list[dict]:
@@ -223,29 +293,43 @@ def _resend_review_impl(file: UploadFile, db: Session):
 def resend_send(
     file: UploadFile = File(...),
     campaign_name: str = Form(...),
+    template_id: int = Form(...),
     sending_mode: str = Form(...),
     resend_reason: str = Form(...),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Queue resend for previously contacted recipients."""
-    log.info(f"Queuing resend: campaign={campaign_name}, mode={sending_mode}, reason={resend_reason}, user={user.email}")
+    """Queue resend campaign with template for previously contacted recipients."""
+    log.info(f"Queuing resend: campaign={campaign_name}, template={template_id}, mode={sending_mode}, user={user.email}")
 
-    # Safety net: guarantee we always return valid JSON or HTTPException
     try:
-        return _resend_send_impl(file, campaign_name, sending_mode, resend_reason, db, user)
+        log.info("[SEND] 1. Starting resend_send_impl")
+        result = _resend_send_impl(file, campaign_name, template_id, sending_mode, resend_reason, db, user)
+        log.info(f"[SEND] 2. Resend completed")
+        return result
     except HTTPException:
         raise
     except Exception as e:
-        log.error(f"CRITICAL: Unexpected exception in resend_send: {e}", exc_info=True)
+        log.error(f"[SEND] EXCEPTION: {type(e).__name__}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Server error: {str(e)[:100]}")
 
 
-def _resend_send_impl(file: UploadFile, campaign_name: str, sending_mode: str, resend_reason: str, db: Session, user):
+def _resend_send_impl(file: UploadFile, campaign_name: str, template_id: int, sending_mode: str, resend_reason: str, db: Session, user):
     """Create a resend campaign and queue targets with existing sender pipeline."""
+    log.info(f"[IMPL] 1. Validating template {template_id}")
+
+    # Validate template exists (reuse New Campaign's template system)
+    template = db.get(EmailTemplate, template_id)
+    if not template:
+        log.warning(f"Template {template_id} not found")
+        raise HTTPException(status_code=404, detail="Email template not found")
+
+    log.info(f"[IMPL] 2. Template validated: {template.name}")
+
     try:
+        log.info(f"[IMPL] 3. Parsing file")
         rows = parse_file(file)
-        log.info(f"Successfully parsed {len(rows)} rows for send")
+        log.info(f"[IMPL] 4. Successfully parsed {len(rows)} rows for send")
     except ValueError as e:
         log.warning(f"File parse error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
@@ -302,14 +386,17 @@ def _resend_send_impl(file: UploadFile, campaign_name: str, sending_mode: str, r
         )
 
     # Create Campaign record (integrates with existing sender pipeline)
+    log.info(f"[IMPL] 10. Creating campaign with template {template_id}")
     campaign = Campaign(
         name=campaign_name.strip() or "Untitled resend",
+        template_id=template_id,  # USE SAME TEMPLATE AS NEW CAMPAIGN
         mode=SendMode.automatic if sending_mode == "automatic" else SendMode.manual,
         daily_limit=min(50, cm.HARD_DAILY_CAP),  # Resend respects same 50/day limit
         owner_id=user.id,
         status=CampaignStatus.draft,
         source_filename=file.filename,
     )
+    log.info(f"[IMPL] 11. Campaign template set to {template_id}")
     db.add(campaign)
     db.flush()
     log.info(f"Created resend campaign ID {campaign.id}: '{campaign_name}'")

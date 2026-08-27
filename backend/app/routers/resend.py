@@ -445,15 +445,21 @@ def _resend_send_impl(file: UploadFile, campaign_name: str, template_id: int, se
             print(f"[SEND] Row {idx}: Email found: {email}", flush=True)
             log.debug(f"Row {idx}: Found email {email}")
 
-            # Resend campaign: add ALL emails, no history or duplicate check
+            # Resend campaign: add ALL emails with ALL fields for template filling
             company = mapped_row.get('company_name') or 'Unknown'
-            contact_person = mapped_row.get('contact_person')
 
             resend_targets.append({
                 'position': position,
                 'email': email,
                 'company_name': str(company) if company else 'Unknown',
-                'contact_person': str(contact_person) if contact_person else None,
+                'contact_person': mapped_row.get('contact_person'),
+                'country': mapped_row.get('country'),
+                'location': mapped_row.get('location'),
+                'category': mapped_row.get('category'),
+                'website': mapped_row.get('website'),
+                'phone': mapped_row.get('phone'),
+                'linkedin': mapped_row.get('linkedin'),
+                'contact_form': mapped_row.get('contact_form'),
                 'resend_reason': resend_reason[:255] if resend_reason else None,
             })
             position += 1
@@ -490,7 +496,7 @@ def _resend_send_impl(file: UploadFile, campaign_name: str, template_id: int, se
     db.flush()
     log.info(f"Created resend campaign ID {campaign.id}: '{campaign_name}'")
 
-    # Create CampaignTarget rows for each resend recipient
+    # Create CampaignTarget rows for each resend recipient with ALL fields for template filling
     # Mark as is_resend_approved so duplicate check doesn't block them
     targets = [
         CampaignTarget(
@@ -499,6 +505,13 @@ def _resend_send_impl(file: UploadFile, campaign_name: str, template_id: int, se
             company_name=target['company_name'],
             email=target['email'],
             contact_person=target['contact_person'],
+            country=target.get('country'),
+            location=target.get('location'),
+            category=target.get('category'),
+            website=target.get('website'),
+            phone=target.get('phone'),
+            linkedin=target.get('linkedin'),
+            contact_form=target.get('contact_form'),
             state=TargetState.pending,
             resend_reason=target['resend_reason'],
             is_resend_approved=True,  # Auto-approve resends to bypass duplicate check

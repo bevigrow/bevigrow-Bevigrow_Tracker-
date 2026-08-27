@@ -845,3 +845,8 @@ class OutreachInsights(BaseModel):
     companies_tracked: int
 
 
+class ExecuteResendIn(BaseModel):
+    approved_target_ids: list[int]
+    resend_reason: str = "User-approved resend"
+
+

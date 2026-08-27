@@ -45,6 +45,7 @@ from ..schemas import (
     EmailAccountIn,
     EmailAccountOut,
     EventOut,
+    ExecuteResendIn,
     ImportReportOut,
     ReplyOut,
     StepResultOut,
@@ -895,8 +896,7 @@ def get_resend_review(
 @router.post("/{campaign_id}/execute-resend")
 def execute_resend(
     campaign_id: int,
-    approved_target_ids: list[int],
-    resend_reason: str = "User-approved resend",
+    payload: ExecuteResendIn,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -908,7 +908,7 @@ def execute_resend(
             detail="Only completed campaigns can be resent."
         )
 
-    if not approved_target_ids:
+    if not payload.approved_target_ids:
         raise HTTPException(
             status_code=400,
             detail="No targets selected for resend."
@@ -922,7 +922,7 @@ def execute_resend(
     failed_count = 0
     results = []
 
-    for target_id in approved_target_ids:
+    for target_id in payload.approved_target_ids:
         target = db.get(CampaignTarget, target_id)
         if target is None or target.campaign_id != campaign_id:
             failed_count += 1
@@ -963,13 +963,13 @@ def execute_resend(
         db,
         campaign_id,
         "resent",
-        f"{sent_count} approved resend(s) sent. Reason: {resend_reason}",
+        f"{sent_count} approved resend(s) sent. Reason: {payload.resend_reason}",
     )
     db.commit()
 
     return {
         "campaign_id": campaign_id,
-        "approved_count": len(approved_target_ids),
+        "approved_count": len(payload.approved_target_ids),
         "sent_count": sent_count,
         "failed_count": failed_count,
         "results": results,

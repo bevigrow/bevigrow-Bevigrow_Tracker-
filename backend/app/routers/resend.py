@@ -36,7 +36,7 @@ def resend_health():
     return {"status": "ok", "router": "resend"}
 
 
-@router.post("/review-test")
+@router.get("/review-test")
 def review_test():
     """Test endpoint without dependencies."""
     print("[TEST] Review test endpoint called", flush=True)

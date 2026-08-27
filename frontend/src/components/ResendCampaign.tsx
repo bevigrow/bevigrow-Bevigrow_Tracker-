@@ -156,8 +156,8 @@ export default function ResendCampaign() {
 
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-latte dark:bg-[#1a1410] rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-latte dark:bg-[#1a1410] border-b border-caramel/15 p-4 flex justify-between items-center">
+          <div className="bg-[#2A1A12] rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-[#2A1A12] border-b border-caramel/15 p-4 flex justify-between items-center">
               <h2 className="text-xl font-bold text-latte dark:text-gold">
                 {step === 'select' && 'Select Campaign to Resend'}
                 {step === 'upload' && 'Upload Corrected Data'}
@@ -175,9 +175,9 @@ export default function ResendCampaign() {
               {step === 'select' && (
                 <div>
                   {loading ? (
-                    <div className="text-center py-8">Loading campaigns...</div>
+                    <div className="text-center py-8 text-latte">Loading campaigns...</div>
                   ) : campaigns.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">
+                    <div className="text-center py-8 text-latte/60">
                       No completed campaigns available for resending.
                     </div>
                   ) : (

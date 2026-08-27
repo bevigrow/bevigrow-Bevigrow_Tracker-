@@ -69,6 +69,12 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     # The foreign key is added separately below — ADD COLUMN alone would
     # not create one, and ON DELETE SET NULL is the point of it.
     ("outreach", "quote_id", "INTEGER"),
+    # Pre-send review and controlled resend workflow.
+    ("campaign_targets", "is_resend_approved", "BOOLEAN DEFAULT FALSE NOT NULL"),
+    ("campaign_targets", "resend_reason", "VARCHAR(200)"),
+    ("campaign_targets", "resend_notes", "TEXT"),
+    ("campaign_targets", "approved_by_id", "INTEGER"),
+    ("campaign_targets", "approved_at", "TIMESTAMP WITH TIME ZONE"),
 ]
 
 

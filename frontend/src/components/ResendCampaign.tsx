@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { RotateCcw } from 'lucide-react';
 import { Button } from './ui';
+import { api, tokenStore, API_BASE } from '../lib/api';
 
 interface EmailTemplate {
   id: number;
@@ -70,9 +71,15 @@ export default function ResendCampaign() {
     try {
       const formData = new FormData();
       formData.append('file', uploadedFile);
-      const response = await fetch('/api/resend/review', {
+
+      const headers = new Headers();
+      const token = tokenStore.get();
+      if (token) headers.set('Authorization', `Bearer ${token}`);
+
+      const response = await fetch(`${API_BASE}/api/resend/review`, {
         method: 'POST',
         body: formData,
+        headers,
       });
 
       const responseText = await response.text();
@@ -107,9 +114,7 @@ export default function ResendCampaign() {
     setStep('template');
     setLoading(true);
     try {
-      const response = await fetch('/api/resend/templates');
-      if (!response.ok) throw new Error('Failed to load templates');
-      const data = await response.json();
+      const data = await api.get<any[]>('/api/resend/templates');
       setTemplates(data);
       if (data.length > 0) {
         setSelectedTemplateId(data[0].id);
@@ -142,9 +147,14 @@ export default function ResendCampaign() {
       formData.append('category', '');
       formData.append('template_id', selectedTemplateId.toString());
 
-      const response = await fetch('/api/resend/preview', {
+      const headers = new Headers();
+      const token = tokenStore.get();
+      if (token) headers.set('Authorization', `Bearer ${token}`);
+
+      const response = await fetch(`${API_BASE}/api/resend/preview`, {
         method: 'POST',
         body: formData,
+        headers,
       });
 
       if (!response.ok) throw new Error('Failed to generate preview');
@@ -171,9 +181,14 @@ export default function ResendCampaign() {
       formData.append('sending_mode', sendingMode);
       formData.append('resend_reason', 'User-approved corrected data resend');
 
-      const response = await fetch('/api/resend/send', {
+      const headers = new Headers();
+      const token = tokenStore.get();
+      if (token) headers.set('Authorization', `Bearer ${token}`);
+
+      const response = await fetch(`${API_BASE}/api/resend/send`, {
         method: 'POST',
         body: formData,
+        headers,
       });
 
       const responseText = await response.text();

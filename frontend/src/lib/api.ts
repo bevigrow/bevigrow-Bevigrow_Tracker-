@@ -453,4 +453,8 @@ export const api = {
       '/api/ai/suggestions',
     ),
   applySuggestions: () => request<number[]>('/api/ai/suggestions/apply', { method: 'POST' }),
+
+  // Generic HTTP methods for dynamic endpoints
+  get: <T,>(path: string) => request<T>(path),
+  post: <T,>(path: string, body: any) => request<T>(path, { method: 'POST', body: JSON.stringify(body) }),
 }

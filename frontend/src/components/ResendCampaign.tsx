@@ -224,43 +224,99 @@ export default function ResendCampaign() {
                 </div>
               )}
 
-              {/* STEP 2: Upload Corrected Data */}
+              {/* STEP 2: Upload */}
               {step === 'upload' && selectedCampaign && (
                 <div>
-                  <div className="bg-gold/10 dark:bg-gold/5 border border-gold/25 dark:border-gold/15 p-4 rounded mb-4">
-                    <div className="font-semibold text-gold dark:text-gold">
-                      Upload Corrected Data
+                  <div className="space-y-6">
+                    {/* Title and Description */}
+                    <div>
+                      <h3 className="text-lg font-semibold text-latte mb-2">Resend</h3>
+                      <p className="text-sm text-latte/70">Upload your cleaned company list — CSV or XLSX</p>
                     </div>
-                    <div className="text-sm text-latte/70 dark:text-latte/60 mt-2">
-                      Upload a CSV or XLSX file with corrected company names and contact info to resend with updated data.
-                    </div>
-                  </div>
 
-                  <div className="mb-6">
-                    <label className="block text-sm font-medium mb-2">
-                      Company File
-                    </label>
-                    <input
-                      type="file"
-                      accept=".csv,.xlsx,.xls,.ods,.tsv"
-                      onChange={(e) => setUploadedFile(e.target.files?.[0] || null)}
-                      className="block w-full text-sm border dark:border-gray-700 rounded p-2"
-                    />
-                    {uploadedFile && (
-                      <div className="text-sm text-green-600 dark:text-green-400 mt-2">
-                        ✓ {uploadedFile.name}
+                    {/* Company File */}
+                    <div>
+                      <label className="block text-xs font-medium text-latte/60 uppercase tracking-wide mb-2">
+                        Company file
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="file"
+                          accept=".csv,.xlsx,.xls,.ods,.tsv"
+                          onChange={(e) => setUploadedFile(e.target.files?.[0] || null)}
+                          className="hidden"
+                          id="resend-file-input"
+                        />
+                        <label
+                          htmlFor="resend-file-input"
+                          className="flex items-center gap-3 p-3 bg-[#1a1410] border border-caramel/25 rounded cursor-pointer hover:border-caramel/50"
+                        >
+                          <span className="px-3 py-2 bg-gold/20 text-gold rounded text-sm font-medium">
+                            Choose file
+                          </span>
+                          <span className="text-latte/70">
+                            {uploadedFile ? uploadedFile.name : 'No file chosen'}
+                          </span>
+                        </label>
                       </div>
-                    )}
+                      <p className="text-xs text-latte/50 mt-2">
+                        Excel, CSV, TSV, .xls or .ods — column headings are matched automatically, and a file named wrongly is still read correctly
+                      </p>
+                    </div>
+
+                    {/* Template */}
+                    <div>
+                      <label className="block text-xs font-medium text-latte/60 uppercase tracking-wide mb-2">
+                        Template
+                      </label>
+                      <select
+                        defaultValue="bevigrow-intro"
+                        className="w-full p-3 bg-[#1a1410] border border-caramel/25 rounded text-latte"
+                      >
+                        <option value="bevigrow-intro">BeviGrow introduction</option>
+                      </select>
+                    </div>
+
+                    {/* Sending Options */}
+                    <div>
+                      <label className="block text-xs font-medium text-latte/60 uppercase tracking-wide mb-3">
+                        Sending
+                      </label>
+                      <div className="space-y-3">
+                        <label className="flex items-center gap-3 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="sending-mode"
+                            value="read-first"
+                            defaultChecked
+                            className="w-4 h-4"
+                          />
+                          <span className="text-sm text-latte">Let me read each email first</span>
+                        </label>
+                        <label className="flex items-center gap-3 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="sending-mode"
+                            value="auto-send"
+                            className="w-4 h-4"
+                          />
+                          <span className="text-sm text-latte">Just send them — 50 a day until the list is done</span>
+                        </label>
+                      </div>
+                      <p className="text-xs text-latte/50 mt-3">
+                        Nothing goes out until you read and approve each one.
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="flex gap-3">
+                  <div className="mt-8 flex gap-3">
                     <Button
                       type="button"
                       variant="ghost"
                       onClick={() => setStep('select')}
                       className="flex-1"
                     >
-                      Back
+                      Cancel
                     </Button>
                     <Button
                       type="button"
@@ -268,7 +324,7 @@ export default function ResendCampaign() {
                       disabled={!uploadedFile || loading}
                       className="flex-1"
                     >
-                      Continue to Review
+                      Upload and queue
                     </Button>
                   </div>
                 </div>

@@ -294,36 +294,30 @@ async def import_companies(
     db.add(campaign)
     db.flush()
 
-    for row in report.rows:
-        db.add(
-            CampaignTarget(
-                campaign_id=campaign.id,
-                position=row.position,
-                company_name=row.company_name,
-                email=row.email,
-                contact_person=row.contact_person,
-                website=row.website,
-                country=row.country,
-                location=row.location,
-                linkedin=row.linkedin,
-                contact_form=row.contact_form,
-                phone=row.phone,
-                category=row.category,
-                extra=json.dumps(row.extra) if row.extra else None,
-                normalized_company=row.normalized_company,
-                normalized_email=row.normalized_email,
-                domain=row.domain,
-                skip_reason=row.skip_reason,
-                # Everything starts pending, even rows with no address.
-                # Marking them skipped here meant the engine never saw
-                # them, so nothing was written to the ledger and they were
-                # missing from the report entirely — the one place
-                # somebody would look to ask why a company was not
-                # written to. The engine skips them on the first step and
-                # records the reason.
-                state=TargetState.pending,
-            )
+    targets = [
+        CampaignTarget(
+            campaign_id=campaign.id,
+            position=row.position,
+            company_name=row.company_name,
+            email=row.email,
+            contact_person=row.contact_person,
+            website=row.website,
+            country=row.country,
+            location=row.location,
+            linkedin=row.linkedin,
+            contact_form=row.contact_form,
+            phone=row.phone,
+            category=row.category,
+            extra=json.dumps(row.extra) if row.extra else None,
+            normalized_company=row.normalized_company,
+            normalized_email=row.normalized_email,
+            domain=row.domain,
+            skip_reason=row.skip_reason,
+            state=TargetState.pending,
         )
+        for row in report.rows
+    ]
+    db.add_all(targets)
 
     cm.record(
         db,
@@ -832,6 +826,154 @@ def heartbeat(token: str = Query(default=""), steps: int = Query(default=12, ge=
     if not hmac.compare_digest(token.strip(), expected):
         raise HTTPException(status_code=403, detail="Bad token.")
     return scheduler.tick(steps)
+
+
+@router.get("/completed", response_model=list[CampaignStatusOut])
+def list_completed_campaigns(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """List all completed campaigns available for resending."""
+    stmt = (
+        select(Campaign)
+        .where(Campaign.status == CampaignStatus.completed)
+        .where(Campaign.deleted_at.is_(None))
+        .order_by(Campaign.last_activity_at.desc())
+    )
+    rows = db.scalars(stmt).all()
+    return [_status(db, c) for c in rows]
+
+
+@router.get("/{campaign_id}/resend-review")
+def get_resend_review(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Get pre-send review for resending a completed campaign.
+
+    Shows all previously contacted recipients and detects changes.
+    """
+    campaign = _get(db, campaign_id)
+    if campaign.status != CampaignStatus.completed:
+        raise HTTPException(
+            status_code=400,
+            detail="Only completed campaigns can be resent."
+        )
+
+    review = presend_review.get_review(db, campaign_id)
+    return {
+        "campaign_id": campaign_id,
+        "campaign_name": campaign.name,
+        "total_recipients": review.total_recipients,
+        "new_contacts": review.new_contacts,
+        "previously_contacted": review.previously_contacted,
+        "potential_duplicates": review.potential_duplicates,
+        "data_mismatches": review.data_mismatches,
+        "requires_review": review.requires_review,
+        "reviews": [
+            {
+                "target_id": r.target_id,
+                "company_name": r.company_name,
+                "email": r.email,
+                "contact_person": r.contact_person,
+                "country": r.country,
+                "is_previously_contacted": r.is_previously_contacted,
+                "previous_send_date": r.previous_send_date.isoformat() if r.previous_send_date else None,
+                "previous_subject": r.previous_subject,
+                "previous_company_name": r.previous_company_name,
+                "company_name_changed": r.company_name_changed,
+                "contact_name_changed": r.contact_name_changed,
+                "country_changed": r.country_changed,
+                "issues": r.issues,
+            }
+            for r in review.reviews
+        ],
+    }
+
+
+@router.post("/{campaign_id}/execute-resend")
+def execute_resend(
+    campaign_id: int,
+    approved_target_ids: list[int],
+    resend_reason: str = "User-approved resend",
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Execute resend for approved targets from a completed campaign."""
+    campaign = _get(db, campaign_id)
+    if campaign.status != CampaignStatus.completed:
+        raise HTTPException(
+            status_code=400,
+            detail="Only completed campaigns can be resent."
+        )
+
+    if not approved_target_ids:
+        raise HTTPException(
+            status_code=400,
+            detail="No targets selected for resend."
+        )
+
+    account = engine.active_account(db)
+    if account is None:
+        raise HTTPException(status_code=400, detail="Connect a sending mailbox first.")
+
+    sent_count = 0
+    failed_count = 0
+    results = []
+
+    for target_id in approved_target_ids:
+        target = db.get(CampaignTarget, target_id)
+        if target is None or target.campaign_id != campaign_id:
+            failed_count += 1
+            results.append({
+                "target_id": target_id,
+                "status": "error",
+                "message": "Target not found"
+            })
+            continue
+
+        try:
+            outcome = engine.dispatch(db, campaign, target, account)
+            if outcome.action == "sent":
+                sent_count += 1
+                results.append({
+                    "target_id": target_id,
+                    "company": target.company_name,
+                    "status": "sent",
+                    "message": "Resend approved and sent"
+                })
+            else:
+                failed_count += 1
+                results.append({
+                    "target_id": target_id,
+                    "company": target.company_name,
+                    "status": "failed",
+                    "message": outcome.reason or "Send failed"
+                })
+        except Exception as exc:
+            failed_count += 1
+            results.append({
+                "target_id": target_id,
+                "status": "error",
+                "message": str(exc)[:200]
+            })
+
+    cm.record(
+        db,
+        campaign_id,
+        "resent",
+        f"{sent_count} approved resend(s) sent. Reason: {resend_reason}",
+    )
+    db.commit()
+
+    return {
+        "campaign_id": campaign_id,
+        "approved_count": len(approved_target_ids),
+        "sent_count": sent_count,
+        "failed_count": failed_count,
+        "results": results,
+    }
 
 
 @router.get("/system/health")

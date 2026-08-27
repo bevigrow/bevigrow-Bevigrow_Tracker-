@@ -118,45 +118,60 @@ def resend_review(
     _: User = Depends(get_current_user),
 ):
     """Analyze uploaded file and identify previously contacted recipients."""
-    log.info(f"Processing resend review for: {file.filename if file else 'unknown'}")
+    log.info(f"[REVIEW] 1. Endpoint called for: {file.filename if file else 'unknown'}")
 
-    # MAXIMUM defensive: catch EVERYTHING and return JSON
     try:
-        log.info("Starting review implementation")
+        log.info(f"[REVIEW] 2. File object: {file}")
+        log.info(f"[REVIEW] 3. DB session: {db}")
+
+        log.info(f"[REVIEW] 4. Starting _resend_review_impl")
         result = _resend_review_impl(file, db)
-        log.info(f"Review completed, returning {type(result)}")
+
+        log.info(f"[REVIEW] 5. Got result type: {type(result)}")
+        log.info(f"[REVIEW] 6. Result keys: {result.keys() if isinstance(result, dict) else 'not a dict'}")
+        log.info(f"[REVIEW] 7. Returning result")
         return result
+
     except HTTPException as e:
-        log.error(f"HTTPException in review: {e.status_code} - {e.detail}")
+        log.error(f"[REVIEW] HTTPException: {e.status_code} - {e.detail}")
         raise
     except Exception as e:
-        log.error(f"CRITICAL EXCEPTION in resend_review: {type(e).__name__}: {e}", exc_info=True)
-        # Absolutely guarantee we return valid JSON
+        log.error(f"[REVIEW] EXCEPTION: {type(e).__name__}: {e}", exc_info=True)
+        import traceback
+        log.error(f"[REVIEW] TRACEBACK:\n{traceback.format_exc()}")
+
         return {
-            "error": "Server error processing file",
-            "detail": str(e)[:200],
+            "error": f"Server error: {type(e).__name__}",
+            "detail": str(e)[:300],
             "type": type(e).__name__,
         }
 
 
 def _resend_review_impl(file: UploadFile, db: Session):
     """Implementation of resend review logic."""
+    log.info(f"[IMPL] 1. Started for file: {file.filename}")
+
     # Parse file
     try:
+        log.info(f"[IMPL] 2. Calling parse_file")
         rows = parse_file(file)
-        log.info(f"Successfully parsed {len(rows)} rows from file")
+        log.info(f"[IMPL] 3. Parsed {len(rows)} rows from file")
     except ValueError as e:
-        log.warning(f"File parse error: {e}")
+        log.warning(f"[IMPL] File parse error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        log.error(f"[IMPL] Unexpected error in parse_file: {type(e).__name__}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"File parse error: {str(e)[:100]}")
 
     if not rows:
-        log.info("File contained no rows, returning empty review")
+        log.info("[IMPL] 4. No rows found, returning empty")
         return {
             'total_recipients': 0,
             'previously_contacted': 0,
             'recipients': [],
         }
 
+    log.info(f"[IMPL] 5. Processing {len(rows)} rows")
     recipients = []
     previously_contacted = 0
 

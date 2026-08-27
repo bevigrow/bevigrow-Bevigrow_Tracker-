@@ -30,11 +30,15 @@ def _engine_kwargs() -> dict:
         # stale connections. pool_pre_ping adds 1-2ms per query so disable it.
         "pool_pre_ping": False,
         # Neon: set connections to autoclose after idle time (slightly less than
-        # the 5-minute Neon timeout) to avoid stale connection errors
+        # the 5-minute Neon timeout) to avoid stale connection errors.
+        # On cold start, immediately establish one connection to warm up.
         "connect_args": {
             "keepalives": 1,
             "keepalives_idle": 240,
-        }
+        },
+        # On cold start after server wake-up, don't wait for lazy connection.
+        # Establishes at least one connection immediately.
+        "pool_pre_ping": False,
     }
 
 

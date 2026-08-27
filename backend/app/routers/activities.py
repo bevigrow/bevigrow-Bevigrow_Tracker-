@@ -121,7 +121,11 @@ def update_activity(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    activity = db.get(Activity, activity_id)
+    activity = db.scalar(
+        select(Activity)
+        .where(Activity.id == activity_id)
+        .options(selectinload(Activity.contact))
+    )
     if not activity:
         raise HTTPException(status_code=404, detail="Activity not found")
     for field, value in payload.model_dump(exclude_unset=True).items():
@@ -138,7 +142,11 @@ def resummarize(
     activity_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)
 ):
     """Regenerate the AI summary for an existing activity (Claude Haiku)."""
-    activity = db.get(Activity, activity_id)
+    activity = db.scalar(
+        select(Activity)
+        .where(Activity.id == activity_id)
+        .options(selectinload(Activity.contact))
+    )
     if not activity:
         raise HTTPException(status_code=404, detail="Activity not found")
 

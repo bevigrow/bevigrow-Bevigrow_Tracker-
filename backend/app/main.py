@@ -36,26 +36,34 @@ async def lifespan(app: FastAPI):
     log.info("Database: %s", "PostgreSQL (Neon)" if not settings.is_sqlite else "SQLite (local dev)")
     log.info("AI model: %s", settings.AI_MODEL)
 
-    # Non-blocking startup: seed operations run in background
+    # Non-blocking startup: all heavy operations run in background threads
+    # This lets the API become responsive ASAP.
     import threading
+
     def _init_async():
         try:
             seed.run()
         except Exception as exc:
             log.error('Seed failed: %s', exc)
+
+    def _recover_async():
+        try:
+            from .database import SessionLocal
+            from .services.engine import recover_stuck
+            with SessionLocal() as session:
+                recovered = recover_stuck(session)
+            if recovered:
+                log.warning('%d interrupted send(s) marked unverified', recovered)
+        except Exception as exc:
+            log.error('Send recovery failed: %s', exc)
+
+    # Start seed in background (creates tables, admin account, demo data)
     threading.Thread(target=_init_async, daemon=True).start()
 
-    # An attempt left mid-flight by a restart must be settled before any
-    # queue moves again, or it would be picked up and sent a second time.
-    try:
-        from .database import SessionLocal
-        from .services.engine import recover_stuck
-        with SessionLocal() as session:
-            recovered = recover_stuck(session)
-        if recovered:
-            log.warning('%d interrupted send(s) marked unverified', recovered)
-    except Exception as exc:  # noqa: BLE001 - never block startup
-        log.error('Send recovery failed: %s', exc)
+    # Start send recovery in background (marks stuck attempts as unverified)
+    # This is safe to run async since it only marks records, doesn't send.
+    threading.Thread(target=_recover_async, daemon=True).start()
+
     # The sender runs in here, so a campaign continues after the browser
     # that started it has gone. State lives in the database, so the thread
     # can stop at any moment without losing its place.

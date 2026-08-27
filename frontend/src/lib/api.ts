@@ -109,36 +109,42 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   // Ride over a sleeping server rather than reporting it as a broken one.
   //
-  // The backend is on a plan that stops the instance after fifteen idle
-  // minutes; the next request wakes it and takes a while, and any request
-  // racing that wake-up fails outright. So does every request during the
-  // thirty seconds a deploy takes. From inside the browser all of those look
-  // identical to no internet, and telling somebody to check their connection
-  // when the connection is fine is the least useful thing this could say.
+  // The backend is on a Render free plan that stops the instance after 15 idle
+  // minutes; the next request wakes it and takes ~50 seconds. Any request during
+  // deployment (30 seconds) or wake-up also fails. From inside the browser all
+  // of those look identical to no internet.
   //
-  // Three attempts, backing off, and only for a request that never reached
-  // the server. An HTTP error — 400, 404, 500 — is an answer, and answers are
-  // never retried: sending the same POST twice because the first attempt
-  // returned 500 is how one saved record becomes two.
-  const attempts = 3
+  // Retry strategy:
+  // - Max 10 attempts (120 seconds of retry window)
+  // - Exponential backoff with jitter (1s, 2s, 4s, 8s, 16s, 32s...)
+  // - Only for transient failures (network errors, no response)
+  // - Never retry HTTP errors (4xx, 5xx) to avoid duplicate POSTs
+  const MAX_ATTEMPTS = 10
   let res: Response | null = null
   let lastFailure: unknown = null
-  for (let attempt = 0; attempt < attempts; attempt++) {
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     try {
       res = await fetch(`${API_BASE}${path}`, { ...init, headers })
       break
     } catch (err) {
       lastFailure = err
-      if (attempt < attempts - 1) {
-        await new Promise((r) => setTimeout(r, 1200 * (attempt + 1)))
+      if (attempt < MAX_ATTEMPTS - 1) {
+        // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 32s, 64s...
+        const backoffMs = Math.min(1000 * Math.pow(2, attempt), 120000)
+        // Add up to 20% jitter to avoid thundering herd
+        const jitter = Math.random() * backoffMs * 0.2
+        await new Promise((r) => setTimeout(r, backoffMs + jitter))
       }
     }
   }
+
   if (!res) {
     void lastFailure
     throw new ApiError(
-      'The BeviGrow server did not answer. It may be waking up — wait a few ' +
-        'seconds and try again. If it keeps happening, check your connection.',
+      'The BeviGrow server did not answer. It may be waking up after extended ' +
+        'idle time (this can take up to 50 seconds on the free plan). Please wait ' +
+        'a moment and refresh. If this persists, check your internet connection.',
       0,
     )
   }

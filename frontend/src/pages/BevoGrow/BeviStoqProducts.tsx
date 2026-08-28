@@ -108,6 +108,18 @@ export function BeviStoqProducts() {
 
   const handleCreate = async () => {
     try {
+      // Validate initial quantity fields if quantity is entered
+      if (formData.initial_quantity) {
+        if (!formData.initial_location_id) {
+          alert('Location is required when adding initial quantity')
+          return
+        }
+        if (!formData.initial_supplier) {
+          alert('Supplier is required when adding initial quantity')
+          return
+        }
+      }
+
       const payload = {
         name: formData.name,
         category_id: parseInt(formData.category_id),
@@ -139,7 +151,7 @@ export function BeviStoqProducts() {
             location_id: parseInt(formData.initial_location_id),
             quantity: parseFloat(formData.initial_quantity),
             unit: formData.default_unit,
-            supplier: formData.initial_supplier || null,
+            supplier: formData.initial_supplier,
             cost_per_unit: formData.initial_cost ? parseFloat(formData.initial_cost) : null
           })
         })
@@ -463,34 +475,38 @@ export function BeviStoqProducts() {
           {!isEditing && (
             <>
               <div className="border-t border-caramel/15 pt-4 mt-4">
-                <p className="text-sm font-semibold text-latte mb-3">📦 Initial Quantity (Optional)</p>
+                <p className="text-sm font-semibold text-latte mb-3">📦 Initial Quantity</p>
+                <p className="text-xs text-latte/50 mb-3">All fields below are mandatory if you enter quantity</p>
               </div>
 
-              <Field label="Quantity">
+              <Field label="Quantity *">
                 <Input
                   type="number"
                   placeholder="e.g. 100"
                   value={formData.initial_quantity}
                   onChange={(e) => setFormData({ ...formData, initial_quantity: e.target.value })}
+                  required={formData.initial_quantity !== ''}
                 />
               </Field>
 
-              <Field label="Location">
+              <Field label="Location *">
                 <Select
                   value={formData.initial_location_id}
                   onChange={(e) => setFormData({ ...formData, initial_location_id: e.target.value })}
                   options={[
-                    { value: '', label: 'Select location (optional)' },
+                    { value: '', label: 'Select location' },
                     ...locations.map(l => ({ value: l.id.toString(), label: l.name }))
                   ]}
+                  required={formData.initial_quantity !== ''}
                 />
               </Field>
 
-              <Field label="Supplier">
+              <Field label="Supplier *">
                 <Input
-                  placeholder="Supplier name (optional)"
+                  placeholder="Supplier name"
                   value={formData.initial_supplier}
                   onChange={(e) => setFormData({ ...formData, initial_supplier: e.target.value })}
+                  required={formData.initial_quantity !== ''}
                 />
               </Field>
 

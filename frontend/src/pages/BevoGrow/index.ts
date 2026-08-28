@@ -1,0 +1,5 @@
+export { BeviStoqDashboard } from './BeviStoqDashboard'
+export { BeviStoqProducts } from './BeviStoqProducts'
+export { BeviStoqCategories } from './BeviStoqCategories'
+export { BeviStoqLocations } from './BeviStoqLocations'
+export { BeviStoqStock } from './BeviStoqStock'

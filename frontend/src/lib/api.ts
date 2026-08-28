@@ -90,7 +90,7 @@ export function onUnauthorized(fn: () => void): () => void {
   }
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers)
   const token = tokenStore.get()
   if (token) headers.set('Authorization', `Bearer ${token}`)

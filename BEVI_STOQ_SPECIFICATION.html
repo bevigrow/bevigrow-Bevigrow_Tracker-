@@ -1,0 +1,1757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bevi Stoq - Inventory Management System Specification</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            padding: 40px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            border-bottom: 4px solid #8B6F47;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        h1 {
+            font-size: 2.5em;
+            color: #8B6F47;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            font-size: 1.1em;
+            color: #666;
+            font-style: italic;
+        }
+        h2 {
+            color: #8B6F47;
+            font-size: 1.8em;
+            margin-top: 40px;
+            margin-bottom: 15px;
+            border-left: 4px solid #8B6F47;
+            padding-left: 15px;
+        }
+        h3 {
+            color: #A0826D;
+            font-size: 1.3em;
+            margin-top: 25px;
+            margin-bottom: 10px;
+        }
+        h4 {
+            color: #555;
+            font-size: 1.1em;
+            margin-top: 15px;
+            margin-bottom: 8px;
+        }
+        p {
+            margin-bottom: 12px;
+            text-align: justify;
+        }
+        .highlight {
+            background: #FFF3E0;
+            padding: 15px;
+            border-left: 4px solid #FF9800;
+            margin: 15px 0;
+        }
+        .warning {
+            background: #FFEBEE;
+            padding: 15px;
+            border-left: 4px solid #F44336;
+            margin: 15px 0;
+        }
+        .info {
+            background: #E3F2FD;
+            padding: 15px;
+            border-left: 4px solid #2196F3;
+            margin: 15px 0;
+        }
+        ul, ol {
+            margin-left: 25px;
+            margin-bottom: 12px;
+        }
+        li {
+            margin-bottom: 8px;
+        }
+        .section {
+            margin-bottom: 30px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #8B6F47;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .flow-diagram {
+            background: #F5F5F5;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 15px 0;
+            font-family: monospace;
+            line-height: 1.8;
+            overflow-x: auto;
+        }
+        .code-block {
+            background: #282C34;
+            color: #ABB2BF;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+            overflow-x: auto;
+        }
+        .code-block code {
+            color: #61DAFB;
+        }
+        .example {
+            background: #F0F7FF;
+            padding: 15px;
+            border-left: 4px solid #0066CC;
+            margin: 15px 0;
+            border-radius: 3px;
+        }
+        .component-card {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+            background: #FAFAFA;
+        }
+        .badge {
+            display: inline-block;
+            background: #8B6F47;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 0.9em;
+            margin-right: 5px;
+        }
+        .feature-list {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin: 15px 0;
+        }
+        .feature-item {
+            background: #F9F9F9;
+            padding: 12px;
+            border-left: 3px solid #8B6F47;
+            border-radius: 3px;
+        }
+        .feature-item strong {
+            color: #8B6F47;
+        }
+        .page-break {
+            page-break-after: always;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 2px solid #ddd;
+        }
+        .toc {
+            background: #F5F5F5;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .toc a {
+            color: #8B6F47;
+            text-decoration: none;
+        }
+        .toc a:hover {
+            text-decoration: underline;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.9em;
+            margin: 10px 0;
+        }
+        .status-planning {
+            background: #FFF3E0;
+            color: #E65100;
+        }
+        .status-required {
+            background: #FFEBEE;
+            color: #B71C1C;
+        }
+        .status-critical {
+            background: #FFCDD2;
+            color: #B71C1C;
+            font-weight: bold;
+        }
+        .nav-structure {
+            background: #F5F5F5;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            margin: 15px 0;
+        }
+        footer {
+            text-align: center;
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 2px solid #ddd;
+            color: #999;
+            font-size: 0.9em;
+        }
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+            .container {
+                max-width: 100%;
+                padding: 20px;
+                box-shadow: none;
+            }
+            .page-break {
+                page-break-after: always;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- HEADER -->
+        <div class="header">
+            <h1>🏪 BEVI STOQ</h1>
+            <p class="subtitle">Comprehensive Inventory Management System Specification</p>
+            <p style="margin-top: 15px; color: #888;">Version 1.0 | Date: August 28, 2026</p>
+            <span class="status-badge status-planning">PLANNING PHASE</span>
+        </div>
+
+        <!-- TABLE OF CONTENTS -->
+        <div class="toc">
+            <h3 style="margin-top: 0;">Table of Contents</h3>
+            <ol>
+                <li><a href="#executive-summary">Executive Summary</a></li>
+                <li><a href="#core-purpose">Core Purpose & Scope</a></li>
+                <li><a href="#key-principles">Key Design Principles</a></li>
+                <li><a href="#navigation">Navigation Structure</a></li>
+                <li><a href="#core-entities">Core Entities & Data Model</a></li>
+                <li><a href="#features">Complete Feature List</a></li>
+                <li><a href="#workflows">Workflow Examples</a></li>
+                <li><a href="#dashboard">Dashboard Specification</a></li>
+                <li><a href="#ui-ux">UI/UX Requirements</a></li>
+                <li><a href="#technical">Technical Architecture</a></li>
+                <li><a href="#database">Database Design</a></li>
+                <li><a href="#api">API Endpoints</a></li>
+                <li><a href="#validation">Validation Rules</a></li>
+                <li><a href="#permissions">Security & Permissions</a></li>
+                <li><a href="#testing">Testing Requirements</a></li>
+            </ol>
+        </div>
+
+        <!-- EXECUTIVE SUMMARY -->
+        <h2 id="executive-summary">Executive Summary</h2>
+        <div class="section">
+            <p><strong>Bevi Stoq</strong> is a professional-grade inventory management system integrated into the existing BeviGrow web application. It enables users to manage products, track stock across multiple locations, handle customer requirements, and maintain complete inventory history.</p>
+
+            <div class="info">
+                <strong>Key Objective:</strong> Provide a scalable, data-driven inventory system that works for ANY product type without hard-coded categories, products, or locations.
+            </div>
+
+            <h3>Core Statistics</h3>
+            <table>
+                <tr>
+                    <th>Aspect</th>
+                    <th>Details</th>
+                </tr>
+                <tr>
+                    <td>Main Navigation Sections</td>
+                    <td>8 core sections + sub-pages</td>
+                </tr>
+                <tr>
+                    <td>Core Entities</td>
+                    <td>Categories, Products, Locations, Stock, Movements, Requirements, Combos</td>
+                </tr>
+                <tr>
+                    <td>Key Pages</td>
+                    <td>Dashboard, Product Management, Category Management, Location Management, Stock Management, Customer Requirements, Combos, Stock History</td>
+                </tr>
+                <tr>
+                    <td>Critical Features</td>
+                    <td>Location-based stock, Reserved vs Available stock, Low-stock thresholds per product, Multi-unit support, Customer requirement allocation</td>
+                </tr>
+                <tr>
+                    <td>Integration Level</td>
+                    <td>Deep integration with existing BeviGrow app (authentication, UI components, routing)</td>
+                </tr>
+            </table>
+        </div>
+
+        <!-- CORE PURPOSE -->
+        <h2 id="core-purpose">Core Purpose & Scope</h2>
+        <div class="section">
+            <h3>What Bevi Stoq Manages</h3>
+            <div class="feature-list">
+                <div class="feature-item">
+                    <strong>✓ Products</strong>
+                    <p>User-created product catalog with categories and units</p>
+                </div>
+                <div class="feature-item">
+                    <strong>✓ Categories</strong>
+                    <p>Organize products (Spices, Coffee, Packaging, etc.)</p>
+                </div>
+                <div class="feature-item">
+                    <strong>✓ Locations</strong>
+                    <p>Warehouses, storage facilities (Yercaud, Salem, Chennai)</p>
+                </div>
+                <div class="feature-item">
+                    <strong>✓ Location-Based Stock</strong>
+                    <p>Product + Location + Quantity tracking</p>
+                </div>
+                <div class="feature-item">
+                    <strong>✓ Stock Movements</strong>
+                    <p>Complete history of all stock changes</p>
+                </div>
+                <div class="feature-item">
+                    <strong>✓ Stock Transfers</strong>
+                    <p>Move stock between locations atomically</p>
+                </div>
+                <div class="feature-item">
+                    <strong>✓ Stock Reservation</strong>
+                    <p>Reserve stock for customer requirements</p>
+                </div>
+                <div class="feature-item">
+                    <strong>✓ Customer Requirements</strong>
+                    <p>Track what customers need + availability checking</p>
+                </div>
+                <div class="feature-item">
+                    <strong>✓ Product Combos</strong>
+                    <p>Save multi-product lists (bundled products)</p>
+                </div>
+                <div class="feature-item">
+                    <strong>✓ Low-Stock Alerts</strong>
+                    <p>Per-product thresholds (not universal)</p>
+                </div>
+                <div class="feature-item">
+                    <strong>✓ Out-of-Stock Alerts</strong>
+                    <p>RED, OBVIOUS status when stock = 0</p>
+                </div>
+                <div class="feature-item">
+                    <strong>✓ Stock History</strong>
+                    <p>Full audit trail of all inventory changes</p>
+                </div>
+            </div>
+
+            <h3>What Bevi Stoq Does NOT Manage</h3>
+            <p>These belong in the <strong>Customers</strong> module (separate from Bevi Stoq):</p>
+            <ul>
+                <li>Customer information & profiles</li>
+                <li>Customer purchase history</li>
+                <li>Payment tracking & invoicing</li>
+                <li>Payment methods & payment dates</li>
+                <li>Customer communication</li>
+            </ul>
+            <div class="info">
+                <strong>Communication:</strong> The Customers module can CREATE requirements in Bevi Stoq, which then affects inventory. But customer data and stock data remain cleanly separated.
+            </div>
+        </div>
+
+        <!-- KEY PRINCIPLES -->
+        <h2 id="key-principles">Key Design Principles</h2>
+        <div class="section">
+            <div class="warning">
+                <strong>🚨 CRITICAL PRINCIPLES (Non-Negotiable):</strong>
+            </div>
+
+            <h3>1. Zero Hard-Coded Data</h3>
+            <ul>
+                <li>NO hard-coded categories like "Spices", "Coffee", "Masala"</li>
+                <li>NO hard-coded products like "Pepper", "Cinnamon"</li>
+                <li>NO hard-coded locations like "Yercaud", "Salem"</li>
+                <li>Everything must be user-created and configurable</li>
+                <li>Examples in documentation are only examples</li>
+            </ul>
+
+            <h3>2. Location-Based Stock (Not Global)</h3>
+            <ul>
+                <li>Every product must have stock tracked by location</li>
+                <li>Example: Pepper = 250kg (Yercaud) + 100kg (Salem) + 50kg (Chennai)</li>
+                <li>Never maintain a single global quantity for a product</li>
+                <li>Total stock = sum of all location stocks</li>
+            </ul>
+
+            <h3>3. No Negative Stock</h3>
+            <div class="highlight">
+                <strong>The system MUST prevent negative inventory at all costs.</strong>
+                <p>If available stock is 500kg and someone tries to reserve/consume 600kg, show:</p>
+                <ul style="margin-top: 10px;">
+                    <li>Required: 600kg</li>
+                    <li>Available: 500kg</li>
+                    <li>Shortage: 100kg</li>
+                    <li>Status: CANNOT FULFILL</li>
+                </ul>
+                <p style="margin-top: 10px;"><strong>Never silently create -100kg inventory.</strong></p>
+            </div>
+
+            <h3>4. Reserved vs Physical Stock</h3>
+            <div class="example">
+                <strong>Example:</strong>
+                <p>Physical Stock = 500kg | Reserved Stock = 100kg | Available = 400kg</p>
+                <p>Formula: <code>Available = Physical - Reserved</code></p>
+                <p>When customer requirement is reserved, available decreases but physical remains unchanged. When fulfilled, both decrease.</p>
+            </div>
+
+            <h3>5. Per-Product Low-Stock Thresholds</h3>
+            <ul>
+                <li>Each product has its own configurable low-stock threshold</li>
+                <li>Example: Pepper threshold = 50kg, Cinnamon = 20kg, Cardamom = 10kg</li>
+                <li>Status is calculated automatically based on current stock vs threshold</li>
+                <li>User does NOT manually select status</li>
+            </ul>
+
+            <h3>6. OUT OF STOCK = RED & OBVIOUS</h3>
+            <div class="warning">
+                <strong>When stock = 0kg:</strong>
+                <p>Show "OUT OF STOCK" in RED/ERROR color throughout the application</p>
+                <ul style="margin-top: 10px;">
+                    <li>Dashboard</li>
+                    <li>Product lists</li>
+                    <li>Category details</li>
+                    <li>Location details</li>
+                    <li>Customer requirement checking</li>
+                    <li>Search results</li>
+                    <li>Combo availability</li>
+                </ul>
+                <p style="margin-top: 10px;">Do not rely only on an icon. Make it impossible to miss.</p>
+            </div>
+
+            <h3>7. Historical Integrity Must Be Preserved</h3>
+            <ul>
+                <li>All stock movements must be recorded</li>
+                <li>History is never deleted, only archived</li>
+                <li>If a category/product/location is deactivated, historical records remain intact</li>
+                <li>Audit trail shows: User, Date/Time, Quantity, Movement Type, Reference</li>
+            </ul>
+
+            <h3>8. Stock Changes via Transactions, Not Direct Editing</h3>
+            <ul>
+                <li>Avoid allowing users to directly edit quantities</li>
+                <li>All stock changes happen through proper transactions:</li>
+                <ul style="margin-left: 25px;">
+                    <li>Add Stock</li>
+                    <li>Transfer Stock</li>
+                    <li>Reserve (Customer Requirement)</li>
+                    <li>Fulfill (Customer Requirement)</li>
+                    <li>Adjustment (Administrative only)</li>
+                </ul>
+                <li>Each transaction creates an immutable movement record</li>
+            </ul>
+
+            <h3>9. Dashboard = Summary → Click = Details</h3>
+            <ul>
+                <li>Dashboard shows high-level summaries</li>
+                <li>Everything clickable for drill-down</li>
+                <li>Example: Click "Spices" → see all spices → click "Pepper" → see Pepper details</li>
+            </ul>
+
+            <h3>10. Atomic Transactions</h3>
+            <ul>
+                <li>Operations like transfers must be all-or-nothing</li>
+                <li>No partial success</li>
+                <li>If one part fails, entire transaction rolls back</li>
+            </ul>
+        </div>
+
+        <!-- NAVIGATION STRUCTURE -->
+        <h2 id="navigation">Navigation Structure</h2>
+        <div class="section">
+            <h3>Main Navigation Layout</h3>
+            <p>Bevi Stoq is added to the BeviGrow main navigation alongside Trade Desk and Outreach:</p>
+
+            <div class="nav-structure">
+Trade Tracker
+├── Trade Desk
+│   ├── Dashboard
+│   ├── Quotes
+│   ├── Deal Stages
+│   ├── Activity Log
+│   ├── Documents
+│   └── Follow-ups
+│
+├── Outreach
+│   ├── Prospects
+│   ├── Outreach Agent
+│   ├── Report
+│   └── Settings
+│
+├── 🆕 Bevi Stoq
+│   ├── Dashboard
+│   ├── Products
+│   ├── Categories
+│   ├── Locations
+│   ├── Stock
+│   ├── Customer Requirements
+│   ├── Combos
+│   └── Stock History
+│
+└── Team (Admin/Manager only)
+            </div>
+
+            <h3>Key Points</h3>
+            <ul>
+                <li>Bevi Stoq appears as a top-level section in navigation</li>
+                <li>Each subsection is accessible from the sidebar</li>
+                <li>Clicking "Bevi Stoq" in the nav shows its Dashboard</li>
+                <li>Navigation structure matches existing BeviGrow patterns</li>
+            </ul>
+        </div>
+
+        <!-- CORE ENTITIES -->
+        <h2 id="core-entities">Core Entities & Data Model</h2>
+        <div class="section">
+            <h3>Entity Overview</h3>
+
+            <table>
+                <tr>
+                    <th>Entity</th>
+                    <th>Purpose</th>
+                    <th>Key Fields</th>
+                </tr>
+                <tr>
+                    <td><strong>Category</strong></td>
+                    <td>Product grouping</td>
+                    <td>Name, Description, Active/Inactive, Created Date, User</td>
+                </tr>
+                <tr>
+                    <td><strong>Product</strong></td>
+                    <td>Individual item</td>
+                    <td>Name, Category, Unit, Low-Stock Threshold, Active/Inactive, Created Date, User</td>
+                </tr>
+                <tr>
+                    <td><strong>Location</strong></td>
+                    <td>Storage facility</td>
+                    <td>Name, Description, Active/Inactive, Created Date, User</td>
+                </tr>
+                <tr>
+                    <td><strong>Inventory</strong></td>
+                    <td>Stock at location</td>
+                    <td>Product ID, Location ID, Physical Stock, Reserved Stock, Last Updated, User</td>
+                </tr>
+                <tr>
+                    <td><strong>StockMovement</strong></td>
+                    <td>Change record</td>
+                    <td>Product ID, Location ID, Type, Quantity, Unit, Date, User, Reference, Notes</td>
+                </tr>
+                <tr>
+                    <td><strong>StockTransfer</strong></td>
+                    <td>Inter-location move</td>
+                    <td>Product ID, From Location, To Location, Quantity, Date, User, Status</td>
+                </tr>
+                <tr>
+                    <td><strong>CustomerRequirement</strong></td>
+                    <td>What customer needs</td>
+                    <td>Customer ID, Status, Created Date, User, Total Items</td>
+                </tr>
+                <tr>
+                    <td><strong>RequirementItem</strong></td>
+                    <td>Individual product in requirement</td>
+                    <td>Requirement ID, Product ID, Quantity, Unit, Reserved Qty, Fulfilled Qty</td>
+                </tr>
+                <tr>
+                    <td><strong>Combo</strong></td>
+                    <td>Product bundle</td>
+                    <td>Name, Description, Created Date, User, Active/Inactive</td>
+                </tr>
+                <tr>
+                    <td><strong>ComboItem</strong></td>
+                    <td>Product in combo</td>
+                    <td>Combo ID, Product ID, Quantity, Unit</td>
+                </tr>
+            </table>
+
+            <h3>Critical Calculations</h3>
+            <div class="code-block">
+Available Stock = Physical Stock - Reserved Stock
+Current Status = NORMAL if Available > Low-Stock Threshold
+Current Status = LOW STOCK if Available ≤ Low-Stock Threshold AND Available > 0
+Current Status = OUT OF STOCK if Available = 0
+
+Maximum Combo Possible = MIN(Available[Product1] / Combo.Qty1,
+                             Available[Product2] / Combo.Qty2, ...)
+            </div>
+        </div>
+
+        <div class="page-break"></div>
+
+        <!-- FEATURES -->
+        <h2 id="features">Complete Feature List</h2>
+        <div class="section">
+            <h3>Category Management</h3>
+            <div class="component-card">
+                <strong>Scope:</strong> CRUD operations for product categories
+                <ul style="margin-top: 10px;">
+                    <li><strong>Create Category</strong> - Name, Description (optional)</li>
+                    <li><strong>Edit Category</strong> - Change name/description</li>
+                    <li><strong>View Categories</strong> - List all with counts</li>
+                    <li><strong>Search Categories</strong> - Partial name matching</li>
+                    <li><strong>Activate/Deactivate</strong> - Soft delete, preserve history</li>
+                    <li><strong>Delete Safety</strong> - Cannot delete if products depend on it</li>
+                </ul>
+            </div>
+
+            <h3>Product Management</h3>
+            <div class="component-card">
+                <strong>Scope:</strong> CRUD operations for products with detailed configuration
+                <ul style="margin-top: 10px;">
+                    <li><strong>Create Product</strong> - Name, Category, Default Unit, Low-Stock Threshold, Notes</li>
+                    <li><strong>Edit Product</strong> - Change all fields except unit (to prevent inconsistency)</li>
+                    <li><strong>View Products</strong> - List, filter by category/location/status</li>
+                    <li><strong>Search Products</strong> - Smart autocomplete with recent items</li>
+                    <li><strong>Duplicate Prevention</strong> - Warn if similar product exists in category</li>
+                    <li><strong>Activate/Deactivate</strong> - Soft delete</li>
+                    <li><strong>Delete Safety</strong> - Cannot delete if stock exists</li>
+                </ul>
+            </div>
+
+            <h3>Location Management</h3>
+            <div class="component-card">
+                <strong>Scope:</strong> CRUD for warehouses/storage facilities
+                <ul style="margin-top: 10px;">
+                    <li><strong>Create Location</strong> - Name, Description (optional)</li>
+                    <li><strong>Edit Location</strong> - Change name/description</li>
+                    <li><strong>View Locations</strong> - List with total stock</li>
+                    <li><strong>Search Locations</strong> - Partial name matching</li>
+                    <li><strong>Activate/Deactivate</strong> - Soft delete</li>
+                    <li><strong>Delete Safety</strong> - Cannot delete if stock exists</li>
+                </ul>
+            </div>
+
+            <h3>Stock Management</h3>
+            <div class="component-card">
+                <strong>Scope:</strong> Core inventory operations
+                <ul style="margin-top: 10px;">
+                    <li><strong>Add Stock</strong> - Product + Location + Quantity + Optional Reference</li>
+                    <li><strong>View Stock</strong> - By product, by location, by status</li>
+                    <li><strong>Stock by Location</strong> - Show breakdown for each product</li>
+                    <li><strong>Stock Transfer</strong> - Move between locations (atomic)</li>
+                    <li><strong>Stock Adjustment</strong> - Admin-only with reason/documentation</li>
+                    <li><strong>Prevent Negative Stock</strong> - Block any operation causing negative inventory</li>
+                    <li><strong>Track All Changes</strong> - Every change creates movement record</li>
+                </ul>
+            </div>
+
+            <h3>Stock Movements & History</h3>
+            <div class="component-card">
+                <strong>Scope:</strong> Complete audit trail
+                <ul style="margin-top: 10px;">
+                    <li><strong>Movement Types:</strong> Opening Stock, Added, Transfer In/Out, Reserved, Fulfilled, Return, Damage/Wastage, Adjustment</li>
+                    <li><strong>Movement Record:</strong> Date, User, Product, Location, Type, Quantity, Reference, Notes</li>
+                    <li><strong>View History:</strong> Searchable, filterable by date/product/location/type</li>
+                    <li><strong>Product Detail History:</strong> Show movements on product detail page</li>
+                    <li><strong>Audit Trail:</strong> Traceable to user and date/time</li>
+                </ul>
+            </div>
+
+            <h3>Customer Requirements</h3>
+            <div class="component-card">
+                <strong>Scope:</strong> Track customer needs and availability
+                <ul style="margin-top: 10px;">
+                    <li><strong>Create Requirement</strong> - Customer + Products + Quantities</li>
+                    <li><strong>Automatic Availability Check</strong> - Real-time calculation</li>
+                    <li><strong>Statuses:</strong> Pending, Available, Partially Available, Shortage, Reserved, Fulfilled, Cancelled</li>
+                    <li><strong>Reserve Stock</strong> - Lock stock for requirement</li>
+                    <li><strong>Multi-Location Allocation</strong> - Suggest optimal location allocation</li>
+                    <li><strong>Fulfill Requirement</strong> - Deduct actual stock</li>
+                    <li><strong>Cancel Requirement</strong> - Release reserved stock</li>
+                </ul>
+            </div>
+
+            <h3>Product Combos</h3>
+            <div class="component-card">
+                <strong>Scope:</strong> Bundled product sets
+                <ul style="margin-top: 10px;">
+                    <li><strong>Create Combo</strong> - Name + Product list with quantities</li>
+                    <li><strong>Edit Combo</strong> - Change products/quantities</li>
+                    <li><strong>Combo Availability Check</strong> - Show if all products available</li>
+                    <li><strong>Maximum Possible</strong> - Calculate max complete combos</li>
+                    <li><strong>View Combos</strong> - List with availability status</li>
+                    <li><strong>Saving Combo = No Stock Impact</strong> - CRITICAL: never modify inventory</li>
+                    <li><strong>Use in Requirements</strong> - Allow customers to request combos</li>
+                </ul>
+            </div>
+
+            <h3>Dashboard & Analytics</h3>
+            <div class="component-card">
+                <strong>Scope:</strong> High-level overview with drill-down
+                <ul style="margin-top: 10px;">
+                    <li><strong>Summary Cards:</strong> Total Stock, Low Stock Count, Out of Stock Count, Pending Requirements</li>
+                    <li><strong>Stock by Category Chart</strong> - Bar/donut chart, clickable</li>
+                    <li><strong>Stock by Location Chart</strong> - Bar/donut chart, clickable</li>
+                    <li><strong>Recent Movements</strong> - Last 5-10 changes</li>
+                    <li><strong>Interactive Drill-Down:</strong> Click card → see details</li>
+                    <li><strong>Fast Loading</strong> - Optimized queries, avoid N+1</li>
+                </ul>
+            </div>
+
+            <h3>Search & Autocomplete</h3>
+            <div class="component-card">
+                <strong>Scope:</strong> Efficient navigation
+                <ul style="margin-top: 10px;">
+                    <li><strong>Global Search</strong> - Find products, categories, locations, requirements</li>
+                    <li><strong>Smart Autocomplete</strong> - In forms with matching suggestions</li>
+                    <li><strong>Recently Used</strong> - Prioritize frequently accessed items</li>
+                    <li><strong>Partial Matching</strong> - "pep" finds "Pepper", "Black Pepper", etc.</li>
+                    <li><strong>Debounced Requests</strong> - Avoid excessive API calls</li>
+                </ul>
+            </div>
+
+            <h3>Units & Conversions</h3>
+            <div class="component-card">
+                <strong>Scope:</strong> Support various measurement units
+                <ul style="margin-top: 10px;">
+                    <li><strong>Units Supported:</strong> g, kg, tonne, pcs, litre, ml, box, bag, packet, etc.</li>
+                    <li><strong>Compatible Unit Groups:</strong> Weight (g↔kg↔tonne), Volume (ml↔litre), Count (pcs)</li>
+                    <li><strong>Conversions:</strong> 1kg = 1000g (automatic)</li>
+                    <li><strong>Prevent Invalid Conversions:</strong> Cannot compare pcs with kg</li>
+                    <li><strong>Product Default Unit:</strong> Set at creation</li>
+                </ul>
+            </div>
+
+            <h3>Filtering & Reporting</h3>
+            <div class="component-card">
+                <strong>Scope:</strong> Data access and insights
+                <ul style="margin-top: 10px;">
+                    <li><strong>Product Filters:</strong> Category, Location, Status (Normal/Low/Out), Active only</li>
+                    <li><strong>Stock History Filters:</strong> Date range, Movement type, Product, Location, User</li>
+                    <li><strong>Requirement Filters:</strong> Status, Customer, Date, Product</li>
+                    <li><strong>Export Support:</strong> Integrate with existing app's export (if available)</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- WORKFLOWS -->
+        <h2 id="workflows">Workflow Examples</h2>
+        <div class="section">
+            <h3>Workflow 1: New Product + Initial Stock</h3>
+            <div class="flow-diagram">
+1. Admin creates Category "Spices"
+2. Admin creates Product "Pepper"
+   - Category: Spices
+   - Default Unit: kg
+   - Low-Stock Threshold: 50 kg
+3. Admin creates Location "Yercaud Warehouse"
+4. Admin creates Location "Salem Warehouse"
+5. Admin "Add Stock" → Pepper, Yercaud, 250 kg
+   - Creates Movement: Opening Stock, +250 kg
+6. Admin "Add Stock" → Pepper, Salem, 100 kg
+   - Creates Movement: Opening Stock, +100 kg
+
+RESULT:
+Dashboard shows: Pepper = 350 kg total
+Spices category shows: Pepper 350 kg (NORMAL)
+            </div>
+
+            <h3>Workflow 2: Customer Requirement & Reservation</h3>
+            <div class="flow-diagram">
+1. Requirement created: ABC Foods needs Pepper 200 kg
+2. System checks: Available = 350 kg, Required = 200 kg
+   - Status: AVAILABLE, Shortage: 0
+3. Admin clicks "Reserve"
+   - Physical: 350 kg (no change)
+   - Reserved: 200 kg (increases)
+   - Available: 150 kg (decreases)
+4. Dashboard now shows: Low Stock alert
+5. When fulfilled:
+   - Physical: 150 kg (decreases)
+   - Reserved: 0 kg (clears)
+   - Available: 150 kg
+   - Creates Movement: Fulfilled, -200 kg
+            </div>
+
+            <h3>Workflow 3: Stock Transfer Between Locations</h3>
+            <div class="flow-diagram">
+BEFORE:
+Yercaud = 250 kg
+Salem = 100 kg
+
+Transfer: 30 kg from Yercaud to Salem
+
+AFTER:
+Yercaud = 220 kg
+Salem = 130 kg
+
+Creates TWO movements:
+- Transfer Out: Yercaud, -30 kg
+- Transfer In: Salem, +30 kg
+
+(Atomic - both succeed or both fail)
+            </div>
+
+            <h3>Workflow 4: Out of Stock Detection</h3>
+            <div class="flow-diagram">
+Current: Pepper = 45 kg (Threshold: 50 kg)
+Status: LOW STOCK ⚠️ (Yellow)
+
+After fulfilling 45 kg:
+Current: Pepper = 0 kg
+Status: OUT OF STOCK 🔴 (Red - obvious)
+
+Dashboard: Shows RED badge
+Product List: Shows RED badge
+Category Detail: Shows RED badge
+Requirement Check: Cannot be selected
+Combo Check: Marked insufficient
+            </div>
+
+            <h3>Workflow 5: Combo Creation & Use</h3>
+            <div class="flow-diagram">
+1. Admin creates Combo "Home Coffee Combo"
+   - Robusta Beans: 500 g
+   - Coffee Powder: 250 g
+   (Saving = NO stock changes)
+
+2. Dashboard shows availability:
+   Robusta: 5 kg → can make 10 combos
+   Powder: 1 kg → can make 4 combos
+   Maximum: 4 combos
+
+3. Customer needs: Home Coffee Combo × 10
+   Status: SHORTAGE (need 4 combos but only 10 available)
+   Shortage: Powder insufficient
+            </div>
+
+            <h3>Workflow 6: Partial Availability Allocation</h3>
+            <div class="flow-diagram">
+Requirement: 600 kg Pepper
+Available: 750 kg total
+  - Yercaud: 400 kg
+  - Salem: 250 kg
+  - Chennai: 100 kg
+
+Suggested Allocation:
+  - Yercaud: 400 kg
+  - Salem: 200 kg
+  Total: 600 kg (100% fulfilled)
+  Remaining:
+    - Salem: 50 kg
+    - Chennai: 100 kg
+
+Admin reviews and approves → creates reservations
+            </div>
+        </div>
+
+        <div class="page-break"></div>
+
+        <!-- DASHBOARD SPECIFICATION -->
+        <h2 id="dashboard">Dashboard Specification</h2>
+        <div class="section">
+            <h3>Dashboard Layout</h3>
+            <p>The Bevi Stoq Dashboard provides a quick overview with interactive drill-down capabilities.</p>
+
+            <h3>Top Summary Cards (Row 1)</h3>
+            <table>
+                <tr>
+                    <th>Card</th>
+                    <th>Content</th>
+                    <th>On Click</th>
+                </tr>
+                <tr>
+                    <td><strong>Total Stock</strong></td>
+                    <td>Sum of all physical stock</td>
+                    <td>Show all products with quantities</td>
+                </tr>
+                <tr>
+                    <td><strong>Low Stock</strong></td>
+                    <td>Count of products below threshold</td>
+                    <td>Show all low-stock products</td>
+                </tr>
+                <tr>
+                    <td><strong>Out of Stock</strong></td>
+                    <td>Count of zero-stock products (RED)</td>
+                    <td>Show all out-of-stock products</td>
+                </tr>
+                <tr>
+                    <td><strong>Pending Requirements</strong></td>
+                    <td>Count of pending/partial requirements</td>
+                    <td>Show pending customer requirements</td>
+                </tr>
+            </table>
+
+            <h3>Charts (Row 2-3)</h3>
+            <div class="example">
+                <strong>Stock by Category (Left Chart)</strong>
+                <p>Bar or pie chart showing stock volume per category. Clickable - click category name to drill into products.</p>
+                <p><em>Example:</em> Spices (1,840kg) | Coffee (2,100kg) | Packaging (350kg)</p>
+            </div>
+
+            <div class="example">
+                <strong>Stock by Location (Right Chart)</strong>
+                <p>Bar or pie chart showing stock volume per location. Clickable - click location to see stock breakdown.</p>
+                <p><em>Example:</em> Yercaud (4,250kg) | Salem (2,100kg) | Chennai (1,500kg)</p>
+            </div>
+
+            <h3>Recent Stock Movements (Row 4)</h3>
+            <p>Compact list showing last 5-10 movements:</p>
+            <table>
+                <tr>
+                    <th>Date</th>
+                    <th>Product</th>
+                    <th>Location</th>
+                    <th>Type</th>
+                    <th>Quantity</th>
+                </tr>
+                <tr>
+                    <td>Today</td>
+                    <td>Pepper</td>
+                    <td>Yercaud</td>
+                    <td>Stock Added</td>
+                    <td>+100 kg</td>
+                </tr>
+                <tr>
+                    <td>Yesterday</td>
+                    <td>Coffee Beans</td>
+                    <td>Chennai</td>
+                    <td>Fulfilled</td>
+                    <td>-50 kg</td>
+                </tr>
+                <tr>
+                    <td>2 days ago</td>
+                    <td>Cinnamon</td>
+                    <td>Salem</td>
+                    <td>Transfer In</td>
+                    <td>+20 kg</td>
+                </tr>
+            </table>
+            <p>"View All" link to full history page.</p>
+
+            <h3>Drill-Down Example</h3>
+            <div class="highlight">
+                <strong>User clicks "Spices" on category chart</strong>
+                <p style="margin-top: 10px;"><em>Page shows: "Spices Category Details"</em></p>
+                <p>Total Products: 12 | Total Available: 1,840 kg</p>
+                <p>Table:</p>
+                <table style="margin-top: 10px;">
+                    <tr>
+                        <th>Product</th>
+                        <th>Quantity</th>
+                        <th>Status</th>
+                    </tr>
+                    <tr>
+                        <td>Pepper</td>
+                        <td>500 kg</td>
+                        <td>NORMAL</td>
+                    </tr>
+                    <tr>
+                        <td>Cinnamon</td>
+                        <td>320 kg</td>
+                        <td>NORMAL</td>
+                    </tr>
+                    <tr>
+                        <td>Cloves</td>
+                        <td>0 kg</td>
+                        <td style="color: red; font-weight: bold;">OUT OF STOCK</td>
+                    </tr>
+                </table>
+                <p style="margin-top: 10px;"><strong>User clicks "Pepper"</strong></p>
+                <p><em>Page shows: "Pepper - Product Detail"</em></p>
+                <p>Category: Spices | Unit: kg | Threshold: 50 kg</p>
+                <p>Physical: 500 kg | Reserved: 50 kg | Available: 450 kg</p>
+                <p>Status: NORMAL</p>
+                <p>Stock by Location: Yercaud (250kg) | Salem (150kg) | Chennai (100kg)</p>
+            </div>
+        </div>
+
+        <!-- UI/UX REQUIREMENTS -->
+        <h2 id="ui-ux">UI/UX Requirements</h2>
+        <div class="section">
+            <h3>Design Consistency</h3>
+            <ul>
+                <li>Match existing BeviGrow design language</li>
+                <li>Reuse existing components (buttons, modals, tables, cards, badges)</li>
+                <li>Use consistent color scheme (browns, golds, espresso tones)</li>
+                <li>Follow existing typography and spacing</li>
+                <li>Icon set must match (lucide-react)</li>
+            </ul>
+
+            <h3>Form UX (Product Add/Edit Example)</h3>
+            <div class="example">
+                <strong>Add Product Modal</strong>
+                <div style="background: #F5F5F5; padding: 15px; border-radius: 5px; margin-top: 10px;">
+Product Name *<br>
+[ e.g. Pepper ]<br>
+<br>
+Category *<br>
+[ Select category ▼ ] [Autocomplete search]<br>
+<br>
+Default Unit *<br>
+[ kg ▼ ]<br>
+<br>
+Low Stock Alert Level *<br>
+[ 50 ]<br>
+[ℹ️ Alert when available stock reaches or falls below this quantity]<br>
+<br>
+Note (Optional)<br>
+[ Optional note ]<br>
+<br>
+[ Cancel ] [ Save Product ]
+                </div>
+            </div>
+
+            <h3>Customer Requirement Form</h3>
+            <div class="example">
+                <strong>New Requirement Modal</strong>
+                <div style="background: #F5F5F5; padding: 15px; border-radius: 5px; margin-top: 10px;">
+Customer *<br>
+[ Search/select customer ]<br>
+<br>
+Products<br>
+Product: [ Search ] | Quantity: [ 0 ] | Unit: [ ▼ ] [ Add ]<br>
+<br>
+Added Items:<br>
+Pepper | 300 kg | Remove<br>
+Coffee Beans | 100 kg | Remove<br>
+<br>
+Real-Time Availability Check:<br>
+Pepper: Required 300kg | Available 500kg | Status: ✓ Available<br>
+Coffee: Required 100kg | Available 80kg | Status: ⚠ Shortage (20kg)<br>
+<br>
+Overall: ⚠ PARTIALLY AVAILABLE<br>
+<br>
+[ Cancel ] [ Reserve Stock ] [ Check Again ]
+                </div>
+            </div>
+
+            <h3>Empty States</h3>
+            <ul>
+                <li>"No products yet. [Create Product]" - when product list empty</li>
+                <li>"No categories yet. [Create Category]" - when category list empty</li>
+                <li>"No stock available. [Add Stock]" - when no stock exists</li>
+                <li>"No customer requirements yet. [Create Requirement]"</li>
+            </ul>
+
+            <h3>Loading States</h3>
+            <ul>
+                <li>Use existing app's skeleton/spinner components</li>
+                <li>Show skeleton on dashboard while fetching data</li>
+                <li>Debounce search inputs to reduce API calls</li>
+                <li>Avoid unnecessary re-fetching</li>
+            </ul>
+
+            <h3>Error Handling</h3>
+            <ul>
+                <li>Show clear error messages (not raw database errors)</li>
+                <li>Preserve user-entered data when errors occur</li>
+                <li>Use existing toast/notification system</li>
+                <li>Example: "Cannot transfer more stock than available. Max: 200kg"</li>
+            </ul>
+
+            <h3>Responsive Design</h3>
+            <ul>
+                <li>Desktop-first (1920px optimal)</li>
+                <li>Tablet support (768px+)</li>
+                <li>Mobile where existing app supports it</li>
+                <li>Responsive tables use card view on mobile</li>
+                <li>Modals/drawers for complex forms on mobile</li>
+            </ul>
+
+            <h3>Status Display</h3>
+            <table>
+                <tr>
+                    <th>Status</th>
+                    <th>Color</th>
+                    <th>Display</th>
+                </tr>
+                <tr>
+                    <td>NORMAL</td>
+                    <td>Green/Success</td>
+                    <td>✓ Stock available</td>
+                </tr>
+                <tr>
+                    <td>LOW STOCK</td>
+                    <td>Orange/Warning</td>
+                    <td>⚠ Approaching threshold</td>
+                </tr>
+                <tr>
+                    <td>OUT OF STOCK</td>
+                    <td>Red/Error</td>
+                    <td>🔴 CRITICAL - Cannot fulfill</td>
+                </tr>
+            </table>
+        </div>
+
+        <!-- TECHNICAL ARCHITECTURE -->
+        <h2 id="technical">Technical Architecture</h2>
+        <div class="section">
+            <h3>Integration Points</h3>
+            <div class="component-card">
+                <strong>Frontend:</strong> React + TypeScript (existing)
+                <ul style="margin-top: 10px;">
+                    <li>Router: React Router (existing)</li>
+                    <li>Components: Existing UI component library</li>
+                    <li>Charts: Lightweight chart library (match existing)</li>
+                    <li>State: Existing app's state management</li>
+                    <li>Auth: Existing authentication system</li>
+                </ul>
+            </div>
+
+            <div class="component-card">
+                <strong>Backend:</strong> Python FastAPI (existing)
+                <ul style="margin-top: 10px;">
+                    <li>ORM: SQLAlchemy (existing)</li>
+                    <li>Database: Postgres with Neon (existing)</li>
+                    <li>Authentication: Existing middleware</li>
+                    <li>Permissions: Existing role-based system</li>
+                </ul>
+            </div>
+
+            <h3>API Design Patterns</h3>
+            <p>Follow existing BeviGrow API patterns:</p>
+            <div class="code-block">
+GET /api/bevi-stoq/categories - List all categories
+POST /api/bevi-stoq/categories - Create category
+GET /api/bevi-stoq/categories/{id} - Get category detail
+PUT /api/bevi-stoq/categories/{id} - Update category
+DELETE /api/bevi-stoq/categories/{id} - Deactivate category
+
+GET /api/bevi-stoq/products - List products (with filters)
+POST /api/bevi-stoq/products - Create product
+GET /api/bevi-stoq/products/{id} - Product detail + history
+
+GET /api/bevi-stoq/stock?product_id=X&location_id=Y - Current stock
+POST /api/bevi-stoq/stock/add - Add stock (creates movement)
+POST /api/bevi-stoq/stock/transfer - Transfer between locations
+
+GET /api/bevi-stoq/requirements - List customer requirements
+POST /api/bevi-stoq/requirements - Create requirement
+POST /api/bevi-stoq/requirements/{id}/reserve - Reserve stock
+POST /api/bevi-stoq/requirements/{id}/fulfill - Fulfill requirement
+POST /api/bevi-stoq/requirements/{id}/cancel - Cancel and release stock
+
+GET /api/bevi-stoq/dashboard - Dashboard summary data
+GET /api/bevi-stoq/movements - Stock movement history
+            </div>
+
+            <h3>Performance Optimization</h3>
+            <ul>
+                <li><strong>Avoid N+1 queries</strong> - Batch fetch related data</li>
+                <li><strong>Indexed queries</strong> - Product ID, Location ID, Status fields</li>
+                <li><strong>Pagination</strong> - Lists show 50 items, load more on scroll</li>
+                <li><strong>Caching</strong> - Cache dashboard data (5-10 min TTL)</li>
+                <li><strong>Debounced search</strong> - 300ms debounce on autocomplete</li>
+                <li><strong>Aggregation queries</strong> - Sum stock by location, not loop</li>
+            </ul>
+
+            <h3>Concurrency & Transactions</h3>
+            <div class="warning">
+                <strong>Critical:</strong> All stock operations must be transactional
+                <ul style="margin-top: 10px;">
+                    <li>Use database transactions for all mutations</li>
+                    <li>Recheck stock availability server-side (not just frontend)</li>
+                    <li>Prevent double-reservation with row-level locking if needed</li>
+                    <li>Atomicity: All or nothing for transfers</li>
+                    <li>No partial stock updates</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- DATABASE DESIGN -->
+        <h2 id="database">Database Design</h2>
+        <div class="section">
+            <h3>Schema Overview</h3>
+            <p>These entities should be created/migrated properly. Inspect existing schema first - do not duplicate if similar structures exist.</p>
+
+            <div class="code-block">
+TABLE categories
+  id (PK)
+  name (UNIQUE in active)
+  description
+  active (default true)
+  created_at
+  created_by_user_id (FK)
+
+TABLE products
+  id (PK)
+  name
+  category_id (FK)
+  default_unit
+  low_stock_alert_level (numeric)
+  active (default true)
+  created_at
+  created_by_user_id (FK)
+
+TABLE locations
+  id (PK)
+  name (UNIQUE)
+  description
+  active (default true)
+  created_at
+  created_by_user_id (FK)
+
+TABLE inventory
+  id (PK)
+  product_id (FK)
+  location_id (FK)
+  physical_stock (numeric, default 0)
+  reserved_stock (numeric, default 0)
+  updated_at
+  updated_by_user_id (FK)
+  UNIQUE(product_id, location_id)
+
+TABLE stock_movements
+  id (PK)
+  product_id (FK)
+  location_id (FK)
+  movement_type (enum: 'opening', 'added', 'transfer_in', 'transfer_out', 'reserved', 'fulfilled', 'adjustment')
+  quantity (numeric)
+  unit (varchar)
+  reference_id (nullable - FK to transfer/requirement)
+  notes (nullable)
+  created_at
+  created_by_user_id (FK)
+
+TABLE customer_requirements
+  id (PK)
+  customer_id (FK)
+  status (enum: 'pending', 'available', 'partially_available', 'reserved', 'fulfilled', 'cancelled')
+  created_at
+  created_by_user_id (FK)
+
+TABLE requirement_items
+  id (PK)
+  requirement_id (FK)
+  product_id (FK)
+  quantity_required (numeric)
+  unit (varchar)
+  quantity_reserved (numeric, default 0)
+  quantity_fulfilled (numeric, default 0)
+
+TABLE combos
+  id (PK)
+  name (UNIQUE)
+  description
+  active (default true)
+  created_at
+  created_by_user_id (FK)
+
+TABLE combo_items
+  id (PK)
+  combo_id (FK)
+  product_id (FK)
+  quantity (numeric)
+  unit (varchar)
+            </div>
+
+            <h3>Indexes</h3>
+            <ul>
+                <li>product_id on inventory (for stock lookups)</li>
+                <li>location_id on inventory (for location drill-down)</li>
+                <li>product_id on stock_movements (for history)</li>
+                <li>location_id on stock_movements (for location history)</li>
+                <li>customer_id on requirements (for customer lookups)</li>
+                <li>category_id on products (for category drill-down)</li>
+                <li>status on requirements (for filtering)</li>
+            </ul>
+
+            <h3>Data Integrity Constraints</h3>
+            <ul>
+                <li>Foreign key constraints (referential integrity)</li>
+                <li>NOT NULL on critical fields (product_id, location_id, quantity)</li>
+                <li>CHECK constraints on quantities (>= 0 for reserved/physical)</li>
+                <li>UNIQUE on product-location combination (no duplicate inventory records)</li>
+            </ul>
+        </div>
+
+        <!-- API ENDPOINTS -->
+        <h2 id="api">API Endpoints</h2>
+        <div class="section">
+            <h3>Core Endpoints</h3>
+
+            <h3>Categories</h3>
+            <table>
+                <tr>
+                    <th>Endpoint</th>
+                    <th>Method</th>
+                    <th>Purpose</th>
+                </tr>
+                <tr>
+                    <td>/api/bevi-stoq/categories</td>
+                    <td>GET</td>
+                    <td>List all active categories</td>
+                </tr>
+                <tr>
+                    <td>/api/bevi-stoq/categories</td>
+                    <td>POST</td>
+                    <td>Create category</td>
+                </tr>
+                <tr>
+                    <td>/api/bevi-stoq/categories/{id}</td>
+                    <td>GET</td>
+                    <td>Get category with product count</td>
+                </tr>
+                <tr>
+                    <td>/api/bevi-stoq/categories/{id}</td>
+                    <td>PUT</td>
+                    <td>Update category</td>
+                </tr>
+                <tr>
+                    <td>/api/bevi-stoq/categories/{id}</td>
+                    <td>DELETE</td>
+                    <td>Deactivate category</td>
+                </tr>
+            </table>
+
+            <h3>Products</h3>
+            <table>
+                <tr>
+                    <th>Endpoint</th>
+                    <th>Method</th>
+                    <th>Purpose</th>
+                </tr>
+                <tr>
+                    <td>/api/bevi-stoq/products</td>
+                    <td>GET</td>
+                    <td>List products (filter: category, location, status)</td>
+                </tr>
+                <tr>
+                    <td>/api/bevi-stoq/products</td>
+                    <td>POST</td>
+                    <td>Create product</td>
+                </tr>
+                <tr>
+                    <td>/api/bevi-stoq/products/search</td>
+                    <td>GET</td>
+                    <td>Autocomplete search products</td>
+                </tr>
+                <tr>
+                    <td>/api/bevi-stoq/products/{id}</td>
+                    <td>GET</td>
+                    <td>Product detail + total stock + movements</td>
+                </tr>
+                <tr>
+                    <td>/api/bevi-stoq/products/{id}</td>
+                    <td>PUT</td>
+                    <td>Update product</td>
+                </tr>
+                <tr>
+                    <td>/api/bevi-stoq/products/{id}</td>
+                    <td>DELETE</td>
+                    <td>Deactivate product</td>
+                </tr>
+            </table>
+
+            <h3>Stock</h3>
+            <table>
+                <tr>
+                    <th>Endpoint</th>
+                    <th>Method</th>
+                    <th>Purpose</th>
+                </tr>
+                <tr>
+                    <td>/api/bevi-stoq/stock</td>
+                    <td>GET</td>
+                    <td>Get stock (filter: product_id, location_id)</td>
+                </tr>
+                <tr>
+                    <td>/api/bevi-stoq/stock/add</td>
+                    <td>POST</td>
+                    <td>Add stock (creates movement)</td>
+                </tr>
+                <tr>
+                    <td>/api/bevi-stoq/stock/transfer</td>
+                    <td>POST</td>
+                    <td>Transfer between locations (atomic)</td>
+                </tr>
+                <tr>
+                    <td>/api/bevi-stoq/stock/adjust</td>
+                    <td>POST</td>
+                    <td>Admin adjustment with reason</td>
+                </tr>
+            </table>
+
+            <h3>Customer Requirements</h3>
+            <table>
+                <tr>
+                    <th>Endpoint</th>
+                    <th>Method</th>
+                    <th>Purpose</th>
+                </tr>
+                <tr>
+                    <td>/api/bevi-stoq/requirements</td>
+                    <td>GET</td>
+                    <td>List requirements (filter: status, customer)</td>
+                </tr>
+                <tr>
+                    <td>/api/bevi-stoq/requirements</td>
+                    <td>POST</td>
+                    <td>Create requirement (auto-checks availability)</td>
+                </tr>
+                <tr>
+                    <td>/api/bevi-stoq/requirements/{id}</td>
+                    <td>GET</td>
+                    <td>Requirement detail</td>
+                </tr>
+                <tr>
+                    <td>/api/bevi-stoq/requirements/{id}/reserve</td>
+                    <td>POST</td>
+                    <td>Reserve stock for requirement</td>
+                </tr>
+                <tr>
+                    <td>/api/bevi-stoq/requirements/{id}/fulfill</td>
+                    <td>POST</td>
+                    <td>Fulfill requirement (deduct physical)</td>
+                </tr>
+                <tr>
+                    <td>/api/bevi-stoq/requirements/{id}/cancel</td>
+                    <td>POST</td>
+                    <td>Cancel requirement (release reserved)</td>
+                </tr>
+            </table>
+
+            <h3>Dashboard</h3>
+            <table>
+                <tr>
+                    <th>Endpoint</th>
+                    <th>Method</th>
+                    <th>Purpose</th>
+                </tr>
+                <tr>
+                    <td>/api/bevi-stoq/dashboard</td>
+                    <td>GET</td>
+                    <td>Summary cards + chart data</td>
+                </tr>
+                <tr>
+                    <td>/api/bevi-stoq/dashboard/movements</td>
+                    <td>GET</td>
+                    <td>Recent movements</td>
+                </tr>
+            </table>
+        </div>
+
+        <!-- VALIDATION -->
+        <h2 id="validation">Validation Rules</h2>
+        <div class="section">
+            <h3>Frontend Validation (User Feedback)</h3>
+            <ul>
+                <li><strong>Product Name:</strong> Required, max 255 chars, no leading/trailing spaces</li>
+                <li><strong>Category:</strong> Required, must exist</li>
+                <li><strong>Unit:</strong> Required, must be from valid list</li>
+                <li><strong>Low-Stock Threshold:</strong> Required, must be numeric, >= 0</li>
+                <li><strong>Quantity:</strong> Required, must be numeric, > 0 (except adjustments)</li>
+                <li><strong>Location:</strong> Required, must exist</li>
+            </ul>
+
+            <h3>Backend Validation (Security)</h3>
+            <ul>
+                <li>Re-validate all data server-side</li>
+                <li>Check authorization (user can perform action)</li>
+                <li>Verify foreign keys exist</li>
+                <li>Prevent duplicate categories (unique within active)</li>
+                <li>Prevent duplicate products (within category)</li>
+                <li>Check stock availability before transfer/fulfillment</li>
+                <li>Validate unit compatibility for conversions</li>
+                <li>Ensure no negative stock</li>
+            </ul>
+
+            <h3>Special Validation</h3>
+            <div class="warning">
+                <strong>Stock Transfer:</strong>
+                <ul style="margin-top: 10px;">
+                    <li>From location must have enough stock</li>
+                    <li>Cannot transfer from same location</li>
+                    <li>Both locations must exist</li>
+                    <li>Product must exist</li>
+                </ul>
+            </div>
+
+            <div class="warning">
+                <strong>Customer Requirement:</strong>
+                <ul style="margin-top: 10px;">
+                    <li>Customer must exist</li>
+                    <li>At least one product required</li>
+                    <li>All products must exist</li>
+                    <li>Quantities must be positive</li>
+                    <li>Units must be valid</li>
+                </ul>
+            </div>
+
+            <div class="warning">
+                <strong>Requirement Fulfillment:</strong>
+                <ul style="margin-top: 10px;">
+                    <li>Requirement must exist</li>
+                    <li>Requirement must be RESERVED</li>
+                    <li>Stock must still be available (re-check)</li>
+                    <li>Cannot fulfill amount greater than reserved</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- PERMISSIONS -->
+        <h2 id="permissions">Security & Permissions</h2>
+        <div class="section">
+            <h3>Authentication</h3>
+            <ul>
+                <li>Use existing BeviGrow authentication system</li>
+                <li>Do not create separate login</li>
+                <li>All endpoints require valid session</li>
+                <li>Respect existing user roles</li>
+            </ul>
+
+            <h3>Role-Based Access</h3>
+            <div class="info">
+                <strong>Permission Model: Full Access for All Authenticated Users</strong>
+                <p>All users (Admin, Manager, Staff) have complete access to all Bevi Stoq features. No role-based restrictions.</p>
+            </div>
+            <table>
+                <tr>
+                    <th>Action</th>
+                    <th>Access Level</th>
+                </tr>
+                <tr>
+                    <td>View Dashboard</td>
+                    <td>✓ All Authenticated Users</td>
+                </tr>
+                <tr>
+                    <td>View Product/Stock/Locations/Categories</td>
+                    <td>✓ All Authenticated Users</td>
+                </tr>
+                <tr>
+                    <td>Add Stock</td>
+                    <td>✓ All Authenticated Users</td>
+                </tr>
+                <tr>
+                    <td>Transfer Stock</td>
+                    <td>✓ All Authenticated Users</td>
+                </tr>
+                <tr>
+                    <td>Create Category</td>
+                    <td>✓ All Authenticated Users</td>
+                </tr>
+                <tr>
+                    <td>Create Product</td>
+                    <td>✓ All Authenticated Users</td>
+                </tr>
+                <tr>
+                    <td>Create Location</td>
+                    <td>✓ All Authenticated Users</td>
+                </tr>
+                <tr>
+                    <td>Create/Edit Combo</td>
+                    <td>✓ All Authenticated Users</td>
+                </tr>
+                <tr>
+                    <td>Create/Manage Customer Requirements</td>
+                    <td>✓ All Authenticated Users</td>
+                </tr>
+                <tr>
+                    <td>Reserve/Fulfill Requirements</td>
+                    <td>✓ All Authenticated Users</td>
+                </tr>
+                <tr>
+                    <td>Stock Adjustment</td>
+                    <td>✓ All Authenticated Users</td>
+                </tr>
+            </table>
+
+            <h3>Data Security</h3>
+            <ul>
+                <li>All mutations require authorization check on server</li>
+                <li>Do not trust frontend role display</li>
+                <li>Log all inventory mutations (user, timestamp, action)</li>
+                <li>Prevent SQL injection through parameterized queries</li>
+                <li>Sanitize user input</li>
+                <li>Validate IDs before database operations</li>
+            </ul>
+
+            <h3>Audit Trail</h3>
+            <ul>
+                <li>Every stock movement recorded with user ID</li>
+                <li>Every requirement status change recorded</li>
+                <li>Timestamps on all operations</li>
+                <li>Cannot edit/delete historical records</li>
+                <li>Can query full history by product/location/user</li>
+            </ul>
+        </div>
+
+        <!-- TESTING -->
+        <h2 id="testing">Testing Requirements</h2>
+        <div class="section">
+            <h3>Unit Tests</h3>
+            <ul>
+                <li>Status calculation logic (NORMAL/LOW/OUT)</li>
+                <li>Unit conversion functions</li>
+                <li>Stock calculation (Available = Physical - Reserved)</li>
+                <li>Combo maximum calculation</li>
+                <li>Requirement availability checking</li>
+            </ul>
+
+            <h3>Integration Tests</h3>
+            <ul>
+                <li>Create category → create product → add stock</li>
+                <li>Stock transfer (from → to)</li>
+                <li>Requirement creation → availability check → reserve → fulfill</li>
+                <li>Combo creation → availability check → use in requirement</li>
+                <li>Cancellation and release of reserved stock</li>
+            </ul>
+
+            <h3>Critical Test Scenarios</h3>
+            <div class="example">
+                <strong>Test 1: Basic Workflow</strong>
+                <ol style="margin-top: 10px;">
+                    <li>Create Category "Spices"</li>
+                    <li>Create Product "Pepper" (threshold 50kg)</li>
+                    <li>Create Locations "Yercaud" and "Salem"</li>
+                    <li>Add 250kg Pepper to Yercaud</li>
+                    <li>Add 100kg Pepper to Salem</li>
+                    <li>Verify: Total 350kg, Status NORMAL</li>
+                    <li>Create requirement: 300kg Pepper</li>
+                    <li>Verify: Available 350kg, Required 300kg, Status AVAILABLE</li>
+                    <li>Reserve 300kg</li>
+                    <li>Verify: Physical 350kg, Reserved 300kg, Available 50kg</li>
+                    <li>Fulfill requirement</li>
+                    <li>Verify: Physical 50kg, Reserved 0kg, Available 50kg, Status LOW STOCK</li>
+                </ol>
+            </div>
+
+            <div class="example">
+                <strong>Test 2: Out of Stock Detection</strong>
+                <ol style="margin-top: 10px;">
+                    <li>Stock: 45kg (threshold 50kg) → Status LOW STOCK ⚠️</li>
+                    <li>Stock: 50kg (threshold 50kg) → Status LOW STOCK ⚠️</li>
+                    <li>Stock: 100kg (threshold 50kg) → Status NORMAL ✓</li>
+                    <li>Fulfill last 100kg → Stock 0kg</li>
+                    <li>Verify: Status OUT OF STOCK 🔴 (RED)</li>
+                    <li>Verify: Cannot fulfill new requirements</li>
+                </ol>
+            </div>
+
+            <div class="example">
+                <strong>Test 3: Combo Availability</strong>
+                <ol style="margin-top: 10px;">
+                    <li>Create Combo "Coffee Bundle": Beans 500g, Powder 250g</li>
+                    <li>Stock: Beans 5kg, Powder 1kg</li>
+                    <li>Verify: Beans can make 10 combos, Powder can make 4</li>
+                    <li>Maximum combos = 4</li>
+                    <li>Create requirement: Coffee Bundle × 10</li>
+                    <li>Verify: Status SHORTAGE (need 4, can only make 4)</li>
+                </ol>
+            </div>
+
+            <h3>Performance Tests</h3>
+            <ul>
+                <li>Dashboard loads < 2 seconds with 10,000 products</li>
+                <li>Search autocomplete responds < 500ms</li>
+                <li>Requirement creation < 1 second (with availability calc)</li>
+                <li>Stock transfer completes atomically</li>
+            </ul>
+
+            <h3>Edge Cases</h3>
+            <ul>
+                <li>Transfer stock from empty location</li>
+                <li>Requirement with zero quantity</li>
+                <li>Requirement for deactivated product</li>
+                <li>Combo with incompatible units</li>
+                <li>Multiple concurrent requirements on same stock</li>
+                <li>Deactivate category with active products</li>
+                <li>Delete product with stock/movements</li>
+            </ul>
+        </div>
+
+        <!-- IMPLEMENTATION PRIORITY -->
+        <h2>Implementation Priority Order</h2>
+        <div class="section">
+            <ol>
+                <li><strong>Inspect existing codebase</strong> - Understand architecture, routing, auth, components</li>
+                <li><strong>Database migrations</strong> - Create all entities with proper constraints</li>
+                <li><strong>Category management</strong> - CRUD, list, search</li>
+                <li><strong>Product management</strong> - CRUD, low-stock threshold, duplicate prevention</li>
+                <li><strong>Location management</strong> - CRUD, list, search</li>
+                <li><strong>Stock management</strong> - Add stock, view stock, track by location</li>
+                <li><strong>Stock movements</strong> - Complete history, audit trail</li>
+                <li><strong>Location transfers</strong> - Atomic transfer, create linked movements</li>
+                <li><strong>Dashboard</strong> - Summary cards, charts, drill-down</li>
+                <li><strong>Search/autocomplete</strong> - Global search, form autocomplete</li>
+                <li><strong>Customer requirements</strong> - Create, availability check, statuses</li>
+                <li><strong>Reservation system</strong> - Reserve stock, track reserved vs physical</li>
+                <li><strong>Fulfillment</strong> - Fulfill requirement, deduct stock</li>
+                <li><strong>Combos</strong> - Create, manage, availability check, max calculation</li>
+                <li><strong>Advanced features</strong> - Unit conversion, multi-location allocation</li>
+                <li><strong>Reports/history</strong> - Stock history page, filtering, export</li>
+                <li><strong>Permissions</strong> - Role-based access control</li>
+                <li><strong>Validation</strong> - Frontend + backend validation</li>
+                <li><strong>Performance optimization</strong> - Query optimization, caching, indexing</li>
+                <li><strong>Testing</strong> - Unit, integration, edge case testing</li>
+            </ol>
+        </div>
+
+        <!-- FINAL CHECKLIST -->
+        <h2>Pre-Implementation Checklist</h2>
+        <div class="section">
+            <h3>Requirements Review</h3>
+            <ul>
+                <li>☑ No hard-coded categories, products, or locations</li>
+                <li>☑ Location-based stock (not global)</li>
+                <li>☑ Prevent negative inventory</li>
+                <li>☑ Reserved vs Physical stock tracking</li>
+                <li>☑ Per-product low-stock thresholds</li>
+                <li>☑ OUT OF STOCK displays RED and obvious</li>
+                <li>☑ Historical integrity preserved</li>
+                <li>☑ Stock changes via transactions</li>
+                <li>☑ Dashboard summary with drill-down</li>
+                <li>☑ Atomic transactions (all or nothing)</li>
+            </ul>
+
+            <h3>Architecture Review</h3>
+            <ul>
+                <li>☑ Inspect existing BeviGrow structure</li>
+                <li>☑ Reuse existing components</li>
+                <li>☑ Follow existing API patterns</li>
+                <li>☑ Integrate with existing auth</li>
+                <li>☑ Match existing design language</li>
+                <li>☑ Use existing database (Postgres)</li>
+                <li>☑ Respect existing permissions</li>
+            </ul>
+
+            <h3>Before You Start Coding</h3>
+            <ul>
+                <li>☑ Review existing project structure</li>
+                <li>☑ Identify existing component library</li>
+                <li>☑ Check existing router structure</li>
+                <li>☑ Review database schema</li>
+                <li>☑ Understand API patterns</li>
+                <li>☑ Map existing user roles</li>
+                <li>☑ Identify authentication mechanism</li>
+                <li>☑ Review existing form validation</li>
+            </ul>
+        </div>
+
+        <!-- FOOTER -->
+        <footer>
+            <p><strong>Bevi Stoq v1.0 Specification</strong></p>
+            <p>This document defines the complete requirements, architecture, and design for the Bevi Stoq inventory management feature.</p>
+            <p>Date: August 28, 2026 | Status: Planning Phase</p>
+            <p>Next Step: Inspect existing codebase → Then proceed to implementation</p>
+        </footer>
+    </div>
+</body>
+</html>

@@ -37,6 +37,23 @@ const Outreach = lazy(() => import('./pages/Outreach').then((m) => ({ default: m
 const Team = lazy(() => import('./pages/Team').then((m) => ({ default: m.Team })))
 const Profile = lazy(() => import('./pages/Profile').then((m) => ({ default: m.Profile })))
 
+// Bevi Stoq - Inventory Management
+const BeviStoqDashboard = lazy(() =>
+  import('./pages/BevoGrow/BeviStoqDashboard').then((m) => ({ default: m.BeviStoqDashboard })),
+)
+const BeviStoqProducts = lazy(() =>
+  import('./pages/BevoGrow/BeviStoqProducts').then((m) => ({ default: m.BeviStoqProducts })),
+)
+const BeviStoqCategories = lazy(() =>
+  import('./pages/BevoGrow/BeviStoqCategories').then((m) => ({ default: m.BeviStoqCategories })),
+)
+const BeviStoqLocations = lazy(() =>
+  import('./pages/BevoGrow/BeviStoqLocations').then((m) => ({ default: m.BeviStoqLocations })),
+)
+const BeviStoqStock = lazy(() =>
+  import('./pages/BevoGrow/BeviStoqStock').then((m) => ({ default: m.BeviStoqStock })),
+)
+
 function RequireAuth({ children, roles }: { children: ReactNode; roles?: Role[] }) {
   const { user, loading } = useAuth()
 
@@ -115,6 +132,13 @@ export default function App() {
                     </RequireAuth>
                   }
                 />
+
+                {/* Bevi Stoq — Inventory Management */}
+                <Route path="bevi-stoq" element={<BeviStoqDashboard />} />
+                <Route path="bevi-stoq/products" element={<BeviStoqProducts />} />
+                <Route path="bevi-stoq/categories" element={<BeviStoqCategories />} />
+                <Route path="bevi-stoq/locations" element={<BeviStoqLocations />} />
+                <Route path="bevi-stoq/stock" element={<BeviStoqStock />} />
 
                 {/* the old flat URLs, kept so existing links and bookmarks work */}
                 <Route path="contacts" element={<Navigate to="/app/trade/quotes" replace />} />

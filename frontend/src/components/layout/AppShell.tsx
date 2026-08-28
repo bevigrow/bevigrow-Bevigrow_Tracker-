@@ -10,10 +10,12 @@ import {
   LogOut,
   Menu,
   MessageSquare,
+  Package,
   Send,
   SlidersHorizontal,
   Users,
   Users2,
+  Warehouse,
   X,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -56,6 +58,14 @@ const OUTREACH_NAV: NavItem[] = [
   { to: '/app/outreach/settings', label: 'Settings', icon: SlidersHorizontal },
 ]
 
+const BEVI_STOQ_NAV: NavItem[] = [
+  { to: '/app/bevi-stoq', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/app/bevi-stoq/products', label: 'Products', icon: Package },
+  { to: '/app/bevi-stoq/categories', label: 'Categories', icon: ClipboardList },
+  { to: '/app/bevi-stoq/locations', label: 'Locations', icon: Warehouse },
+  { to: '/app/bevi-stoq/stock', label: 'Stock', icon: BarChart3 },
+]
+
 const SHARED_NAV: NavItem[] = [
   { to: '/app/team', label: 'Team', icon: Users2, roles: ['admin', 'manager'] },
 ]
@@ -70,9 +80,10 @@ export function AppShell() {
 
   const inOutreach = location.pathname.startsWith('/app/outreach')
   const inTrade = location.pathname.startsWith('/app/trade')
-  const section = inOutreach ? 'Outreach' : inTrade ? 'Trade Desk' : null
+  const inBeviStoq = location.pathname.startsWith('/app/bevi-stoq')
+  const section = inOutreach ? 'Outreach' : inTrade ? 'Trade Desk' : inBeviStoq ? 'Bevi Stoq' : null
 
-  const items = inOutreach ? OUTREACH_NAV : inTrade ? TRADE_NAV : []
+  const items = inOutreach ? OUTREACH_NAV : inTrade ? TRADE_NAV : inBeviStoq ? BEVI_STOQ_NAV : []
   const visible = [...items, ...SHARED_NAV].filter(
     (item) => !item.roles || (user && item.roles.includes(user.role)),
   )

@@ -1,4 +1,4 @@
-import { ArrowRight, Briefcase, Send } from 'lucide-react'
+import { ArrowRight, Briefcase, Package, Send } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
@@ -51,7 +51,7 @@ export function Hub() {
         <p className="mt-2 text-sm text-latte/50">Where are you working today?</p>
       </div>
 
-      <div className="grid gap-5 sm:grid-cols-2">
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         <WorkspaceCard
           to="/app/trade"
           icon={<Briefcase size={24} />}
@@ -74,6 +74,14 @@ export function Hub() {
           }
           urgent={!!counts && counts.due > 0}
           delay={70}
+        />
+        <WorkspaceCard
+          to="/app/bevi-stoq"
+          icon={<Package size={24} />}
+          title="Bevi Stoq"
+          blurb="Inventory management: products, stock levels, locations, and customer requirements."
+          stat="Manage Stock"
+          delay={140}
         />
       </div>
     </div>

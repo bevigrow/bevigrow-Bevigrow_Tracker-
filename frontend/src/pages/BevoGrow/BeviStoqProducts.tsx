@@ -1,4 +1,4 @@
-import { Trash2, Edit2, Warehouse } from 'lucide-react'
+import { Trash2, Edit2, Warehouse, Calendar } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { request } from '../../lib/api'
@@ -28,12 +28,26 @@ interface LocationStock {
   available_stock: number
 }
 
+interface RestockRecord {
+  id: number
+  quantity_restocked: number
+  unit: string
+  restock_date: string
+  location_name: string
+  supplier: string
+  cost_per_unit: number
+  total_cost: number
+  reference_id?: string
+  notes?: string
+}
+
 interface ProductDetail extends Product {
   total_physical_stock: number
   total_reserved_stock: number
   total_available_stock: number
   status: string
   location_stocks?: LocationStock[]
+  restock_history?: RestockRecord[]
 }
 
 export function BeviStoqProducts() {
@@ -46,6 +60,7 @@ export function BeviStoqProducts() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
   const [expandedProduct, setExpandedProduct] = useState<number | null>(null)
+  const [expandedRestock, setExpandedRestock] = useState<number | null>(null)
 
   const [formData, setFormData] = useState({
     name: '',
@@ -235,6 +250,61 @@ export function BeviStoqProducts() {
                                 </div>
                               )}
                             </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Restock Timeline */}
+                {product.restock_history && product.restock_history.length > 0 && (
+                  <div className="mt-3 border-t border-caramel/15 pt-3">
+                    <button
+                      onClick={() => setExpandedRestock(expandedRestock === product.id ? null : product.id)}
+                      className="flex w-full items-center gap-2 text-xs font-medium text-latte/70 hover:text-latte"
+                    >
+                      <Calendar size={14} />
+                      Restock Timeline ({product.restock_history.length})
+                    </button>
+                    {expandedRestock === product.id && (
+                      <div className="mt-3 space-y-2">
+                        {product.restock_history.map((restock, idx) => (
+                          <div key={restock.id || idx} className="rounded-lg bg-espresso/30 p-2.5">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1">
+                                <p className="text-xs font-semibold text-gold">
+                                  {new Date(restock.restock_date).toLocaleDateString('en-IN', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    year: 'numeric'
+                                  })}
+                                </p>
+                                <p className="mt-1 text-xs text-latte/70">{restock.location_name}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-xs font-semibold text-latte">
+                                  +{restock.quantity_restocked} {restock.unit}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="mt-2 border-t border-caramel/15 pt-2">
+                              <div className="grid grid-cols-2 gap-2 text-xs">
+                                {restock.supplier && (
+                                  <div>
+                                    <span className="text-latte/60">Supplier:</span>
+                                    <p className="text-latte/80">{restock.supplier}</p>
+                                  </div>
+                                )}
+                                <div>
+                                  <span className="text-latte/60">Cost:</span>
+                                  <p className="text-gold">₹{restock.total_cost.toLocaleString()}</p>
+                                </div>
+                              </div>
+                            </div>
+                            {restock.notes && (
+                              <p className="mt-1.5 text-xs text-latte/50 italic">{restock.notes}</p>
+                            )}
                           </div>
                         ))}
                       </div>

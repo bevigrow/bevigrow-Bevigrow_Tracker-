@@ -54,6 +54,7 @@ export function BeviStoqProducts() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [products, setProducts] = useState<ProductDetail[]>([])
   const [categories, setCategories] = useState<Category[]>([])
+  const [locations, setLocations] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [isCreating, setIsCreating] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
@@ -66,7 +67,11 @@ export function BeviStoqProducts() {
     name: '',
     category_id: '',
     default_unit: 'kg',
-    low_stock_alert_level: '0'
+    low_stock_alert_level: '0',
+    initial_quantity: '',
+    initial_location_id: '',
+    initial_supplier: '',
+    initial_cost: ''
   })
 
   const search = searchParams.get('search') || ''
@@ -79,8 +84,12 @@ export function BeviStoqProducts() {
   const load = async () => {
     try {
       setLoading(true)
-      const cats = await request<Category[]>('/api/bevi-stoq/categories?active_only=true&limit=1000')
+      const [cats, locs] = await Promise.all([
+        request<Category[]>('/api/bevi-stoq/categories?active_only=true&limit=1000'),
+        request<any[]>('/api/bevi-stoq/locations?active_only=true&limit=1000')
+      ])
       setCategories(cats)
+      setLocations(locs)
 
       const params = new URLSearchParams()
       if (search) params.set('search', search)
@@ -106,19 +115,46 @@ export function BeviStoqProducts() {
         low_stock_alert_level: parseFloat(formData.low_stock_alert_level)
       }
 
+      let productId: number
       if (isEditing && editingId) {
         await request(`/api/bevi-stoq/products/${editingId}`, {
           method: 'PUT',
           body: JSON.stringify(payload)
         })
+        productId = editingId
       } else {
-        await request('/api/bevi-stoq/products', {
+        const response = await request<any>('/api/bevi-stoq/products', {
           method: 'POST',
           body: JSON.stringify(payload)
         })
+        productId = response.id
       }
 
-      setFormData({ name: '', category_id: '', default_unit: 'kg', low_stock_alert_level: '0' })
+      // Add initial stock if provided
+      if (formData.initial_quantity && formData.initial_location_id && !isEditing) {
+        await request('/api/bevi-stoq/stock/add', {
+          method: 'POST',
+          body: JSON.stringify({
+            product_id: productId,
+            location_id: parseInt(formData.initial_location_id),
+            quantity: parseFloat(formData.initial_quantity),
+            unit: formData.default_unit,
+            supplier: formData.initial_supplier || null,
+            cost_per_unit: formData.initial_cost ? parseFloat(formData.initial_cost) : null
+          })
+        })
+      }
+
+      setFormData({
+        name: '',
+        category_id: '',
+        default_unit: 'kg',
+        low_stock_alert_level: '0',
+        initial_quantity: '',
+        initial_location_id: '',
+        initial_supplier: '',
+        initial_cost: ''
+      })
       setIsCreating(false)
       setIsEditing(false)
       setEditingId(null)
@@ -133,7 +169,11 @@ export function BeviStoqProducts() {
       name: product.name,
       category_id: product.category_id.toString(),
       default_unit: product.default_unit,
-      low_stock_alert_level: product.low_stock_alert_level.toString()
+      low_stock_alert_level: product.low_stock_alert_level.toString(),
+      initial_quantity: '',
+      initial_location_id: '',
+      initial_supplier: '',
+      initial_cost: ''
     })
     setEditingId(product.id)
     setIsEditing(true)
@@ -349,7 +389,16 @@ export function BeviStoqProducts() {
           setIsCreating(false)
           setIsEditing(false)
           setEditingId(null)
-          setFormData({ name: '', category_id: '', default_unit: 'kg', low_stock_alert_level: '0' })
+          setFormData({
+            name: '',
+            category_id: '',
+            default_unit: 'kg',
+            low_stock_alert_level: '0',
+            initial_quantity: '',
+            initial_location_id: '',
+            initial_supplier: '',
+            initial_cost: ''
+          })
         }}
         title={isEditing ? 'Edit Product' : 'Add Product'}
       >
@@ -410,13 +459,69 @@ export function BeviStoqProducts() {
             />
           </Field>
 
+          {/* Initial Quantity Section (Only when Creating) */}
+          {!isEditing && (
+            <>
+              <div className="border-t border-caramel/15 pt-4 mt-4">
+                <p className="text-sm font-semibold text-latte mb-3">📦 Initial Quantity (Optional)</p>
+              </div>
+
+              <Field label="Quantity">
+                <Input
+                  type="number"
+                  placeholder="e.g. 100"
+                  value={formData.initial_quantity}
+                  onChange={(e) => setFormData({ ...formData, initial_quantity: e.target.value })}
+                />
+              </Field>
+
+              <Field label="Location">
+                <Select
+                  value={formData.initial_location_id}
+                  onChange={(e) => setFormData({ ...formData, initial_location_id: e.target.value })}
+                  options={[
+                    { value: '', label: 'Select location (optional)' },
+                    ...locations.map(l => ({ value: l.id.toString(), label: l.name }))
+                  ]}
+                />
+              </Field>
+
+              <Field label="Supplier">
+                <Input
+                  placeholder="Supplier name (optional)"
+                  value={formData.initial_supplier}
+                  onChange={(e) => setFormData({ ...formData, initial_supplier: e.target.value })}
+                />
+              </Field>
+
+              <Field label="Cost per Unit (₹)">
+                <Input
+                  type="number"
+                  placeholder="0.00"
+                  value={formData.initial_cost}
+                  onChange={(e) => setFormData({ ...formData, initial_cost: e.target.value })}
+                  step="0.01"
+                />
+              </Field>
+            </>
+          )}
+
           <div className="flex gap-3">
             <Button
               variant="ghost"
               onClick={() => {
                 setIsCreating(false)
                 setIsEditing(false)
-                setFormData({ name: '', category_id: '', default_unit: 'kg', low_stock_alert_level: '0' })
+                setFormData({
+                  name: '',
+                  category_id: '',
+                  default_unit: 'kg',
+                  low_stock_alert_level: '0',
+                  initial_quantity: '',
+                  initial_location_id: '',
+                  initial_supplier: '',
+                  initial_cost: ''
+                })
               }}
               type="button"
             >

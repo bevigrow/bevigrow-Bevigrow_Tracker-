@@ -1,4 +1,4 @@
-import { Trash2, Edit2 } from 'lucide-react'
+import { Trash2, Edit2, Warehouse } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { request } from '../../lib/api'
@@ -20,11 +20,20 @@ interface Category {
   name: string
 }
 
+interface LocationStock {
+  location_id: number
+  location_name: string
+  physical_stock: number
+  reserved_stock: number
+  available_stock: number
+}
+
 interface ProductDetail extends Product {
   total_physical_stock: number
   total_reserved_stock: number
   total_available_stock: number
   status: string
+  location_stocks?: LocationStock[]
 }
 
 export function BeviStoqProducts() {
@@ -36,6 +45,7 @@ export function BeviStoqProducts() {
   const [isEditing, setIsEditing] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
+  const [expandedProduct, setExpandedProduct] = useState<number | null>(null)
 
   const [formData, setFormData] = useState({
     name: '',
@@ -191,6 +201,46 @@ export function BeviStoqProducts() {
                     <span className="text-gold">{product.total_available_stock}</span>
                   </div>
                 </div>
+
+                {/* Location Stock Breakdown */}
+                {product.location_stocks && product.location_stocks.length > 0 && (
+                  <div className="mt-3 border-t border-caramel/15 pt-3">
+                    <button
+                      onClick={() => setExpandedProduct(expandedProduct === product.id ? null : product.id)}
+                      className="flex w-full items-center gap-2 text-xs font-medium text-latte/70 hover:text-latte"
+                    >
+                      <Warehouse size={14} />
+                      Locations ({product.location_stocks.length})
+                    </button>
+                    {expandedProduct === product.id && (
+                      <div className="mt-3 space-y-2">
+                        {product.location_stocks.map((loc) => (
+                          <div key={loc.location_id} className="rounded-lg bg-espresso/30 p-2.5">
+                            <p className="text-xs font-semibold text-latte">{loc.location_name}</p>
+                            <div className="mt-1.5 space-y-1">
+                              <div className="flex justify-between text-xs">
+                                <span className="text-latte/60">Available:</span>
+                                <span className={loc.available_stock === 0 ? 'text-red-400' : 'text-gold'}>
+                                  {loc.available_stock}
+                                </span>
+                              </div>
+                              <div className="flex justify-between text-xs">
+                                <span className="text-latte/60">Physical:</span>
+                                <span className="text-latte/70">{loc.physical_stock}</span>
+                              </div>
+                              {loc.reserved_stock > 0 && (
+                                <div className="flex justify-between text-xs">
+                                  <span className="text-latte/60">Reserved:</span>
+                                  <span className="text-orange-400">{loc.reserved_stock}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="mt-4 flex gap-2 border-t border-caramel/15 pt-4">

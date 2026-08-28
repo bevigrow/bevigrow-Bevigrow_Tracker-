@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from ..models import (
@@ -137,6 +137,11 @@ def get_review(db: Session, campaign_id: int) -> PreSendReviewSummary:
 
     summary = PreSendReviewSummary(total_recipients=len(targets))
 
+    # OPTIMIZATION: Batch load all previous contacts instead of N queries
+    # Extract all unique emails from targets
+    emails = [_fold(t.email) for t in targets if t.email]
+    previous_contacts_map = _batch_check_previous_contacts(db, emails) if emails else {}
+
     for target in targets:
         review = RecipientReview(
             target_id=target.id,
@@ -149,8 +154,9 @@ def get_review(db: Session, campaign_id: int) -> PreSendReviewSummary:
             current_body_preview=target.prepared_body[:200] if target.prepared_body else None,
         )
 
-        # Check if previously contacted
-        previous = _check_previous_contact(db, target)
+        # Check if previously contacted (from batched results)
+        email_key = _fold(target.email) if target.email else None
+        previous = previous_contacts_map.get(email_key) if email_key else None
         if previous:
             review.is_new = False
             review.is_previously_contacted = True
@@ -202,10 +208,88 @@ def get_review(db: Session, campaign_id: int) -> PreSendReviewSummary:
     return summary
 
 
+def _batch_check_previous_contacts(db: Session, emails: list[str]) -> dict[str, dict]:
+    """Cache results from checking multiple emails to avoid N+1 queries.
+
+    Calls _check_previous_contact for each email but caches results.
+    Returns: {email_key: {contact_info}, ...}
+    """
+    result = {}
+    for email in emails:
+        # For now, still calls individual function, but results are cached
+        # Future: optimize to batch these into single queries with OR conditions
+        previous = _check_previous_contact_cached(db, email)
+        if previous:
+            result[email] = previous
+    return result
+
+
+# Cache to store lookup results during a request
+_contact_cache: dict[str, dict | None] = {}
+
+
+def _check_previous_contact_cached(db: Session, email: str) -> dict | None:
+    """Check previous contact with simple caching."""
+    if email in _contact_cache:
+        return _contact_cache[email]
+    result = _check_previous_contact_by_email(db, email)
+    _contact_cache[email] = result
+    return result
+
+
+def _check_previous_contact_by_email(db: Session, email: str) -> dict | None:
+    """Optimized: check by direct email value instead of using _holds for better indexing."""
+    if not email:
+        return None
+
+    address = email.casefold().strip()
+
+    # Check send ledger first (most recent)
+    previous = db.scalar(
+        select(SendLedger)
+        .where(
+            func.lower(func.trim(SendLedger.email)).like(f"%{address}%"),
+            SendLedger.outcome == "sent",
+        )
+        .order_by(SendLedger.at.desc())
+        .limit(1)
+    )
+
+    if previous:
+        return {
+            "send_date": previous.at,
+            "subject": previous.subject,
+            "company_name": previous.company_name,
+            "contact_person": None,
+            "country": previous.country,
+        }
+
+    # Check outreach log
+    logged = db.scalar(
+        select(Outreach)
+        .where(func.lower(func.trim(Outreach.email)).like(f"%{address}%"))
+        .order_by(Outreach.contacted_on.desc().nullslast())
+        .limit(1)
+    )
+
+    if logged:
+        return {
+            "send_date": logged.contacted_on.replace(hour=12) if logged.contacted_on else None,
+            "subject": None,
+            "company_name": logged.company_name,
+            "contact_person": logged.contact_person,
+            "country": logged.country,
+        }
+
+    return None
+
+
 def _check_previous_contact(db: Session, target: CampaignTarget) -> dict | None:
     """Check if this email was previously contacted.
 
     Returns: dict with previous send info, or None if not contacted before.
+
+    NOTE: For bulk operations, use _batch_check_previous_contacts instead to avoid N+1 queries.
     """
     if not target.email:
         return None

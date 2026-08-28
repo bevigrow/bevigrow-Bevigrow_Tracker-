@@ -70,8 +70,8 @@ export function BeviStoqCustomerPurchases() {
 
   const handleAdd = async () => {
     try {
-      if (!formData.customer_name || !formData.product_id || !formData.quantity || !formData.amount) {
-        alert('Fill all required fields')
+      if (!formData.customer_name || !formData.product_id || !formData.quantity) {
+        alert('Fill all required fields (Customer Name, Product, Quantity)')
         return
       }
 
@@ -302,18 +302,17 @@ export function BeviStoqCustomerPurchases() {
             />
           </Field>
 
-          <Field label="Amount (₹) *">
+          <Field label="Amount (₹)">
             <Input
               type="number"
               placeholder="₹0.00"
               value={formData.amount}
               onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
               step="0.01"
-              required
             />
           </Field>
 
-          <Field label="Payment Status *">
+          <Field label="Payment Status">
             <Select
               value={formData.payment_status}
               onChange={(e) => setFormData({ ...formData, payment_status: e.target.value as any })}
@@ -325,7 +324,7 @@ export function BeviStoqCustomerPurchases() {
             />
           </Field>
 
-          <Field label="Payment Method *">
+          <Field label="Payment Method">
             <Select
               value={formData.payment_method}
               onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}

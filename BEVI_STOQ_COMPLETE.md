@@ -84,7 +84,34 @@ Route: `/app/bevi-stoq/stock`
   - Date range filter (from_date, to_date)
 - Route: `/app/bevi-stoq/purchases`
 
-### Stock History
+### Restock History
+- Complete restock tracking organized by category
+- Group view for easy navigation by product category
+- For each restock record shows:
+  * Product name and category
+  * Quantity restocked
+  * **Restock Date** (full date tracking)
+  * Location where restocked
+  * Supplier name
+  * Cost per unit (₹)
+  * Total cost (₹)
+  * Reference/Order ID
+  * Notes
+- **Full CRUD Operations:**
+  - Create new restock records
+  - Edit existing records
+  - Delete with confirmation
+- **Filters:**
+  - By category (dropdown)
+  - By product (dropdown)
+  - By date range (from_date, to_date)
+- Summary statistics:
+  - Total restock count
+  - Total quantity restocked across all products
+  - Total cost invested in restocks
+- Route: `/app/bevi-stoq/restock`
+
+### Stock History/Movement History
 - Complete movement history
 - Movement types: ADD, TRANSFER, RESERVE, FULFILL, RETURN
 - **Date Filtering:**

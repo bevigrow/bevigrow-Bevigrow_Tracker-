@@ -59,6 +59,9 @@ const BeviStoqRequirements = lazy(() =>
 const BeviStoqHistory = lazy(() =>
   import('./pages/BevoGrow/BeviStoqHistory').then((m) => ({ default: m.BeviStoqHistory })),
 )
+const BeviStoqCustomerPurchases = lazy(() =>
+  import('./pages/BevoGrow/BeviStoqCustomerPurchases').then((m) => ({ default: m.BeviStoqCustomerPurchases })),
+)
 
 function RequireAuth({ children, roles }: { children: ReactNode; roles?: Role[] }) {
   const { user, loading } = useAuth()
@@ -147,6 +150,7 @@ export default function App() {
                 <Route path="bevi-stoq/stock" element={<BeviStoqStock />} />
                 <Route path="bevi-stoq/requirements" element={<BeviStoqRequirements />} />
                 <Route path="bevi-stoq/history" element={<BeviStoqHistory />} />
+                <Route path="bevi-stoq/purchases" element={<BeviStoqCustomerPurchases />} />
 
                 {/* the old flat URLs, kept so existing links and bookmarks work */}
                 <Route path="contacts" element={<Navigate to="/app/trade/quotes" replace />} />

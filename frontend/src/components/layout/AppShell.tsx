@@ -67,6 +67,7 @@ const BEVI_STOQ_NAV: NavItem[] = [
   { to: '/app/bevi-stoq/locations', label: 'Locations', icon: Warehouse },
   { to: '/app/bevi-stoq/stock', label: 'Stock Operations', icon: BarChart3 },
   { to: '/app/bevi-stoq/requirements', label: 'Customer Requirements', icon: ShoppingCart },
+  { to: '/app/bevi-stoq/purchases', label: 'Customer Purchases', icon: Users },
   { to: '/app/bevi-stoq/history', label: 'Stock History', icon: History },
 ]
 

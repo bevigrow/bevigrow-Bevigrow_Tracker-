@@ -114,10 +114,6 @@ export function BeviStoqProducts() {
           alert('Location is required when adding initial quantity')
           return
         }
-        if (!formData.initial_supplier) {
-          alert('Supplier is required when adding initial quantity')
-          return
-        }
       }
 
       const payload = {
@@ -151,7 +147,6 @@ export function BeviStoqProducts() {
             location_id: parseInt(formData.initial_location_id),
             quantity: parseFloat(formData.initial_quantity),
             unit: formData.default_unit,
-            supplier: formData.initial_supplier,
             cost_per_unit: formData.initial_cost ? parseFloat(formData.initial_cost) : null
           })
         })
@@ -476,7 +471,6 @@ export function BeviStoqProducts() {
             <>
               <div className="border-t border-caramel/15 pt-4 mt-4">
                 <p className="text-sm font-semibold text-latte mb-3">📦 Initial Quantity</p>
-                <p className="text-xs text-latte/50 mb-3">All fields below are mandatory if you enter quantity</p>
               </div>
 
               <Field label="Quantity *">
@@ -497,15 +491,6 @@ export function BeviStoqProducts() {
                     { value: '', label: 'Select location' },
                     ...locations.map(l => ({ value: l.id.toString(), label: l.name }))
                   ]}
-                  required={formData.initial_quantity !== ''}
-                />
-              </Field>
-
-              <Field label="Supplier *">
-                <Input
-                  placeholder="Supplier name"
-                  value={formData.initial_supplier}
-                  onChange={(e) => setFormData({ ...formData, initial_supplier: e.target.value })}
                   required={formData.initial_quantity !== ''}
                 />
               </Field>

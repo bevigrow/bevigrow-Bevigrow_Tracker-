@@ -6,12 +6,14 @@ import {
   ClipboardList,
   Coffee,
   FileText,
+  History,
   LayoutDashboard,
   LogOut,
   Menu,
   MessageSquare,
   Package,
   Send,
+  ShoppingCart,
   SlidersHorizontal,
   Users,
   Users2,
@@ -63,7 +65,9 @@ const BEVI_STOQ_NAV: NavItem[] = [
   { to: '/app/bevi-stoq/products', label: 'Products', icon: Package },
   { to: '/app/bevi-stoq/categories', label: 'Categories', icon: ClipboardList },
   { to: '/app/bevi-stoq/locations', label: 'Locations', icon: Warehouse },
-  { to: '/app/bevi-stoq/stock', label: 'Stock', icon: BarChart3 },
+  { to: '/app/bevi-stoq/stock', label: 'Stock Operations', icon: BarChart3 },
+  { to: '/app/bevi-stoq/requirements', label: 'Customer Requirements', icon: ShoppingCart },
+  { to: '/app/bevi-stoq/history', label: 'Stock History', icon: History },
 ]
 
 const SHARED_NAV: NavItem[] = [

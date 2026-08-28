@@ -197,7 +197,7 @@ export function Modal({ open, onClose, title, subtitle, children, width = 'max-w
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:p-6">
       <div
         onClick={onClose}
-        className="animate-fade-in fixed inset-0 bg-bean/80 backdrop-blur-sm"
+        className="animate-fade-in fixed inset-0 bg-bean/90"
       />
       <div
         className={cx(

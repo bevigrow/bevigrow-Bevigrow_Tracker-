@@ -81,14 +81,14 @@ export function AppShell() {
     <div className="relative min-h-screen">
       {open && (
         <div
-          className="fixed inset-0 z-30 bg-bean/70 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-30 bg-bean/80 lg:hidden"
           onClick={() => setOpen(false)}
         />
       )}
 
       <aside
         className={cx(
-          'fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-caramel/15 bg-darkroast/95 backdrop-blur-xl transition-transform duration-300 lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-caramel/15 bg-darkroast transition-transform duration-300 lg:translate-x-0',
           open ? 'translate-x-0' : '-translate-x-full',
         )}
       >
@@ -211,7 +211,7 @@ export function AppShell() {
       </aside>
 
       <div className="relative z-10 lg:pl-64">
-        <header className="sticky top-0 z-20 flex items-center gap-4 border-b border-caramel/15 bg-darkroast/80 px-5 py-3.5 backdrop-blur-xl lg:px-8">
+        <header className="sticky top-0 z-20 flex items-center gap-4 border-b border-caramel/15 bg-darkroast px-5 py-3.5 lg:px-8">
           <button
             onClick={() => setOpen(true)}
             className="rounded-lg p-2 text-latte/60 hover:bg-latte/10 lg:hidden"

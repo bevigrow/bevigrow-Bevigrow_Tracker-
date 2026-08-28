@@ -42,7 +42,7 @@ export function AuthShell({
           {subtitle && <p className="mt-2 text-sm text-latte/50">{subtitle}</p>}
         </div>
 
-        <div className="rounded-2xl border border-caramel/20 bg-espresso/60 p-7 shadow-cup backdrop-blur-xl">
+        <div className="rounded-2xl border border-caramel/20 bg-espresso p-7 shadow-cup">
           {children}
         </div>
 

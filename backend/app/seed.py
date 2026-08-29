@@ -253,6 +253,16 @@ def migrate_columns() -> None:
             except Exception as e:
                 log.warning(f"Could not increase movement_type column size (may already be larger): {e}")
 
+        # Drop old location_id column from bs_stock_movements (should use from_location_id and to_location_id)
+        if not settings.is_sqlite:
+            try:
+                existing_cols = _existing_columns(conn, "bs_stock_movements")
+                if "location_id" in existing_cols:
+                    conn.execute(text(f"ALTER TABLE {prefix}bs_stock_movements DROP COLUMN location_id CASCADE"))
+                    log.info("Dropped old bs_stock_movements.location_id column (using from_location_id/to_location_id)")
+            except Exception as e:
+                log.warning(f"Could not drop location_id column (may not exist): {e}")
+
 
 def create_tables() -> None:
     ensure_schema()

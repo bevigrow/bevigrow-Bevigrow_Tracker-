@@ -72,10 +72,14 @@ export function BeviStoqStock() {
         return
       }
 
-      const refId = formData.reference ? parseInt(formData.reference, 10) : null
-      if (formData.reference && isNaN(refId)) {
-        setError('Reference ID must be a valid number')
-        return
+      let refId: number | null = null
+      if (formData.reference) {
+        const parsed = parseInt(formData.reference, 10)
+        if (isNaN(parsed)) {
+          setError('Reference ID must be a valid number')
+          return
+        }
+        refId = parsed
       }
 
       const payload = {

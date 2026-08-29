@@ -138,7 +138,7 @@ export function BeviStoqCustomerPurchases() {
       quantity: purchase.quantity.toString(),
       unit: purchase.unit,
       purchase_date: purchase.purchase_date,
-      payment_status: purchase.payment_status,
+      payment_status: purchase.payment_status as 'pending' | 'paid' | 'overdue',
       payment_method: purchase.payment_method || 'cash',
       amount: purchase.amount.toString(),
       notes: purchase.notes || ''

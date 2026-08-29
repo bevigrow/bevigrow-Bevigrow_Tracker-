@@ -11,6 +11,7 @@ from sqlalchemy import text
 from . import seed
 from .config import settings
 from .database import engine
+from . import bevi_stoq_models
 from .routers import (
     activities,
     ai_routes,

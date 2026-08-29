@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
 import { EmptyState, Spinner } from '../components/ui'
 import { useToast } from '../lib/toast'
-import { UnitSelect } from '../lib/units'
 
 interface Product {
   id: number

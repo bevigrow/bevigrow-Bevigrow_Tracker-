@@ -1,8 +1,11 @@
 """Bevi Stoq inventory management API routes."""
+import logging
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
+
+log = logging.getLogger(__name__)
 
 from ..database import get_db
 from ..deps import get_current_user
@@ -174,24 +177,36 @@ def create_product(
     current_user: User = Depends(get_current_user)
 ):
     """Create product."""
+    # Validate input
+    if not data.name or not data.name.strip():
+        raise HTTPException(status_code=400, detail="Product name cannot be empty")
+
     # Check category exists
     category = db.get(Category, data.category_id)
     if not category:
         raise HTTPException(status_code=404, detail="Category not found")
 
-    # Check duplicate
+    # Check duplicate (case-insensitive, trimmed)
+    product_name_normalized = data.name.strip()
     existing = db.scalar(
         select(Product).where(
-            Product.name == data.name,
+            func.lower(func.trim(Product.name)) == func.lower(product_name_normalized),
             Product.category_id == data.category_id,
             Product.active == True
         )
     )
     if existing:
-        raise HTTPException(status_code=400, detail="Product already exists in this category")
+        log.warning(
+            f"Duplicate product attempted: {product_name_normalized} in category {data.category_id} "
+            f"by user {current_user.id}. Existing product: {existing.name} (ID: {existing.id})"
+        )
+        raise HTTPException(
+            status_code=400,
+            detail=f"Product '{existing.name}' already exists in this category"
+        )
 
     product = Product(
-        name=data.name,
+        name=product_name_normalized,
         category_id=data.category_id,
         default_unit=data.default_unit,
         low_stock_alert_level=data.low_stock_alert_level,
@@ -200,6 +215,7 @@ def create_product(
     db.add(product)
     db.commit()
     db.refresh(product)
+    log.info(f"Product created: {product.name} (ID: {product.id}) in category {data.category_id}")
     return product
 
 
@@ -254,8 +270,30 @@ def update_product(
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
+    # Check for duplicate if name or category is changing
+    if data.name is not None or data.category_id is not None:
+        new_name = data.name if data.name is not None else product.name
+        new_category_id = data.category_id if data.category_id is not None else product.category_id
+
+        # Only check if values actually changed
+        if new_name != product.name or new_category_id != product.category_id:
+            new_name_normalized = new_name.strip() if isinstance(new_name, str) else new_name
+            existing = db.scalar(
+                select(Product).where(
+                    func.lower(func.trim(Product.name)) == func.lower(new_name_normalized),
+                    Product.category_id == new_category_id,
+                    Product.id != product_id,  # Exclude self
+                    Product.active == True
+                )
+            )
+            if existing:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Product '{existing.name}' already exists in this category"
+                )
+
     if data.name is not None:
-        product.name = data.name
+        product.name = data.name.strip()
     if data.category_id is not None:
         product.category_id = data.category_id
     if data.low_stock_alert_level is not None:
@@ -264,6 +302,7 @@ def update_product(
     product.updated_at = utcnow()
     db.commit()
     db.refresh(product)
+    log.info(f"Product updated: {product.name} (ID: {product.id})")
     return product
 
 

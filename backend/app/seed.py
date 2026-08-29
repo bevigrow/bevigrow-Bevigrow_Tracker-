@@ -258,10 +258,43 @@ def migrate_columns() -> None:
             try:
                 existing_cols = _existing_columns(conn, "bs_stock_movements")
                 if "location_id" in existing_cols:
+                    # First, drop any NOT NULL constraints
+                    conn.execute(text(f"ALTER TABLE {prefix}bs_stock_movements ALTER COLUMN location_id DROP NOT NULL"))
+                    # Then drop the column
                     conn.execute(text(f"ALTER TABLE {prefix}bs_stock_movements DROP COLUMN location_id CASCADE"))
                     log.info("Dropped old bs_stock_movements.location_id column (using from_location_id/to_location_id)")
             except Exception as e:
                 log.warning(f"Could not drop location_id column (may not exist): {e}")
+
+        # Final schema validation - ensure all critical columns exist and have correct types
+        if not settings.is_sqlite:
+            try:
+                # Verify bs_products schema
+                prod_cols = _existing_columns(conn, "bs_products")
+                required_prod_cols = {"id", "name", "category_id", "default_unit", "active", "alert_quantity", "created_by_user_id", "created_at"}
+                missing_prod = required_prod_cols - prod_cols
+                if missing_prod:
+                    log.error(f"SCHEMA ERROR: bs_products missing columns: {missing_prod}")
+                else:
+                    log.info("✓ bs_products schema validated")
+
+                # Verify bs_stock_movements schema
+                mov_cols = _existing_columns(conn, "bs_stock_movements")
+                required_mov_cols = {"id", "product_id", "from_location_id", "to_location_id", "movement_type", "quantity", "created_by_user_id", "created_at"}
+                missing_mov = required_mov_cols - mov_cols
+                if missing_mov:
+                    log.error(f"SCHEMA ERROR: bs_stock_movements missing columns: {missing_mov}")
+                else:
+                    log.info("✓ bs_stock_movements schema validated")
+
+                # Verify no unwanted columns exist
+                if "location_id" in mov_cols:
+                    log.error("SCHEMA ERROR: bs_stock_movements still has location_id column (should be from_location_id/to_location_id)")
+                else:
+                    log.info("✓ bs_stock_movements location_id removed")
+
+            except Exception as e:
+                log.error(f"Schema validation error: {e}")
 
 
 def create_tables() -> None:

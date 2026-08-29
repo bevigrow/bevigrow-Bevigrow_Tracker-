@@ -19,9 +19,15 @@ interface Category {
   name: string
 }
 
+interface Location {
+  id: number
+  name: string
+}
+
 export function BeviStoqProducts() {
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
+  const [locations, setLocations] = useState<Location[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
@@ -31,6 +37,11 @@ export function BeviStoqProducts() {
     default_unit: '',
     low_stock_threshold: 0,
   })
+  const [initialStock, setInitialStock] = useState({
+    quantity: '',
+    unit: '',
+    location_id: 0,
+  })
   const [editingId, setEditingId] = useState<number | null>(null)
 
   useEffect(() => {
@@ -39,12 +50,14 @@ export function BeviStoqProducts() {
 
   const fetchData = async () => {
     try {
-      const [productsRes, categoriesRes] = await Promise.all([
+      const [productsRes, categoriesRes, locationsRes] = await Promise.all([
         api.get<Product[]>('/api/bevi-stoq/products'),
         api.get<Category[]>('/api/bevi-stoq/categories'),
+        api.get<Location[]>('/api/bevi-stoq/locations'),
       ])
       setProducts(productsRes)
       setCategories(categoriesRes)
+      setLocations(locationsRes)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data')
     } finally {
@@ -55,12 +68,29 @@ export function BeviStoqProducts() {
   const handleSubmit = async (e: any) => {
     e.preventDefault()
     try {
+      let productId = editingId
       if (editingId) {
         await api.put(`/api/bevi-stoq/products/${editingId}`, formData)
       } else {
-        await api.post('/api/bevi-stoq/products', formData)
+        const newProduct = await api.post<Product>('/api/bevi-stoq/products', formData)
+        productId = newProduct.id
       }
+
+      // Create initial inventory if provided and this is a new product
+      if (!editingId && productId && initialStock.quantity && initialStock.location_id) {
+        await api.post('/api/bevi-stoq/stock-movements', {
+          product_id: productId,
+          to_location_id: initialStock.location_id,
+          movement_type: 'receipt',
+          quantity: parseFloat(initialStock.quantity),
+          unit: initialStock.unit || formData.default_unit,
+          reference_id: 0,
+          notes: 'Initial stock',
+        })
+      }
+
       setFormData({ name: '', category_id: 0, default_unit: '', low_stock_threshold: 0 })
+      setInitialStock({ quantity: '', unit: '', location_id: 0 })
       setEditingId(null)
       setShowForm(false)
       await fetchData()
@@ -171,6 +201,54 @@ export function BeviStoqProducts() {
                 />
               </div>
             </div>
+
+            {!editingId && (
+              <>
+                <hr className="border-caramel/30" />
+                <div>
+                  <h3 className="mb-4 font-semibold text-latte">Initial Stock (Optional)</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-latte">Quantity *</label>
+                      <input
+                        type="number"
+                        value={initialStock.quantity}
+                        onChange={(e) => setInitialStock({ ...initialStock, quantity: e.target.value })}
+                        className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte placeholder-latte/40 focus:outline-none focus:ring-2 focus:ring-gold/50"
+                        placeholder="Enter quantity"
+                        step="0.01"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-latte">Unit *</label>
+                      <input
+                        type="text"
+                        value={initialStock.unit}
+                        onChange={(e) => setInitialStock({ ...initialStock, unit: e.target.value })}
+                        className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte placeholder-latte/40 focus:outline-none focus:ring-2 focus:ring-gold/50"
+                        placeholder={formData.default_unit || 'e.g., kg'}
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-latte">Location *</label>
+                      <select
+                        value={initialStock.location_id}
+                        onChange={(e) => setInitialStock({ ...initialStock, location_id: parseInt(e.target.value) })}
+                        className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
+                      >
+                        <option value={0}>Select location</option>
+                        {locations.map((loc) => (
+                          <option key={loc.id} value={loc.id}>
+                            {loc.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
             <div className="flex gap-3">
               <button
                 type="submit"

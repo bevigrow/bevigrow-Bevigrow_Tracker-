@@ -81,7 +81,7 @@ class Product(Base):
     category: Mapped["Category"] = relationship(back_populates="products")
 
     default_unit: Mapped[str] = mapped_column(String(50), nullable=False)
-    low_stock_alert_level: Mapped[float] = mapped_column("low_stock_alert_level", Float, default=0)
+    alert_quantity: Mapped[float | None] = mapped_column("alert_quantity", Float, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

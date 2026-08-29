@@ -11,7 +11,7 @@ interface Product {
   name: string
   category_id: number
   default_unit: string
-  low_stock_alert_level: number
+  alert_quantity: number | null
   active: boolean
   created_at: string
 }
@@ -38,7 +38,7 @@ export function BeviStoqProducts() {
     name: '',
     category_id: 0,
     default_unit: '',
-    low_stock_alert_level: 0,
+    alert_quantity: '',
   })
   const [initialStock, setInitialStock] = useState({
     quantity: '',
@@ -75,20 +75,27 @@ export function BeviStoqProducts() {
         name: formData.name,
         category_id: formData.category_id,
         default_unit: formData.default_unit,
-        low_stock_alert_level: formData.low_stock_alert_level,
+        alert_quantity: formData.alert_quantity,
         types: {
           name: typeof formData.name,
           category_id: typeof formData.category_id,
           default_unit: typeof formData.default_unit,
-          low_stock_alert_level: typeof formData.low_stock_alert_level,
+          alert_quantity: typeof formData.alert_quantity,
         }
       })
 
+      const payload = {
+        name: formData.name,
+        category_id: formData.category_id,
+        default_unit: formData.default_unit,
+        alert_quantity: formData.alert_quantity ? parseFloat(formData.alert_quantity) : null,
+      }
+
       let productId = editingId
       if (editingId) {
-        await api.put(`/api/bevi-stoq/products/${editingId}`, formData)
+        await api.put(`/api/bevi-stoq/products/${editingId}`, payload)
       } else {
-        const newProduct = await api.post<Product>('/api/bevi-stoq/products', formData)
+        const newProduct = await api.post<Product>('/api/bevi-stoq/products', payload)
         productId = newProduct.id
       }
 
@@ -105,7 +112,7 @@ export function BeviStoqProducts() {
         })
       }
 
-      setFormData({ name: '', category_id: 0, default_unit: '', low_stock_alert_level: 0 })
+      setFormData({ name: '', category_id: 0, default_unit: '', alert_quantity: '' })
       setInitialStock({ quantity: '', unit: '', location_id: 0 })
       setEditingId(null)
       setShowForm(false)
@@ -134,7 +141,7 @@ export function BeviStoqProducts() {
       name: product.name,
       category_id: product.category_id,
       default_unit: product.default_unit,
-      low_stock_alert_level: product.low_stock_alert_level,
+      alert_quantity: product.alert_quantity,
     })
     setEditingId(product.id)
     setShowForm(true)
@@ -154,7 +161,7 @@ export function BeviStoqProducts() {
         </div>
         <button
           onClick={() => {
-            setFormData({ name: '', category_id: 0, default_unit: '', low_stock_alert_level: 0 })
+            setFormData({ name: '', category_id: 0, default_unit: '', alert_quantity: '' })
             setEditingId(null)
             setShowForm(!showForm)
           }}
@@ -203,20 +210,16 @@ export function BeviStoqProducts() {
                 required={true}
               />
               <div>
-                <label className="block text-sm font-medium text-latte">Low Stock Threshold</label>
+                <label className="block text-sm font-medium text-latte">Alert Quantity (Optional)</label>
+                <p className="text-xs text-latte/50 mb-1">Set a custom quantity to receive a low-stock alert. Leave empty if you don't want an alert for this product.</p>
                 <input
                   type="number"
-                  value={formData.low_stock_alert_level}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    const num = val === '' ? 0 : parseFloat(val);
-                    setFormData({ ...formData, low_stock_alert_level: isNaN(num) ? 0 : num })
-                  }}
-                  className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
-                  placeholder="0"
+                  value={formData.alert_quantity}
+                  onChange={(e) => setFormData({ ...formData, alert_quantity: e.target.value })}
+                  className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte placeholder-latte/40 focus:outline-none focus:ring-2 focus:ring-gold/50"
+                  placeholder="Leave empty for no alert"
                   step="0.01"
                   min="0"
-                  required
                 />
               </div>
             </div>
@@ -304,7 +307,7 @@ export function BeviStoqProducts() {
                   <td className="px-4 py-3 text-sm text-latte">{product.name}</td>
                   <td className="px-4 py-3 text-sm text-latte/70">{getCategoryName(product.category_id)}</td>
                   <td className="px-4 py-3 text-sm text-latte/70">{product.default_unit}</td>
-                  <td className="px-4 py-3 text-sm text-latte/70">{product.low_stock_alert_level}</td>
+                  <td className="px-4 py-3 text-sm text-latte/70">{product.alert_quantity}</td>
                   <td className="px-4 py-3 text-sm">
                     <span className="text-xs text-latte/50">{product.active ? '✓ Active' : '✗ Inactive'}</span>
                   </td>

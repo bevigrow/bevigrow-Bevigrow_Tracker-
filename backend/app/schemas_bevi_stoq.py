@@ -29,7 +29,7 @@ class CategoryOut(BaseModel):
 # ================================================================ PRODUCTS
 class ProductCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
-    category_id: int
+    category_id: int | None = None
     default_unit: str = Field(..., min_length=1, max_length=50)
     alert_quantity: float | None = Field(None, ge=0)
 
@@ -45,7 +45,7 @@ class ProductUpdate(BaseModel):
 class ProductOut(BaseModel):
     id: int
     name: str
-    category_id: int
+    category_id: int | None
     default_unit: str
     alert_quantity: float | None
     active: bool

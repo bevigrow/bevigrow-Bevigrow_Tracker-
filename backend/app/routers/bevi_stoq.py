@@ -142,8 +142,8 @@ def create_product(data: ProductCreate, db: Session = Depends(get_db), user: Use
     try:
         log.info(f"CREATE PRODUCT: Received request: name={data.name}, category_id={data.category_id}, unit={data.default_unit}, alert_quantity={data.alert_quantity}, user={user.id}")
 
-        # Validate category exists
-        if data.category_id:
+        # Validate category exists (if provided)
+        if data.category_id is not None:
             category = db.get(Category, data.category_id)
             if not category:
                 log.warning(f"CREATE PRODUCT: Invalid category_id {data.category_id}")

@@ -77,8 +77,8 @@ class Product(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
-    category_id: Mapped[int] = mapped_column(ForeignKey("bevigrow.bs_categories.id"), index=True)
-    category: Mapped["Category"] = relationship(back_populates="products")
+    category_id: Mapped[int | None] = mapped_column(ForeignKey("bevigrow.bs_categories.id"), index=True)
+    category: Mapped["Category | None"] = relationship(back_populates="products")
 
     default_unit: Mapped[str] = mapped_column(String(50), nullable=False)
     alert_quantity: Mapped[float | None] = mapped_column("alert_quantity", Float, nullable=True)

@@ -9,16 +9,11 @@ import { UnitSelect } from '../lib/units'
 interface Product {
   id: number
   name: string
-  category_id: number
+  category_id: number | null
   default_unit: string
   alert_quantity: number | null
   active: boolean
   created_at: string
-}
-
-interface Category {
-  id: number
-  name: string
 }
 
 interface Location {
@@ -26,24 +21,21 @@ interface Location {
   name: string
 }
 
+const UNITS = ['g', 'kg', 'pcs']
+
 export function BeviStoqProducts() {
   const toast = useToast()
   const [products, setProducts] = useState<Product[]>([])
-  const [categories, setCategories] = useState<Category[]>([])
   const [locations, setLocations] = useState<Location[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
-    category_id: 0,
     default_unit: '',
-    alert_quantity: '',
-  })
-  const [initialStock, setInitialStock] = useState({
-    quantity: '',
-    unit: '',
+    stock_quantity: '',
     location_id: 0,
+    notes: '',
   })
   const [editingId, setEditingId] = useState<number | null>(null)
 
@@ -53,13 +45,11 @@ export function BeviStoqProducts() {
 
   const fetchData = async () => {
     try {
-      const [productsRes, categoriesRes, locationsRes] = await Promise.all([
+      const [productsRes, locationsRes] = await Promise.all([
         api.get<Product[]>('/api/bevi-stoq/products'),
-        api.get<Category[]>('/api/bevi-stoq/categories'),
         api.get<Location[]>('/api/bevi-stoq/locations'),
       ])
       setProducts(productsRes)
-      setCategories(categoriesRes)
       setLocations(locationsRes)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data')
@@ -71,34 +61,11 @@ export function BeviStoqProducts() {
   const handleSubmit = async (e: any) => {
     e.preventDefault()
     try {
-      console.log('FORM SUBMIT: Sending product data:', {
-        name: formData.name,
-        category_id: formData.category_id,
-        default_unit: formData.default_unit,
-        alert_quantity: formData.alert_quantity,
-        types: {
-          name: typeof formData.name,
-          category_id: typeof formData.category_id,
-          default_unit: typeof formData.default_unit,
-          alert_quantity: typeof formData.alert_quantity,
-        }
-      })
-
-      // Validate alert_quantity if provided
-      let alertQuantityValue: number | null = null
-      if (formData.alert_quantity.trim()) {
-        const parsed = parseFloat(formData.alert_quantity)
-        if (isNaN(parsed) || parsed < 0) {
-          throw new Error('Alert Quantity must be a positive number or empty')
-        }
-        alertQuantityValue = parsed
-      }
-
       const payload = {
         name: formData.name,
-        category_id: formData.category_id,
+        category_id: null,
         default_unit: formData.default_unit,
-        alert_quantity: alertQuantityValue,
+        alert_quantity: null,
       }
 
       let productId = editingId
@@ -107,23 +74,22 @@ export function BeviStoqProducts() {
       } else {
         const newProduct = await api.post<Product>('/api/bevi-stoq/products', payload)
         productId = newProduct.id
+
+        // Create stock movement if quantity and location provided
+        if (productId && formData.stock_quantity && formData.location_id) {
+          await api.post('/api/bevi-stoq/stock-movements', {
+            product_id: productId,
+            to_location_id: formData.location_id,
+            movement_type: 'opening_stock',
+            quantity: parseFloat(formData.stock_quantity),
+            unit: formData.default_unit,
+            reference_id: 0,
+            notes: formData.notes || 'Initial stock',
+          })
+        }
       }
 
-      // Create initial inventory for new products if provided
-      if (!editingId && productId && initialStock.quantity && initialStock.location_id) {
-        await api.post('/api/bevi-stoq/stock-movements', {
-          product_id: productId,
-          to_location_id: initialStock.location_id,
-          movement_type: 'opening_stock',
-          quantity: parseFloat(initialStock.quantity),
-          unit: initialStock.unit || formData.default_unit,
-          reference_id: 0,
-          notes: 'Opening stock',
-        })
-      }
-
-      setFormData({ name: '', category_id: 0, default_unit: '', alert_quantity: '' })
-      setInitialStock({ quantity: '', unit: '', location_id: 0 })
+      setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, notes: '' })
       setEditingId(null)
       setShowForm(false)
       setError(null)
@@ -149,15 +115,14 @@ export function BeviStoqProducts() {
   const handleEdit = (product: Product) => {
     setFormData({
       name: product.name,
-      category_id: product.category_id,
       default_unit: product.default_unit,
-      alert_quantity: product.alert_quantity ? String(product.alert_quantity) : '',
+      stock_quantity: '',
+      location_id: 0,
+      notes: '',
     })
     setEditingId(product.id)
     setShowForm(true)
   }
-
-  const getCategoryName = (id: number) => categories.find((c) => c.id === id)?.name || 'Unknown'
 
   if (loading) return <Spinner label="Loading products…" />
   if (error) return <EmptyState emoji="⚠️" title="Error" hint={error} />
@@ -167,11 +132,11 @@ export function BeviStoqProducts() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-latte">Products</h1>
-          <p className="mt-1 text-sm text-latte/60">Manage inventory items with custom thresholds</p>
+          <p className="mt-1 text-sm text-latte/60">Manage inventory items</p>
         </div>
         <button
           onClick={() => {
-            setFormData({ name: '', category_id: 0, default_unit: '', alert_quantity: '' })
+            setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, notes: '' })
             setEditingId(null)
             setShowForm(!showForm)
           }}
@@ -187,7 +152,7 @@ export function BeviStoqProducts() {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-latte">Product Name *</label>
+                <label className="block text-sm font-medium text-latte">Product Name</label>
                 <input
                   type="text"
                   value={formData.name}
@@ -198,82 +163,61 @@ export function BeviStoqProducts() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-latte">Category *</label>
-                <select
-                  value={formData.category_id}
-                  onChange={(e) => setFormData({ ...formData, category_id: parseInt(e.target.value) })}
-                  className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
-                  required
-                >
-                  <option value={0}>Select category</option>
-                  {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <UnitSelect
-                value={formData.default_unit}
-                onChange={(unit) => setFormData({ ...formData, default_unit: unit })}
-                label="Unit"
-                required={true}
-              />
-              <div>
-                <label className="block text-sm font-medium text-latte">Alert Quantity (Optional)</label>
-                <p className="text-xs text-latte/50 mb-1">Set a custom quantity to receive a low-stock alert. Leave empty if you don't want an alert for this product.</p>
+                <label className="block text-sm font-medium text-latte">Stock Quantity</label>
                 <input
                   type="text"
-                  value={formData.alert_quantity}
-                  onChange={(e) => setFormData({ ...formData, alert_quantity: e.target.value })}
+                  value={formData.stock_quantity}
+                  onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })}
                   className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte placeholder-latte/40 focus:outline-none focus:ring-2 focus:ring-gold/50"
-                  placeholder="Leave empty for no alert"
+                  placeholder="e.g., 1000"
                 />
               </div>
             </div>
 
-            {!editingId && (
-              <>
-                <hr className="border-caramel/30" />
-                <div>
-                  <h3 className="mb-4 font-semibold text-latte">Initial Stock</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-latte">Quantity</label>
-                      <input
-                        type="number"
-                        value={initialStock.quantity}
-                        onChange={(e) => setInitialStock({ ...initialStock, quantity: e.target.value })}
-                        className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte placeholder-latte/40 focus:outline-none focus:ring-2 focus:ring-gold/50"
-                        placeholder="Enter quantity"
-                        step="0.01"
-                      />
-                    </div>
-                    <UnitSelect
-                      value={initialStock.unit}
-                      onChange={(unit) => setInitialStock({ ...initialStock, unit })}
-                      label="Unit"
-                      required={false}
-                    />
-                    <div className="col-span-2">
-                      <label className="block text-sm font-medium text-latte">Location</label>
-                      <select
-                        value={initialStock.location_id}
-                        onChange={(e) => setInitialStock({ ...initialStock, location_id: parseInt(e.target.value) })}
-                        className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
-                      >
-                        <option value={0}>Select location</option>
-                        {locations.map((loc) => (
-                          <option key={loc.id} value={loc.id}>
-                            {loc.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-latte">Unit</label>
+                <select
+                  value={formData.default_unit}
+                  onChange={(e) => setFormData({ ...formData, default_unit: e.target.value })}
+                  className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
+                  required
+                >
+                  <option value="">Select unit</option>
+                  {UNITS.map((unit) => (
+                    <option key={unit} value={unit}>
+                      {unit}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-latte">Location</label>
+                <select
+                  value={formData.location_id}
+                  onChange={(e) => setFormData({ ...formData, location_id: parseInt(e.target.value) })}
+                  className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
+                >
+                  <option value={0}>Select location</option>
+                  {locations.map((loc) => (
+                    <option key={loc.id} value={loc.id}>
+                      {loc.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-latte">Note (optional)</label>
+              <input
+                type="text"
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte placeholder-latte/40 focus:outline-none focus:ring-2 focus:ring-gold/50"
+                placeholder="Add notes about this product"
+              />
+            </div>
 
             <div className="flex gap-3">
               <button
@@ -302,9 +246,7 @@ export function BeviStoqProducts() {
             <thead>
               <tr className="border-b border-caramel/15 bg-espresso/60">
                 <th className="px-4 py-3 text-left text-sm font-semibold text-latte">Product</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-latte">Category</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-latte">Unit</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-latte">Threshold</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-latte">Status</th>
                 <th className="px-4 py-3 text-right text-sm font-semibold text-latte">Actions</th>
               </tr>
@@ -313,9 +255,7 @@ export function BeviStoqProducts() {
               {products.map((product) => (
                 <tr key={product.id} className="border-b border-caramel/15 hover:bg-espresso/40">
                   <td className="px-4 py-3 text-sm text-latte">{product.name}</td>
-                  <td className="px-4 py-3 text-sm text-latte/70">{getCategoryName(product.category_id)}</td>
                   <td className="px-4 py-3 text-sm text-latte/70">{product.default_unit}</td>
-                  <td className="px-4 py-3 text-sm text-latte/70">{product.alert_quantity}</td>
                   <td className="px-4 py-3 text-sm">
                     <span className="text-xs text-latte/50">{product.active ? '✓ Active' : '✗ Inactive'}</span>
                   </td>

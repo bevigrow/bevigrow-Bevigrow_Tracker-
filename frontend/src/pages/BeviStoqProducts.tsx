@@ -78,12 +78,16 @@ export function BeviStoqProducts() {
         productId = newProduct.id
 
         // Create stock movement if quantity and location provided
-        if (productId && formData.stock_quantity && formData.location_id) {
+        if (productId && formData.stock_quantity && formData.location_id > 0) {
+          const qty = parseFloat(formData.stock_quantity)
+          if (isNaN(qty) || qty <= 0) {
+            throw new Error('Stock quantity must be a valid positive number')
+          }
           await api.post('/api/bevi-stoq/stock-movements', {
             product_id: productId,
             to_location_id: formData.location_id,
             movement_type: 'opening_stock',
-            quantity: parseFloat(formData.stock_quantity),
+            quantity: qty,
             unit: formData.default_unit,
             reference_id: null,
             notes: formData.notes || 'Initial stock',

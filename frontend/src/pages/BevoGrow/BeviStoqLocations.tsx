@@ -20,6 +20,7 @@ export function BeviStoqLocations() {
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
 
   const [formData, setFormData] = useState({ name: '', description: '' })
+  const [error, setError] = useState<string>('')
 
   useEffect(() => {
     load()
@@ -39,6 +40,12 @@ export function BeviStoqLocations() {
 
   const handleSave = async () => {
     try {
+      setError('')
+      if (!formData.name || !formData.name.trim()) {
+        setError('Location Name is required')
+        return
+      }
+
       const payload = { name: formData.name, description: formData.description }
 
       if (isEditing && editingId) {
@@ -59,7 +66,7 @@ export function BeviStoqLocations() {
       setEditingId(null)
       load()
     } catch (error) {
-      console.error('Error:', error)
+      setError(`Error: ${error instanceof Error ? error.message : 'Failed to save location'}`)
     }
   }
 
@@ -130,6 +137,11 @@ export function BeviStoqLocations() {
           }}
           className="space-y-4"
         >
+          {error && (
+            <div className="rounded-lg bg-red-500/20 px-3 py-2 text-sm text-red-300">
+              {error}
+            </div>
+          )}
           <Field label="Location Name *">
             <Input
               value={formData.name}

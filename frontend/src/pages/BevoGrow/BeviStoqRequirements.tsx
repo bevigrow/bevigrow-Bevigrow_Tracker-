@@ -36,6 +36,7 @@ export function BeviStoqRequirements() {
     customer_name: '',
     items: [] as Array<{ product_id: string; quantity: string; unit: string }>
   })
+  const [error, setError] = useState<string>('')
 
   useEffect(() => {
     load()
@@ -57,15 +58,26 @@ export function BeviStoqRequirements() {
 
   const handleCreate = async () => {
     try {
+      setError('')
+      if (!formData.customer_name || !formData.customer_name.trim()) {
+        setError('Customer Name is required')
+        return
+      }
       if (formData.items.length === 0) {
-        alert('Add at least one product')
+        setError('Add at least one product')
+        return
+      }
+
+      const invalidItems = formData.items.filter(item => !item.product_id || !item.quantity)
+      if (invalidItems.length > 0) {
+        setError('All items must have Product and Quantity')
         return
       }
 
       const payload = {
         customer_name: formData.customer_name,
         items: formData.items.map(item => ({
-          product_id: parseInt(item.product_id),
+          product_id: parseInt(item.product_id, 10),
           quantity_required: parseFloat(item.quantity),
           unit: item.unit
         }))
@@ -80,7 +92,7 @@ export function BeviStoqRequirements() {
       setIsCreating(false)
       load()
     } catch (error) {
-      console.error('Error:', error)
+      setError(`Error: ${error instanceof Error ? error.message : 'Failed to create requirement'}`)
     }
   }
 
@@ -154,15 +166,18 @@ export function BeviStoqRequirements() {
               <div className="border-t border-caramel/15 pt-3 pb-3">
                 <p className="text-sm font-medium text-latte/80 mb-2">Items:</p>
                 <div className="space-y-2">
-                  {req.items.map((item) => (
-                    <div key={item.id} className="text-sm text-latte/70 flex justify-between">
-                      <span>Product #{item.product_id}</span>
-                      <span>
-                        {item.quantity_required} {item.unit}
-                        {item.quantity_reserved > 0 && ` (Reserved: ${item.quantity_reserved})`}
-                      </span>
-                    </div>
-                  ))}
+                  {req.items.map((item) => {
+                    const product = products.find(p => p.id === item.product_id)
+                    return (
+                      <div key={item.id} className="text-sm text-latte/70 flex justify-between">
+                        <span>{product?.name || `Product #${item.product_id}`}</span>
+                        <span>
+                          {item.quantity_required} {item.unit}
+                          {item.quantity_reserved > 0 && ` (Reserved: ${item.quantity_reserved})`}
+                        </span>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
 
@@ -209,6 +224,11 @@ export function BeviStoqRequirements() {
           }}
           className="space-y-4"
         >
+          {error && (
+            <div className="rounded-lg bg-red-500/20 px-3 py-2 text-sm text-red-300">
+              {error}
+            </div>
+          )}
           <Field label="Customer Name *">
             <Input
               value={formData.customer_name}
@@ -251,7 +271,12 @@ export function BeviStoqRequirements() {
                     options={[
                       { value: 'kg', label: 'kg' },
                       { value: 'g', label: 'g' },
-                      { value: 'pcs', label: 'pcs' }
+                      { value: 'tonne', label: 'tonne' },
+                      { value: 'pcs', label: 'pcs' },
+                      { value: 'litre', label: 'litre' },
+                      { value: 'ml', label: 'ml' },
+                      { value: 'box', label: 'box' },
+                      { value: 'bag', label: 'bag' }
                     ]}
                   />
                   <Button

@@ -69,6 +69,7 @@ export function BeviStoqRestockHistory() {
     reference_id: '',
     notes: ''
   })
+  const [error, setError] = useState<string>('')
 
   useEffect(() => {
     load()
@@ -115,14 +116,15 @@ export function BeviStoqRestockHistory() {
 
   const handleSave = async () => {
     try {
+      setError('')
       if (!formData.product_id || !formData.location_id || !formData.quantity_restocked) {
-        alert('Fill all required fields')
+        setError('Fill all required fields (Product, Location, Quantity)')
         return
       }
 
       const payload = {
-        product_id: parseInt(formData.product_id),
-        location_id: parseInt(formData.location_id),
+        product_id: parseInt(formData.product_id, 10),
+        location_id: parseInt(formData.location_id, 10),
         quantity_restocked: parseFloat(formData.quantity_restocked),
         unit: formData.unit,
         restock_date: formData.restock_date,
@@ -153,9 +155,10 @@ export function BeviStoqRestockHistory() {
       setIsAdding(false)
       setIsEditing(false)
       setEditingId(null)
+      setError('')
       await loadRestocks()
     } catch (error) {
-      console.error('Error:', error)
+      setError(`Error: ${error instanceof Error ? error.message : 'Failed to save restock'}`)
     }
   }
 
@@ -387,6 +390,11 @@ export function BeviStoqRestockHistory() {
           }}
           className="space-y-4"
         >
+          {error && (
+            <div className="rounded-lg bg-red-500/20 px-3 py-2 text-sm text-red-300">
+              {error}
+            </div>
+          )}
           <Field label="Product *">
             <Select
               value={formData.product_id}
@@ -422,8 +430,10 @@ export function BeviStoqRestockHistory() {
               options={[
                 { value: 'kg', label: 'kg' },
                 { value: 'g', label: 'g' },
+                { value: 'tonne', label: 'tonne' },
                 { value: 'pcs', label: 'pcs' },
                 { value: 'litre', label: 'litre' },
+                { value: 'ml', label: 'ml' },
                 { value: 'box', label: 'box' },
                 { value: 'bag', label: 'bag' }
               ]}

@@ -32,6 +32,7 @@ export function BeviStoqStock() {
     cost_per_unit: '',
     total_cost: ''
   })
+  const [error, setError] = useState<string>('')
 
   const [transferData, setTransferData] = useState({
     product_id: '',
@@ -65,17 +66,24 @@ export function BeviStoqStock() {
 
   const handleAddStock = async () => {
     try {
+      setError('')
       if (!formData.product_id || !formData.location_id || !formData.quantity) {
-        alert('Fill all required fields')
+        setError('Fill all required fields (Product, Location, Quantity)')
+        return
+      }
+
+      const refId = formData.reference ? parseInt(formData.reference, 10) : null
+      if (formData.reference && isNaN(refId)) {
+        setError('Reference ID must be a valid number')
         return
       }
 
       const payload = {
-        product_id: parseInt(formData.product_id),
-        location_id: parseInt(formData.location_id),
+        product_id: parseInt(formData.product_id, 10),
+        location_id: parseInt(formData.location_id, 10),
         quantity: parseFloat(formData.quantity),
         unit: formData.unit,
-        reference_id: formData.reference ? parseInt(formData.reference) : null,
+        reference_id: refId,
         notes: formData.notes,
         restock_date: formData.restock_date || null,
         supplier: formData.supplier || null,
@@ -95,21 +103,27 @@ export function BeviStoqStock() {
       setIsAdding(false)
       load()
     } catch (error) {
-      console.error('Error:', error)
+      setError(`Error: ${error instanceof Error ? error.message : 'Failed to add stock'}`)
     }
   }
 
   const handleTransferStock = async () => {
     try {
+      setError('')
       if (!transferData.product_id || !transferData.from_location_id || !transferData.to_location_id || !transferData.quantity) {
-        alert('Fill all required fields')
+        setError('Fill all required fields (Product, From/To Location, Quantity)')
+        return
+      }
+
+      if (transferData.from_location_id === transferData.to_location_id) {
+        setError('From and To locations must be different')
         return
       }
 
       const payload = {
-        product_id: parseInt(transferData.product_id),
-        from_location_id: parseInt(transferData.from_location_id),
-        to_location_id: parseInt(transferData.to_location_id),
+        product_id: parseInt(transferData.product_id, 10),
+        from_location_id: parseInt(transferData.from_location_id, 10),
+        to_location_id: parseInt(transferData.to_location_id, 10),
         quantity: parseFloat(transferData.quantity),
         unit: transferData.unit,
         transfer_date: transferData.transfer_date || null,
@@ -128,7 +142,7 @@ export function BeviStoqStock() {
       setIsAdding(false)
       load()
     } catch (error) {
-      console.error('Error:', error)
+      setError(`Error: ${error instanceof Error ? error.message : 'Failed to transfer stock'}`)
     }
   }
 
@@ -199,6 +213,11 @@ export function BeviStoqStock() {
             }}
             className="space-y-4"
           >
+            {error && (
+              <div className="rounded-lg bg-red-500/20 px-3 py-2 text-sm text-red-300">
+                {error}
+              </div>
+            )}
             <Field label="Product *">
               <Select
                 value={formData.product_id}
@@ -234,8 +253,12 @@ export function BeviStoqStock() {
                 options={[
                   { value: 'kg', label: 'kg' },
                   { value: 'g', label: 'g' },
+                  { value: 'tonne', label: 'tonne' },
                   { value: 'pcs', label: 'pcs' },
-                  { value: 'litre', label: 'litre' }
+                  { value: 'litre', label: 'litre' },
+                  { value: 'ml', label: 'ml' },
+                  { value: 'box', label: 'box' },
+                  { value: 'bag', label: 'bag' }
                 ]}
               />
             </Field>
@@ -310,6 +333,11 @@ export function BeviStoqStock() {
             }}
             className="space-y-4"
           >
+            {error && (
+              <div className="rounded-lg bg-red-500/20 px-3 py-2 text-sm text-red-300">
+                {error}
+              </div>
+            )}
             <Field label="Product *">
               <Select
                 value={transferData.product_id}
@@ -354,8 +382,12 @@ export function BeviStoqStock() {
                 options={[
                   { value: 'kg', label: 'kg' },
                   { value: 'g', label: 'g' },
+                  { value: 'tonne', label: 'tonne' },
                   { value: 'pcs', label: 'pcs' },
-                  { value: 'litre', label: 'litre' }
+                  { value: 'litre', label: 'litre' },
+                  { value: 'ml', label: 'ml' },
+                  { value: 'box', label: 'box' },
+                  { value: 'bag', label: 'bag' }
                 ]}
               />
             </Field>

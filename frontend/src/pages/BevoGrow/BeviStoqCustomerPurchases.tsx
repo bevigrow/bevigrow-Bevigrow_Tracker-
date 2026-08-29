@@ -1,6 +1,7 @@
+import { Trash2, Edit2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { request } from '../../lib/api'
-import { Button, Card, Input, Field, Modal, Select, Spinner, EmptyState, cx } from '../../components/ui'
+import { Button, Card, Input, Field, Modal, Select, Spinner, EmptyState, ConfirmDialog, cx } from '../../components/ui'
 
 interface CustomerPurchase {
   id: number
@@ -41,6 +42,10 @@ export function BeviStoqCustomerPurchases() {
     amount: '',
     notes: ''
   })
+  const [isEditing, setIsEditing] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [error, setError] = useState<string>('')
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
 
   useEffect(() => {
     load()
@@ -70,8 +75,21 @@ export function BeviStoqCustomerPurchases() {
 
   const handleAdd = async () => {
     try {
-      if (!formData.customer_name || !formData.product_id || !formData.quantity) {
-        alert('Fill all required fields (Customer Name, Product, Quantity)')
+      setError('')
+      if (!formData.customer_name || !formData.customer_name.trim()) {
+        setError('Customer Name is required')
+        return
+      }
+      if (!formData.product_id) {
+        setError('Product is required')
+        return
+      }
+      if (!formData.quantity) {
+        setError('Quantity is required')
+        return
+      }
+      if (!formData.amount || isNaN(parseFloat(formData.amount))) {
+        setError('Valid Amount is required')
         return
       }
 
@@ -87,10 +105,17 @@ export function BeviStoqCustomerPurchases() {
         notes: formData.notes
       }
 
-      await request('/api/bevi-stoq/customer-purchases', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      })
+      if (isEditing && editingId) {
+        await request(`/api/bevi-stoq/customer-purchases/${editingId}`, {
+          method: 'PUT',
+          body: JSON.stringify(payload)
+        })
+      } else {
+        await request('/api/bevi-stoq/customer-purchases', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        })
+      }
 
       setFormData({
         customer_name: '', product_id: '', quantity: '', unit: 'kg',
@@ -98,9 +123,38 @@ export function BeviStoqCustomerPurchases() {
         payment_status: 'pending', payment_method: 'cash', amount: '', notes: ''
       })
       setIsAdding(false)
+      setIsEditing(false)
+      setEditingId(null)
       load()
     } catch (error) {
-      console.error('Error:', error)
+      setError(`Error: ${error instanceof Error ? error.message : 'Failed to save purchase'}`)
+    }
+  }
+
+  const handleEdit = (purchase: CustomerPurchase) => {
+    setFormData({
+      customer_name: purchase.customer_name,
+      product_id: purchase.id?.toString() || '',
+      quantity: purchase.quantity.toString(),
+      unit: purchase.unit,
+      purchase_date: purchase.purchase_date,
+      payment_status: purchase.payment_status,
+      payment_method: purchase.payment_method || 'cash',
+      amount: purchase.amount.toString(),
+      notes: purchase.notes || ''
+    })
+    setEditingId(purchase.id)
+    setIsEditing(true)
+    setIsAdding(true)
+  }
+
+  const handleDelete = async (id: number) => {
+    try {
+      await request(`/api/bevi-stoq/customer-purchases/${id}`, { method: 'DELETE' })
+      load()
+      setDeleteConfirm(null)
+    } catch (error) {
+      setError(`Delete error: ${error instanceof Error ? error.message : 'Failed to delete'}`)
     }
   }
 
@@ -201,7 +255,7 @@ export function BeviStoqCustomerPurchases() {
               </thead>
               <tbody className="divide-y divide-caramel/10">
                 {purchases.map((purchase) => (
-                  <tr key={purchase.id} className="hover:bg-espresso/20">
+                  <tr key={purchase.id} className="hover:bg-espresso/20 group">
                     <td className="py-3 text-latte/70">
                       {new Date(purchase.purchase_date).toLocaleDateString()}
                     </td>
@@ -218,7 +272,22 @@ export function BeviStoqCustomerPurchases() {
                         {purchase.payment_status.toUpperCase()}
                       </span>
                     </td>
-                    <td className="py-3 text-latte/70">{purchase.payment_method?.toUpperCase() || '-'}</td>
+                    <td className="py-3 text-latte/70 flex gap-2">
+                      <button
+                        onClick={() => handleEdit(purchase)}
+                        className="p-1 text-latte/60 hover:text-gold transition opacity-0 group-hover:opacity-100"
+                        title="Edit"
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                      <button
+                        onClick={() => setDeleteConfirm(purchase.id)}
+                        className="p-1 text-latte/60 hover:text-red-400 transition opacity-0 group-hover:opacity-100"
+                        title="Delete"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -237,13 +306,16 @@ export function BeviStoqCustomerPurchases() {
         open={isAdding}
         onClose={() => {
           setIsAdding(false)
+          setIsEditing(false)
+          setEditingId(null)
+          setError('')
           setFormData({
             customer_name: '', product_id: '', quantity: '', unit: 'kg',
             purchase_date: new Date().toISOString().split('T')[0],
             payment_status: 'pending', payment_method: 'cash', amount: '', notes: ''
           })
         }}
-        title="Record Customer Purchase"
+        title={isEditing ? 'Edit Customer Purchase' : 'Record Customer Purchase'}
       >
         <form
           onSubmit={(e) => {
@@ -252,6 +324,11 @@ export function BeviStoqCustomerPurchases() {
           }}
           className="space-y-4"
         >
+          {error && (
+            <div className="rounded-lg bg-red-500/20 px-3 py-2 text-sm text-red-300">
+              {error}
+            </div>
+          )}
           <Field label="Customer Name *">
             <Input
               placeholder="e.g. ABC Foods"
@@ -351,11 +428,24 @@ export function BeviStoqCustomerPurchases() {
               Cancel
             </Button>
             <Button type="submit" className="flex-1">
-              Record Purchase
+              {isEditing ? 'Update' : 'Record'} Purchase
             </Button>
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={deleteConfirm !== null}
+        title="Delete Purchase?"
+        message="This purchase record will be permanently deleted."
+        confirmLabel="Delete"
+        onConfirm={() => {
+          if (deleteConfirm) {
+            handleDelete(deleteConfirm)
+          }
+        }}
+        onCancel={() => setDeleteConfirm(null)}
+      />
     </div>
   )
 }

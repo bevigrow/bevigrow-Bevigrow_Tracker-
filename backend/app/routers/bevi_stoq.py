@@ -232,6 +232,21 @@ def create_stock_movement(data: StockMovementCreate, db: Session = Depends(get_d
     if data.quantity <= 0:
         raise HTTPException(status_code=400, detail="Quantity must be positive")
 
+    # For transfers between locations, validate stock and update inventory
+    if data.from_location_id and data.to_location_id and data.movement_type == StockMovementType.transfer.value:
+        from_inv = db.scalar(select(Inventory).where(and_(Inventory.product_id == data.product_id, Inventory.location_id == data.from_location_id)))
+        if not from_inv or from_inv.physical_stock < data.quantity:
+            raise HTTPException(status_code=400, detail=f"Insufficient stock at source location. Required: {data.quantity}, Available: {from_inv.physical_stock if from_inv else 0}")
+
+        to_inv = db.scalar(select(Inventory).where(and_(Inventory.product_id == data.product_id, Inventory.location_id == data.to_location_id)))
+        if not to_inv:
+            to_inv = Inventory(product_id=data.product_id, location_id=data.to_location_id, physical_stock=0, reserved_stock=0, updated_by_user_id=user.id)
+            db.add(to_inv)
+            db.flush()
+
+        from_inv.physical_stock -= data.quantity
+        to_inv.physical_stock += data.quantity
+
     movement = StockMovement(product_id=data.product_id, from_location_id=data.from_location_id, to_location_id=data.to_location_id, movement_type=StockMovementType(data.movement_type), quantity=data.quantity, unit=data.unit, reference_id=data.reference_id, notes=data.notes, created_by_user_id=user.id)
     db.add(movement)
     db.commit()
@@ -398,6 +413,12 @@ def cancel_requirement(id: int, db: Session = Depends(get_db), user: User = Depe
 # ================================================================ CUSTOMER PURCHASES
 @router.post("/customer-purchases", response_model=CustomerPurchaseOut, status_code=201)
 def create_purchase(data: CustomerPurchaseCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    # Validate sufficient stock available
+    inventories = db.scalars(select(Inventory).where(Inventory.product_id == data.product_id)).all()
+    total_available = sum(inv.physical_stock for inv in inventories)
+    if total_available < data.quantity:
+        raise HTTPException(status_code=400, detail=f"Insufficient stock. Required: {data.quantity}, Available: {total_available}, Shortage: {data.quantity - total_available}")
+
     purchase = CustomerPurchase(customer_name=data.customer_name, contact_id=data.contact_id, product_id=data.product_id, quantity=data.quantity, unit=data.unit, purchase_date=data.purchase_date, payment_status=PaymentStatus(data.payment_status), payment_method=data.payment_method, amount=data.amount, notes=data.notes, created_by_user_id=user.id)
     db.add(purchase)
     db.flush()

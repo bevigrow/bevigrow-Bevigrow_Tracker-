@@ -39,12 +39,12 @@ export function BeviStoqPurchases() {
     customer_name: '',
     contact_id: '',
     product_id: 0,
-    quantity: '',
+    quantity: 0,
     unit: '',
     purchase_date: new Date().toISOString().split('T')[0],
     payment_status: 'pending',
     payment_method: '',
-    amount: '',
+    amount: 0,
     notes: '',
   })
 
@@ -86,12 +86,12 @@ export function BeviStoqPurchases() {
         customer_name: '',
         contact_id: '',
         product_id: 0,
-        quantity: '',
+        quantity: 0,
         unit: '',
         purchase_date: new Date().toISOString().split('T')[0],
         payment_status: 'pending',
         payment_method: '',
-        amount: '',
+        amount: 0,
         notes: '',
       })
       setShowForm(false)

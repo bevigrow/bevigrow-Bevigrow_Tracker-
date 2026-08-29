@@ -71,12 +71,6 @@ export function BeviStoqProducts() {
   const handleSubmit = async (e: any) => {
     e.preventDefault()
     try {
-      // Validate initial stock is provided for new products
-      if (!editingId && (!initialStock.quantity || !initialStock.location_id)) {
-        setError('Initial stock quantity and location are required')
-        return
-      }
-
       let productId = editingId
       if (editingId) {
         await api.put(`/api/bevi-stoq/products/${editingId}`, formData)
@@ -85,7 +79,7 @@ export function BeviStoqProducts() {
         productId = newProduct.id
       }
 
-      // Create initial inventory for new products
+      // Create initial inventory for new products if provided
       if (!editingId && productId && initialStock.quantity && initialStock.location_id) {
         await api.post('/api/bevi-stoq/stock-movements', {
           product_id: productId,
@@ -217,7 +211,7 @@ export function BeviStoqProducts() {
                   <h3 className="mb-4 font-semibold text-latte">Initial Stock</h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-latte">Quantity *</label>
+                      <label className="block text-sm font-medium text-latte">Quantity</label>
                       <input
                         type="number"
                         value={initialStock.quantity}
@@ -225,22 +219,20 @@ export function BeviStoqProducts() {
                         className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte placeholder-latte/40 focus:outline-none focus:ring-2 focus:ring-gold/50"
                         placeholder="Enter quantity"
                         step="0.01"
-                        required
                       />
                     </div>
                     <UnitSelect
                       value={initialStock.unit}
                       onChange={(unit) => setInitialStock({ ...initialStock, unit })}
                       label="Unit"
-                      required={true}
+                      required={false}
                     />
                     <div className="col-span-2">
-                      <label className="block text-sm font-medium text-latte">Location *</label>
+                      <label className="block text-sm font-medium text-latte">Location</label>
                       <select
                         value={initialStock.location_id}
                         onChange={(e) => setInitialStock({ ...initialStock, location_id: parseInt(e.target.value) })}
                         className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
-                        required
                       >
                         <option value={0}>Select location</option>
                         {locations.map((loc) => (

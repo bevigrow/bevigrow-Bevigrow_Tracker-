@@ -108,10 +108,28 @@ export function BeviStoqProducts() {
 
   const handleCreate = async () => {
     try {
+      // Validate required fields
+      if (!formData.name) {
+        alert('Product Name is required')
+        return
+      }
+      if (!formData.category_id) {
+        alert('Category is required')
+        return
+      }
+      if (!formData.default_unit) {
+        alert('Default Unit is required')
+        return
+      }
+
       // Validate initial quantity fields if quantity is entered
       if (formData.initial_quantity) {
         if (!formData.initial_location_id) {
           alert('Location is required when adding initial quantity')
+          return
+        }
+        if (!formData.initial_unit) {
+          alert('Unit is required when adding initial quantity')
           return
         }
       }
@@ -120,7 +138,7 @@ export function BeviStoqProducts() {
         name: formData.name,
         category_id: parseInt(formData.category_id),
         default_unit: formData.default_unit,
-        low_stock_alert_level: parseFloat(formData.low_stock_alert_level)
+        low_stock_alert_level: parseFloat(formData.low_stock_alert_level) || 0
       }
 
       let productId: number
@@ -135,21 +153,30 @@ export function BeviStoqProducts() {
           method: 'POST',
           body: JSON.stringify(payload)
         })
+        if (!response || !response.id) {
+          alert('Error creating product. Please try again.')
+          return
+        }
         productId = response.id
       }
 
       // Add initial stock if provided
       if (formData.initial_quantity && formData.initial_location_id && !isEditing) {
-        await request('/api/bevi-stoq/stock/add', {
-          method: 'POST',
-          body: JSON.stringify({
-            product_id: productId,
-            location_id: parseInt(formData.initial_location_id),
-            quantity: parseFloat(formData.initial_quantity),
-            unit: formData.initial_unit || formData.default_unit,
-            cost_per_unit: formData.initial_cost ? parseFloat(formData.initial_cost) : null
+        try {
+          await request('/api/bevi-stoq/stock/add', {
+            method: 'POST',
+            body: JSON.stringify({
+              product_id: productId,
+              location_id: parseInt(formData.initial_location_id),
+              quantity: parseFloat(formData.initial_quantity),
+              unit: formData.initial_unit || formData.default_unit,
+              cost_per_unit: formData.initial_cost ? parseFloat(formData.initial_cost) : 0
+            })
           })
-        })
+        } catch (stockError) {
+          console.error('Error adding stock:', stockError)
+          alert('Product created but error adding initial stock. You can add it manually.')
+        }
       }
 
       setFormData({
@@ -165,9 +192,11 @@ export function BeviStoqProducts() {
       setIsCreating(false)
       setIsEditing(false)
       setEditingId(null)
-      load()
+      await load()
     } catch (error) {
-      console.error('Error:', error)
+      console.error('Error creating product:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+      alert(`Error: ${errorMessage}`)
     }
   }
 

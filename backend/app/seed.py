@@ -222,6 +222,16 @@ def migrate_columns() -> None:
                 )
             )
 
+        # Drop old low_stock_alert_level column if it still exists (renamed to alert_quantity)
+        if not settings.is_sqlite:
+            try:
+                existing_cols = _existing_columns(conn, "bs_products")
+                if "low_stock_alert_level" in existing_cols:
+                    conn.execute(text(f"ALTER TABLE {prefix}bs_products DROP COLUMN low_stock_alert_level CASCADE"))
+                    log.info("Dropped old column bs_products.low_stock_alert_level (migrated to alert_quantity)")
+            except Exception as e:
+                log.warning(f"Could not drop old low_stock_alert_level column: {e}")
+
 
 def create_tables() -> None:
     ensure_schema()

@@ -2,7 +2,7 @@ import { Plus, Edit2, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { api } from '../lib/api'
-import { EmptyState, Spinner } from '../components/ui'
+import { EmptyState, Spinner, useToast } from '../components/ui'
 
 interface Product {
   id: number
@@ -25,6 +25,7 @@ interface Location {
 }
 
 export function BeviStoqProducts() {
+  const toast = useToast()
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [locations, setLocations] = useState<Location[]>([])
@@ -87,11 +88,11 @@ export function BeviStoqProducts() {
         await api.post('/api/bevi-stoq/stock-movements', {
           product_id: productId,
           to_location_id: initialStock.location_id,
-          movement_type: 'receipt',
+          movement_type: 'opening_stock',
           quantity: parseFloat(initialStock.quantity),
           unit: initialStock.unit || formData.default_unit,
           reference_id: 0,
-          notes: 'Initial stock',
+          notes: 'Opening stock',
         })
       }
 
@@ -99,9 +100,13 @@ export function BeviStoqProducts() {
       setInitialStock({ quantity: '', unit: '', location_id: 0 })
       setEditingId(null)
       setShowForm(false)
+      setError(null)
+      toast.success(editingId ? 'Product updated successfully' : 'Product created successfully')
       await fetchData()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save product')
+      const message = err instanceof Error ? err.message : 'Failed to save product'
+      setError(message)
+      toast.error(message)
     }
   }
 

@@ -59,22 +59,22 @@ export function BeviStoqMovements() {
   const getProductName = (id: number) => products.find((p) => p.id === id)?.name || 'Unknown'
   const getLocationName = (id: number | null) => (id ? locations.find((l) => l.id === id)?.name || 'Unknown' : '-')
 
-  const movementTypes = ['receipt', 'transfer', 'adjustment', 'fulfillment', 'return']
+  const movementTypes = ['opening_stock', 'stock_added', 'stock_removed', 'transfer', 'adjustment']
   let filtered = movements
   if (filterType) filtered = filtered.filter((m) => m.movement_type === filterType)
 
   const getMovementColor = (type: string) => {
     switch (type) {
-      case 'receipt':
+      case 'opening_stock':
+        return 'bg-purple-500/20 text-purple-400'
+      case 'stock_added':
         return 'bg-green-500/20 text-green-400'
+      case 'stock_removed':
+        return 'bg-red-500/20 text-red-400'
       case 'transfer':
         return 'bg-blue-500/20 text-blue-400'
       case 'adjustment':
         return 'bg-yellow-500/20 text-yellow-400'
-      case 'fulfillment':
-        return 'bg-purple-500/20 text-purple-400'
-      case 'return':
-        return 'bg-orange-500/20 text-orange-400'
       default:
         return 'bg-latte/10 text-latte'
     }

@@ -294,7 +294,7 @@ def receive_restock(id: int, db: Session = Depends(get_db), user: User = Depends
     restock.status = RestockStatus.received
     restock.updated_by_user_id = user.id
 
-    movement = StockMovement(product_id=restock.product_id, to_location_id=restock.location_id, movement_type=StockMovementType.receipt, quantity=restock.quantity, unit=restock.unit, reference_id=restock.id, notes=f"Restock from {restock.supplier_name}", created_by_user_id=user.id)
+    movement = StockMovement(product_id=restock.product_id, to_location_id=restock.location_id, movement_type=StockMovementType.stock_added, quantity=restock.quantity, unit=restock.unit, reference_id=restock.id, notes=f"Restock from {restock.supplier_name}", created_by_user_id=user.id)
     db.add(movement)
     db.commit()
     db.refresh(restock)
@@ -385,7 +385,7 @@ def fulfill_requirement(id: int, db: Session = Depends(get_db), user: User = Dep
                 inv.physical_stock -= deduct_qty
                 inv.reserved_stock -= deduct_qty
                 remaining -= deduct_qty
-                movement = StockMovement(product_id=item.product_id, from_location_id=inv.location_id, movement_type=StockMovementType.fulfillment, quantity=deduct_qty, unit=item.unit, reference_id=req.id, notes=f"Fulfillment for {req.customer_name}", created_by_user_id=user.id)
+                movement = StockMovement(product_id=item.product_id, from_location_id=inv.location_id, movement_type=StockMovementType.stock_removed, quantity=deduct_qty, unit=item.unit, reference_id=req.id, notes=f"Fulfillment for {req.customer_name}", created_by_user_id=user.id)
                 db.add(movement)
 
         item.quantity_fulfilled = item.quantity_reserved
@@ -446,7 +446,7 @@ def create_purchase(data: CustomerPurchaseCreate, db: Session = Depends(get_db),
             deduct_qty = min(inv.physical_stock, remaining)
             inv.physical_stock -= deduct_qty
             remaining -= deduct_qty
-            movement = StockMovement(product_id=data.product_id, from_location_id=inv.location_id, movement_type=StockMovementType.fulfillment, quantity=deduct_qty, unit=data.unit, reference_id=purchase.id, notes=f"Sale to {data.customer_name}", created_by_user_id=user.id)
+            movement = StockMovement(product_id=data.product_id, from_location_id=inv.location_id, movement_type=StockMovementType.stock_removed, quantity=deduct_qty, unit=data.unit, reference_id=purchase.id, notes=f"Sale to {data.customer_name}", created_by_user_id=user.id)
             db.add(movement)
 
     db.commit()

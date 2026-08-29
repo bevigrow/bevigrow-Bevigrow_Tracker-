@@ -16,11 +16,11 @@ def utcnow() -> datetime:
 
 class StockMovementType(str, enum.Enum):
     """Types of stock movements in the inventory."""
-    receipt = "receipt"
+    opening_stock = "opening_stock"
+    stock_added = "stock_added"
+    stock_removed = "stock_removed"
     transfer = "transfer"
     adjustment = "adjustment"
-    fulfillment = "fulfillment"
-    return_ = "return"
 
 
 class RequirementStatus(str, enum.Enum):

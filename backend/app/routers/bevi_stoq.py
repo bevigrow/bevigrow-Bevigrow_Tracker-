@@ -582,33 +582,29 @@ def get_dashboard(db: Session = Depends(get_db), _: User = Depends(get_current_u
         total_locations = db.scalar(select(func.count(Location.id)).where(Location.active == True)) or 0
         total_categories = db.scalar(select(func.count(Category.id)).where(Category.active == True)) or 0
 
-        low_stock_list = []
         out_of_stock_list = []
 
         stmt = (
             select(
                 Product.id,
                 Product.name,
-                Product.alert_quantity,
                 func.coalesce(func.sum(Inventory.physical_stock - Inventory.reserved_stock), 0).label("available")
             )
             .outerjoin(Inventory, Inventory.product_id == Product.id)
             .where(Product.active == True)
-            .group_by(Product.id, Product.name, Product.alert_quantity)
+            .group_by(Product.id, Product.name)
         )
 
         for row in db.execute(stmt):
             available = row.available or 0
+            # Only show OUT_OF_STOCK when stock is exactly 0 or below
             if available <= 0:
-                out_of_stock_list.append(ProductStatus(product_id=row.id, product_name=row.name, status="OUT_OF_STOCK", current_stock=available, threshold=row.alert_quantity))
-            elif row.alert_quantity is not None and available <= row.alert_quantity:
-                low_stock_list.append(ProductStatus(product_id=row.id, product_name=row.name, status="LOW_STOCK", current_stock=available, threshold=row.alert_quantity))
+                out_of_stock_list.append(ProductStatus(product_id=row.id, product_name=row.name, status="OUT_OF_STOCK", current_stock=available, threshold=None))
 
         recent = db.scalars(select(StockMovement).order_by(StockMovement.created_at.desc()).limit(10)).all()
 
         return DashboardOut(
-            summary=DashboardSummary(total_products=total_products, low_stock_count=len(low_stock_list), out_of_stock_count=len(out_of_stock_list), total_locations=total_locations, total_categories=total_categories),
-            low_stock_products=low_stock_list,
+            summary=DashboardSummary(total_products=total_products, out_of_stock_count=len(out_of_stock_list), total_locations=total_locations, total_categories=total_categories),
             out_of_stock_products=out_of_stock_list,
             recent_movements=[StockMovementOut.model_validate(m) for m in recent]
         )
@@ -646,7 +642,6 @@ def inventory_report(db: Session = Depends(get_db), _: User = Depends(get_curren
             stmt = stmt.where(Inventory.location_id == location_id)
 
         items = []
-        low_stock_count = 0
         out_of_stock_count = 0
         products_seen = set()
 
@@ -657,12 +652,10 @@ def inventory_report(db: Session = Depends(get_db), _: User = Depends(get_curren
             available = row.physical_stock - row.reserved_stock
             products_seen.add(row.id)
 
+            # Only show OUT_OF_STOCK when stock is 0 or below
             if available <= 0:
                 status = "OUT_OF_STOCK"
                 out_of_stock_count += 1
-            elif row.alert_quantity is not None and available <= row.alert_quantity:
-                status = "LOW_STOCK"
-                low_stock_count += 1
             else:
                 status = "NORMAL"
 
@@ -681,7 +674,6 @@ def inventory_report(db: Session = Depends(get_db), _: User = Depends(get_curren
         return InventoryReport(
             total_products=len(products_seen),
             total_stock_value=0,
-            low_stock_count=low_stock_count,
             out_of_stock_count=out_of_stock_count,
             items=items
         )

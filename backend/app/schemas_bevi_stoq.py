@@ -287,7 +287,6 @@ class ProductStatus(BaseModel):
 
 class DashboardSummary(BaseModel):
     total_products: int
-    low_stock_count: int
     out_of_stock_count: int
     total_locations: int
     total_categories: int
@@ -295,6 +294,5 @@ class DashboardSummary(BaseModel):
 
 class DashboardOut(BaseModel):
     summary: DashboardSummary
-    low_stock_products: list[ProductStatus]
     out_of_stock_products: list[ProductStatus]
     recent_movements: list[StockMovementOut]

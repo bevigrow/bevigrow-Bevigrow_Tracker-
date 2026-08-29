@@ -21,6 +21,7 @@ from .models import (
     TradeType,
     User,
 )
+from .bevi_stoq_models import StockMovementType  # noqa: F401  (imported so the enum is registered before create_all)
 from .security import hash_password
 
 log = logging.getLogger("bevigrow.seed")

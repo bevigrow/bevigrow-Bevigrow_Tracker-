@@ -282,7 +282,7 @@ class ProductStatus(BaseModel):
     product_name: str
     status: str
     current_stock: float
-    threshold: float
+    threshold: float | None
 
 
 class DashboardSummary(BaseModel):

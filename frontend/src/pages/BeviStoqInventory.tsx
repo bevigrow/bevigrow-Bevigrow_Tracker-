@@ -17,6 +17,7 @@ interface Product {
   id: number
   name: string
   default_unit: string
+  low_stock_threshold: number
 }
 
 interface Location {
@@ -56,7 +57,13 @@ export function BeviStoqInventory() {
 
   const getProductName = (id: number) => products.find((p) => p.id === id)?.name || 'Unknown'
   const getProductUnit = (id: number) => products.find((p) => p.id === id)?.default_unit || ''
+  const getProductThreshold = (id: number) => products.find((p) => p.id === id)?.low_stock_threshold || 0
   const getLocationName = (id: number) => locations.find((l) => l.id === id)?.name || 'Unknown'
+  const getStockStatus = (availableStock: number, threshold: number) => {
+    if (availableStock <= 0) return { label: 'OUT OF STOCK', color: 'bg-red-500/20 text-red-400' }
+    if (availableStock <= threshold) return { label: 'LOW STOCK', color: 'bg-yellow-500/20 text-yellow-400' }
+    return { label: 'NORMAL', color: 'bg-green-500/20 text-green-400' }
+  }
 
   let filtered = inventory
   if (filterProduct) filtered = filtered.filter((i) => i.product_id === filterProduct)
@@ -118,7 +125,8 @@ export function BeviStoqInventory() {
             <tbody>
               {filtered.map((item) => {
                 const unit = getProductUnit(item.product_id)
-                const isLow = item.available_stock <= 0
+                const threshold = getProductThreshold(item.product_id)
+                const status = getStockStatus(item.available_stock, threshold)
                 return (
                   <tr key={item.id} className="border-b border-caramel/15 hover:bg-espresso/40">
                     <td className="px-4 py-3 text-sm text-latte">{getProductName(item.product_id)}</td>
@@ -133,14 +141,10 @@ export function BeviStoqInventory() {
                       {item.available_stock} {unit}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      {isLow ? (
-                        <div className="inline-flex items-center gap-1 rounded bg-red-500/20 px-2 py-1 text-xs font-medium text-red-400">
-                          <AlertCircle size={12} />
-                          Out
-                        </div>
-                      ) : (
-                        <div className="inline-flex text-xs text-latte/50">✓ OK</div>
-                      )}
+                      <div className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium ${status.color}`}>
+                        {status.label === 'OUT OF STOCK' && <AlertCircle size={12} />}
+                        {status.label}
+                      </div>
                     </td>
                   </tr>
                 )

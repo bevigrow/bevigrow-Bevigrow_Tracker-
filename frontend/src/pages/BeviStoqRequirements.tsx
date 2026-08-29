@@ -79,6 +79,33 @@ export function BeviStoqRequirements() {
     }
   }
 
+  const handleReserve = async (id: number) => {
+    try {
+      await api.post(`/api/bevi-stoq/customer-requirements/${id}/reserve`, {})
+      await fetchData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reserve requirement')
+    }
+  }
+
+  const handleFulfill = async (id: number) => {
+    try {
+      await api.post(`/api/bevi-stoq/customer-requirements/${id}/fulfill`, {})
+      await fetchData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fulfill requirement')
+    }
+  }
+
+  const handleCancel = async (id: number) => {
+    try {
+      await api.post(`/api/bevi-stoq/customer-requirements/${id}/cancel`, {})
+      await fetchData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to cancel requirement')
+    }
+  }
+
   const getProductName = (id: number) => products.find((p) => p.id === id)?.name || 'Unknown'
 
   const getStatusColor = (status: string) => {
@@ -223,7 +250,7 @@ export function BeviStoqRequirements() {
                   {req.status.toUpperCase()}
                 </span>
               </div>
-              <div className="space-y-1">
+              <div className="mb-4 space-y-1">
                 {req.items.map((item) => (
                   <div key={item.id} className="flex items-center justify-between text-sm">
                     <span className="text-latte/70">{getProductName(item.product_id)}</span>
@@ -232,6 +259,32 @@ export function BeviStoqRequirements() {
                     </span>
                   </div>
                 ))}
+              </div>
+              <div className="flex gap-2">
+                {req.status === 'pending' && (
+                  <button
+                    onClick={() => handleReserve(req.id)}
+                    className="text-xs font-medium rounded px-2 py-1 bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
+                  >
+                    Reserve
+                  </button>
+                )}
+                {req.status === 'reserved' && (
+                  <button
+                    onClick={() => handleFulfill(req.id)}
+                    className="text-xs font-medium rounded px-2 py-1 bg-green-500/20 text-green-400 hover:bg-green-500/30"
+                  >
+                    Fulfill
+                  </button>
+                )}
+                {(req.status === 'pending' || req.status === 'reserved') && (
+                  <button
+                    onClick={() => handleCancel(req.id)}
+                    className="text-xs font-medium rounded px-2 py-1 bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                  >
+                    Cancel
+                  </button>
+                )}
               </div>
             </div>
           ))}

@@ -140,7 +140,13 @@ def list_products(db: Session = Depends(get_db), _: User = Depends(get_current_u
 @router.post("/products", response_model=ProductOut, status_code=201)
 def create_product(data: ProductCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     try:
-        log.info(f"CREATE PRODUCT: Received request: name={data.name}, category_id={data.category_id}, unit={data.default_unit}, alert_quantity={data.alert_quantity}, user={user.id}")
+        # Normalize product name: trim whitespace
+        product_name = data.name.strip()
+
+        log.info(f"CREATE PRODUCT: Received request: name={product_name}, category_id={data.category_id}, unit={data.default_unit}, alert_quantity={data.alert_quantity}, user={user.id}")
+
+        if not product_name:
+            raise HTTPException(status_code=400, detail="Product name cannot be empty")
 
         # Validate category exists (if provided)
         if data.category_id is not None:
@@ -149,32 +155,27 @@ def create_product(data: ProductCreate, db: Session = Depends(get_db), user: Use
                 log.warning(f"CREATE PRODUCT: Invalid category_id {data.category_id}")
                 raise HTTPException(status_code=400, detail=f"Category {data.category_id} not found")
 
-        # Check for duplicate product name (if category is provided, check within category; otherwise check globally)
+        # Check for duplicate active product with same name (case-insensitive)
+        # Only check active products; ignore soft-deleted ones
+        existing_query = select(Product).where(
+            and_(
+                Product.name.ilike(product_name),
+                Product.active == True
+            )
+        )
+
+        # If category is specified, also match by category
         if data.category_id is not None:
-            existing = db.scalar(
-                select(Product).where(
-                    and_(
-                        Product.name.ilike(data.name),
-                        Product.category_id == data.category_id,
-                        Product.active == True
-                    )
-                )
-            )
-            if existing:
-                log.warning(f"CREATE PRODUCT: Duplicate product '{data.name}' in category {data.category_id}")
-                raise HTTPException(status_code=400, detail=f"Product '{data.name}' already exists in this category")
-        else:
-            existing = db.scalar(
-                select(Product).where(
-                    and_(
-                        Product.name.ilike(data.name),
-                        Product.active == True
-                    )
-                )
-            )
-            if existing:
-                log.warning(f"CREATE PRODUCT: Duplicate product '{data.name}'")
-                raise HTTPException(status_code=400, detail=f"Product '{data.name}' already exists")
+            existing_query = existing_query.where(Product.category_id == data.category_id)
+
+        existing = db.scalar(existing_query)
+
+        if existing:
+            log.warning(f"CREATE PRODUCT: Found duplicate: id={existing.id}, name='{existing.name}', category_id={existing.category_id}, active={existing.active}")
+            if data.category_id is not None:
+                raise HTTPException(status_code=400, detail=f"Product '{product_name}' already exists in this category")
+            else:
+                raise HTTPException(status_code=400, detail=f"Product '{product_name}' already exists")
 
         # Validate unit
         if not validate_unit(data.default_unit):
@@ -187,7 +188,7 @@ def create_product(data: ProductCreate, db: Session = Depends(get_db), user: Use
             raise HTTPException(status_code=400, detail="Alert quantity must be non-negative")
 
         log.info(f"CREATE PRODUCT: Validation passed, creating product")
-        prod = Product(name=data.name, category_id=data.category_id, default_unit=data.default_unit, alert_quantity=data.alert_quantity, created_by_user_id=user.id)
+        prod = Product(name=product_name, category_id=data.category_id, default_unit=data.default_unit, alert_quantity=data.alert_quantity, created_by_user_id=user.id)
         db.add(prod)
         db.commit()
         db.refresh(prod)

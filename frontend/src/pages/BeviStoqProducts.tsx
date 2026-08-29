@@ -29,6 +29,7 @@ export function BeviStoqProducts() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
     default_unit: '',
@@ -59,9 +60,11 @@ export function BeviStoqProducts() {
 
   const handleSubmit = async (e: any) => {
     e.preventDefault()
+    if (submitting) return // Prevent double-submit
+    setSubmitting(true)
     try {
       const payload = {
-        name: formData.name,
+        name: formData.name.trim(),
         category_id: null,
         default_unit: formData.default_unit,
         alert_quantity: null,
@@ -98,6 +101,8 @@ export function BeviStoqProducts() {
       const message = err instanceof Error ? err.message : 'Failed to save product'
       setError(message)
       toast.error(message)
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -221,14 +226,16 @@ export function BeviStoqProducts() {
             <div className="flex gap-3">
               <button
                 type="submit"
-                className="rounded bg-gold/20 px-4 py-2 text-sm font-medium text-gold hover:bg-gold/30"
+                disabled={submitting}
+                className="rounded bg-gold/20 px-4 py-2 text-sm font-medium text-gold hover:bg-gold/30 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {editingId ? 'Update' : 'Create'} Product
+                {submitting ? 'Saving...' : (editingId ? 'Update' : 'Create')} Product
               </button>
               <button
                 type="button"
                 onClick={() => setShowForm(false)}
-                className="rounded border border-caramel/30 px-4 py-2 text-sm font-medium text-latte/60 hover:bg-caramel/10"
+                disabled={submitting}
+                className="rounded border border-caramel/30 px-4 py-2 text-sm font-medium text-latte/60 hover:bg-caramel/10 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>

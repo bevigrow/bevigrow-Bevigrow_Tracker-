@@ -15,6 +15,15 @@ interface Product {
   created_at: string
 }
 
+interface InventoryItem {
+  id: number
+  product_id: number
+  location_id: number
+  physical_stock: number
+  reserved_stock: number
+  available_stock?: number
+}
+
 interface Location {
   id: number
   name: string
@@ -22,9 +31,13 @@ interface Location {
 
 const UNITS = ['g', 'kg', 'pcs']
 
+interface ProductWithStock extends Product {
+  total_stock: number
+}
+
 export function BeviStoqProducts() {
   const toast = useToast()
-  const [products, setProducts] = useState<Product[]>([])
+  const [products, setProducts] = useState<ProductWithStock[]>([])
   const [locations, setLocations] = useState<Location[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -45,11 +58,27 @@ export function BeviStoqProducts() {
 
   const fetchData = async () => {
     try {
-      const [productsRes, locationsRes] = await Promise.all([
+      const [productsRes, locationsRes, inventoryRes] = await Promise.all([
         api.get<Product[]>('/api/bevi-stoq/products'),
         api.get<Location[]>('/api/bevi-stoq/locations'),
+        api.get<InventoryItem[]>('/api/bevi-stoq/inventory'),
       ])
-      setProducts(productsRes)
+
+      // Calculate total stock per product
+      const stockByProduct = new Map<number, number>()
+      inventoryRes.forEach((inv) => {
+        const available = inv.physical_stock - inv.reserved_stock
+        const current = stockByProduct.get(inv.product_id) || 0
+        stockByProduct.set(inv.product_id, current + available)
+      })
+
+      // Add total_stock to each product
+      const productsWithStock: ProductWithStock[] = productsRes.map((prod) => ({
+        ...prod,
+        total_stock: stockByProduct.get(prod.id) || 0,
+      }))
+
+      setProducts(productsWithStock)
       setLocations(locationsRes)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data')
@@ -275,6 +304,7 @@ export function BeviStoqProducts() {
               <tr className="border-b border-caramel/15 bg-espresso/60">
                 <th className="px-4 py-3 text-left text-sm font-semibold text-latte">Product</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-latte">Unit</th>
+                <th className="px-4 py-3 text-center text-sm font-semibold text-latte">Quantity</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-latte">Status</th>
                 <th className="px-4 py-3 text-right text-sm font-semibold text-latte">Actions</th>
               </tr>
@@ -284,6 +314,11 @@ export function BeviStoqProducts() {
                 <tr key={product.id} className="border-b border-caramel/15 hover:bg-espresso/40">
                   <td className="px-4 py-3 text-sm text-latte">{product.name}</td>
                   <td className="px-4 py-3 text-sm text-latte/70">{product.default_unit}</td>
+                  <td className="px-4 py-3 text-center text-sm">
+                    <span className={`font-semibold ${product.total_stock > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {product.total_stock.toFixed(2)}
+                    </span>
+                  </td>
                   <td className="px-4 py-3 text-sm">
                     <span className="text-xs text-latte/50">{product.active ? '✓ Active' : '✗ Inactive'}</span>
                   </td>

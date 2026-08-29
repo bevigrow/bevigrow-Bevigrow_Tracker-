@@ -1,4 +1,4 @@
-import { AlertCircle, TrendingDown, AlertTriangle, Box } from 'lucide-react'
+import { AlertCircle, TrendingDown, Box } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { api } from '../lib/api'
@@ -7,24 +7,16 @@ import { EmptyState, Spinner } from '../components/ui'
 interface DashboardData {
   summary: {
     total_products: number
-    low_stock_count: number
     out_of_stock_count: number
     total_locations: number
     total_categories: number
   }
-  low_stock_products: Array<{
-    product_id: number
-    product_name: string
-    status: string
-    current_stock: number
-    threshold: number
-  }>
   out_of_stock_products: Array<{
     product_id: number
     product_name: string
     status: string
     current_stock: number
-    threshold: number
+    threshold: number | null
   }>
   recent_movements: Array<{
     id: number
@@ -73,7 +65,7 @@ export function BeviStoqDashboard() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryCard
           label="Total Products"
           value={data.summary.total_products}
@@ -93,12 +85,6 @@ export function BeviStoqDashboard() {
           color="bg-teal-500/10 text-teal-400"
         />
         <SummaryCard
-          label="Low Stock"
-          value={data.summary.low_stock_count}
-          icon="⚠️"
-          color="bg-yellow-500/10 text-yellow-400"
-        />
-        <SummaryCard
           label="Out of Stock"
           value={data.summary.out_of_stock_count}
           icon="🚨"
@@ -107,46 +93,23 @@ export function BeviStoqDashboard() {
       </div>
 
       {/* Alerts Section */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Out of Stock */}
-        <div className="rounded-lg border border-caramel/15 bg-espresso/40 p-6">
-          <div className="mb-4 flex items-center gap-2">
-            <AlertCircle size={20} className="text-red-400" />
-            <h2 className="font-semibold text-red-400">Out of Stock ({data.out_of_stock_products.length})</h2>
-          </div>
-          {data.out_of_stock_products.length === 0 ? (
-            <p className="text-sm text-latte/60">All products in stock</p>
-          ) : (
-            <div className="space-y-2">
-              {data.out_of_stock_products.map((product) => (
-                <div key={product.product_id} className="flex items-center justify-between rounded bg-red-500/10 px-3 py-2 text-sm">
-                  <span className="text-latte">{product.product_name}</span>
-                  <span className="text-red-400">0 {product.threshold}</span>
-                </div>
-              ))}
-            </div>
-          )}
+      <div className="rounded-lg border border-caramel/15 bg-espresso/40 p-6">
+        <div className="mb-4 flex items-center gap-2">
+          <AlertCircle size={20} className="text-red-400" />
+          <h2 className="font-semibold text-red-400">Out of Stock ({data.out_of_stock_products.length})</h2>
         </div>
-
-        {/* Low Stock */}
-        <div className="rounded-lg border border-caramel/15 bg-espresso/40 p-6">
-          <div className="mb-4 flex items-center gap-2">
-            <AlertTriangle size={20} className="text-yellow-400" />
-            <h2 className="font-semibold text-yellow-400">Low Stock ({data.low_stock_products.length})</h2>
+        {data.out_of_stock_products.length === 0 ? (
+          <p className="text-sm text-latte/60">All products in stock</p>
+        ) : (
+          <div className="space-y-2">
+            {data.out_of_stock_products.map((product) => (
+              <div key={product.product_id} className="flex items-center justify-between rounded bg-red-500/10 px-3 py-2 text-sm">
+                <span className="text-latte">{product.product_name}</span>
+                <span className="text-red-400">0 stock</span>
+              </div>
+            ))}
           </div>
-          {data.low_stock_products.length === 0 ? (
-            <p className="text-sm text-latte/60">No products below threshold</p>
-          ) : (
-            <div className="space-y-2">
-              {data.low_stock_products.map((product) => (
-                <div key={product.product_id} className="flex items-center justify-between rounded bg-yellow-500/10 px-3 py-2 text-sm">
-                  <span className="text-latte">{product.product_name}</span>
-                  <span className="text-yellow-400">{product.current_stock} / {product.threshold}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        )}
       </div>
 
       {/* Recent Movements */}

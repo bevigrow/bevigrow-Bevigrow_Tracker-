@@ -2,7 +2,7 @@ import { Plus, DollarSign } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { api } from '../lib/api'
-import { EmptyState, Spinner } from '../components/ui'
+import { EmptyState, Spinner, useToast } from '../components/ui'
 
 interface CustomerPurchase {
   id: number
@@ -25,6 +25,7 @@ interface Product {
 }
 
 export function BeviStoqPurchases() {
+  const toast = useToast()
   const [purchases, setPurchases] = useState<CustomerPurchase[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
@@ -71,12 +72,12 @@ export function BeviStoqPurchases() {
         contact_id: formData.contact_id ? parseInt(formData.contact_id) : null,
         product_id: parseInt(formData.product_id as any),
         quantity: parseFloat(formData.quantity),
-        unit: formData.unit,
+        unit: formData.unit || null,
         purchase_date: formData.purchase_date,
-        payment_status: formData.payment_status,
-        payment_method: formData.payment_method,
-        amount: parseFloat(formData.amount),
-        notes: formData.notes,
+        payment_status: formData.payment_status || 'pending',
+        payment_method: formData.payment_method || null,
+        amount: formData.amount ? parseFloat(formData.amount) : null,
+        notes: formData.notes || null,
       })
       setFormData({
         customer_name: '',
@@ -91,9 +92,13 @@ export function BeviStoqPurchases() {
         notes: '',
       })
       setShowForm(false)
+      setError(null)
+      toast.success('Purchase recorded successfully')
       await fetchData()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create purchase')
+      const message = err instanceof Error ? err.message : 'Failed to record purchase'
+      setError(message)
+      toast.error(message)
     }
   }
 
@@ -240,23 +245,22 @@ export function BeviStoqPurchases() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-latte">Amount (₹) *</label>
+                <label className="block text-sm font-medium text-latte">Amount (₹)</label>
                 <input
                   type="number"
                   value={formData.amount}
                   onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
                   className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
                   step="0.01"
-                  required
+                  placeholder="Optional"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-latte">Status *</label>
+                <label className="block text-sm font-medium text-latte">Status</label>
                 <select
                   value={formData.payment_status}
                   onChange={(e) => setFormData({ ...formData, payment_status: e.target.value })}
                   className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
-                  required
                 >
                   <option value="pending">Pending</option>
                   <option value="paid">Paid</option>

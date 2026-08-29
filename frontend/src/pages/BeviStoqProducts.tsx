@@ -156,7 +156,7 @@ export function BeviStoqProducts() {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-latte">Product Name</label>
+                <label className="block text-sm font-medium text-latte">Product Name *</label>
                 <input
                   type="text"
                   value={formData.name}
@@ -167,7 +167,7 @@ export function BeviStoqProducts() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-latte">Category</label>
+                <label className="block text-sm font-medium text-latte">Category *</label>
                 <select
                   value={formData.category_id}
                   onChange={(e) => setFormData({ ...formData, category_id: parseInt(e.target.value) })}
@@ -183,7 +183,7 @@ export function BeviStoqProducts() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-latte">Unit</label>
+                <label className="block text-sm font-medium text-latte">Unit *</label>
                 <input
                   type="text"
                   value={formData.default_unit}

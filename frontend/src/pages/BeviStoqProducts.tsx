@@ -73,7 +73,9 @@ export function BeviStoqProducts() {
 
       let productId = editingId
       if (editingId) {
+        console.log(`Updating product: id=${editingId}, name=${payload.name}, unit=${payload.default_unit}`)
         await api.put(`/api/bevi-stoq/products/${editingId}`, payload)
+        console.log('Product updated successfully')
         setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, notes: '' })
         setEditingId(null)
         setShowForm(false)

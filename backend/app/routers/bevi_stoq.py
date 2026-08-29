@@ -267,17 +267,39 @@ def get_product(id: int, db: Session = Depends(get_db), _: User = Depends(get_cu
 
 @router.put("/products/{id}", response_model=ProductOut)
 def update_product(id: int, data: ProductUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    prod = db.get(Product, id)
-    if not prod: raise HTTPException(status_code=404, detail="Product not found")
-    if data.name: prod.name = data.name
-    if data.category_id: prod.category_id = data.category_id
-    if data.default_unit: prod.default_unit = data.default_unit
-    if data.alert_quantity is not None: prod.alert_quantity = data.alert_quantity
-    if data.active is not None: prod.active = data.active
-    prod.updated_by_user_id = user.id
-    db.commit()
-    db.refresh(prod)
-    return prod
+    try:
+        log.info(f"UPDATE PRODUCT: id={id}, data={data.model_dump()}, user={user.id}")
+        prod = db.get(Product, id)
+        if not prod:
+            log.error(f"UPDATE PRODUCT: Product {id} not found")
+            raise HTTPException(status_code=404, detail="Product not found")
+
+        # Update only provided fields
+        if data.name:
+            log.info(f"UPDATE PRODUCT: Updating name from '{prod.name}' to '{data.name}'")
+            prod.name = data.name
+        if data.category_id:
+            prod.category_id = data.category_id
+        if data.default_unit:
+            prod.default_unit = data.default_unit
+        if data.alert_quantity is not None:
+            prod.alert_quantity = data.alert_quantity
+        if data.active is not None:
+            prod.active = data.active
+
+        prod.updated_by_user_id = user.id
+        prod.updated_at = datetime.now(timezone.utc)
+
+        log.info(f"UPDATE PRODUCT: Committing changes")
+        db.commit()
+        db.refresh(prod)
+        log.info(f"UPDATE PRODUCT: Success, product {id} updated")
+        return prod
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"UPDATE PRODUCT: Error: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error updating product: {str(e)}")
 
 @router.delete("/products/{id}", status_code=204)
 def delete_product(id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):

@@ -1008,3 +1008,197 @@ class ApprovedResend(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+# ================================================================ BEVI STOQ
+# Inventory Management System
+# ================================================================
+
+
+class StockMovementType(str, enum.Enum):
+    """Types of stock movements in the inventory."""
+    opening = "opening"
+    added = "added"
+    transfer_in = "transfer_in"
+    transfer_out = "transfer_out"
+    reserved = "reserved"
+    fulfilled = "fulfilled"
+    return_ = "return"
+    damage = "damage"
+    adjustment = "adjustment"
+
+
+class RequirementStatus(str, enum.Enum):
+    """Status of customer requirements."""
+    pending = "pending"
+    available = "available"
+    partially_available = "partially_available"
+    reserved = "reserved"
+    fulfilled = "fulfilled"
+    cancelled = "cancelled"
+
+
+class Category(Base):
+    """Product category for inventory organization."""
+    __tablename__ = "bs_categories"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(150), nullable=False, index=True)
+    description: Mapped[str | None] = mapped_column(Text)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    products: Mapped[list["Product"]] = relationship(back_populates="category", cascade="all, delete-orphan")
+
+
+class Product(Base):
+    """Inventory product with category and unit configuration."""
+    __tablename__ = "bs_products"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    category_id: Mapped[int] = mapped_column(ForeignKey("bs_categories.id"))
+    category: Mapped["Category"] = relationship(back_populates="products")
+
+    default_unit: Mapped[str] = mapped_column(String(50), nullable=False)
+    low_stock_alert_level: Mapped[float] = mapped_column(Float, default=0)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    inventory_items: Mapped[list["Inventory"]] = relationship(back_populates="product")
+    stock_movements: Mapped[list["StockMovement"]] = relationship(back_populates="product")
+
+
+class Location(Base):
+    """Storage location/warehouse for inventory."""
+    __tablename__ = "bs_locations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(150), nullable=False, index=True)
+    description: Mapped[str | None] = mapped_column(Text)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    inventory_items: Mapped[list["Inventory"]] = relationship(back_populates="location")
+    stock_movements: Mapped[list["StockMovement"]] = relationship(back_populates="location")
+
+
+class Inventory(Base):
+    """Current stock at a location for a product."""
+    __tablename__ = "bs_inventory"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("bs_products.id"), index=True)
+    product: Mapped["Product"] = relationship(back_populates="inventory_items")
+
+    location_id: Mapped[int] = mapped_column(ForeignKey("bs_locations.id"), index=True)
+    location: Mapped["Location"] = relationship(back_populates="inventory_items")
+
+    physical_stock: Mapped[float] = mapped_column(Float, default=0)
+    reserved_stock: Mapped[float] = mapped_column(Float, default=0)
+
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    updated_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+
+    __table_args__ = (
+        __import__('sqlalchemy').UniqueConstraint('product_id', 'location_id', name='unique_product_location'),
+    )
+
+
+class StockMovement(Base):
+    """Audit trail of all stock changes."""
+    __tablename__ = "bs_stock_movements"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("bs_products.id"), index=True)
+    product: Mapped["Product"] = relationship(back_populates="stock_movements")
+
+    location_id: Mapped[int] = mapped_column(ForeignKey("bs_locations.id"), index=True)
+    location: Mapped["Location"] = relationship(back_populates="stock_movements")
+
+    movement_type: Mapped[StockMovementType] = mapped_column(
+        Enum(StockMovementType, native_enum=False), index=True
+    )
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    unit: Mapped[str] = mapped_column(String(50))
+
+    reference_id: Mapped[int | None] = mapped_column(Integer)
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+
+
+class CustomerRequirement(Base):
+    """Customer's product requirement/order."""
+    __tablename__ = "bs_customer_requirements"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    customer_id: Mapped[int | None] = mapped_column(ForeignKey("contacts.id"))
+    customer_name: Mapped[str] = mapped_column(String(200))
+
+    status: Mapped[RequirementStatus] = mapped_column(
+        Enum(RequirementStatus, native_enum=False), default=RequirementStatus.pending, index=True
+    )
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    items: Mapped[list["RequirementItem"]] = relationship(back_populates="requirement", cascade="all, delete-orphan")
+
+
+class RequirementItem(Base):
+    """Individual product in a customer requirement."""
+    __tablename__ = "bs_requirement_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    requirement_id: Mapped[int] = mapped_column(ForeignKey("bs_customer_requirements.id"), index=True)
+    requirement: Mapped["CustomerRequirement"] = relationship(back_populates="items")
+
+    product_id: Mapped[int] = mapped_column(ForeignKey("bs_products.id"))
+    quantity_required: Mapped[float] = mapped_column(Float, nullable=False)
+    unit: Mapped[str] = mapped_column(String(50))
+
+    quantity_reserved: Mapped[float] = mapped_column(Float, default=0)
+    quantity_fulfilled: Mapped[float] = mapped_column(Float, default=0)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Combo(Base):
+    """Bundled product set for quick ordering."""
+    __tablename__ = "bs_combos"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    description: Mapped[str | None] = mapped_column(Text)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    items: Mapped[list["ComboItem"]] = relationship(back_populates="combo", cascade="all, delete-orphan")
+
+
+class ComboItem(Base):
+    """Product in a combo bundle."""
+    __tablename__ = "bs_combo_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    combo_id: Mapped[int] = mapped_column(ForeignKey("bs_combos.id"), index=True)
+    combo: Mapped["Combo"] = relationship(back_populates="items")
+
+    product_id: Mapped[int] = mapped_column(ForeignKey("bs_products.id"))
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    unit: Mapped[str] = mapped_column(String(50))
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

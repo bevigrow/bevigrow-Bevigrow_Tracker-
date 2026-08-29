@@ -11,11 +11,9 @@ import {
   LogOut,
   Menu,
   MessageSquare,
-  Package,
   Send,
   ShoppingCart,
   SlidersHorizontal,
-  Stethoscope,
   Users,
   Users2,
   Warehouse,
@@ -61,18 +59,6 @@ const OUTREACH_NAV: NavItem[] = [
   { to: '/app/outreach/settings', label: 'Settings', icon: SlidersHorizontal },
 ]
 
-const BEVI_STOQ_NAV: NavItem[] = [
-  { to: '/app/bevi-stoq', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/app/bevi-stoq/products', label: 'Products', icon: Package },
-  { to: '/app/bevi-stoq/categories', label: 'Categories', icon: ClipboardList },
-  { to: '/app/bevi-stoq/locations', label: 'Locations', icon: Warehouse },
-  { to: '/app/bevi-stoq/stock', label: 'Stock Operations', icon: BarChart3 },
-  { to: '/app/bevi-stoq/requirements', label: 'Customer Requirements', icon: ShoppingCart },
-  { to: '/app/bevi-stoq/purchases', label: 'Customer Purchases', icon: Users },
-  { to: '/app/bevi-stoq/restock', label: 'Restock History', icon: History },
-  { to: '/app/bevi-stoq/history', label: 'Movement History', icon: FileText },
-  { to: '/app/bevi-stoq/diagnostics', label: 'Diagnostics', icon: Stethoscope },
-]
 
 const SHARED_NAV: NavItem[] = [
   { to: '/app/team', label: 'Team', icon: Users2, roles: ['admin', 'manager'] },
@@ -88,10 +74,9 @@ export function AppShell() {
 
   const inOutreach = location.pathname.startsWith('/app/outreach')
   const inTrade = location.pathname.startsWith('/app/trade')
-  const inBeviStoq = location.pathname.startsWith('/app/bevi-stoq')
-  const section = inOutreach ? 'Outreach' : inTrade ? 'Trade Desk' : inBeviStoq ? 'Bevi Stoq' : null
+  const section = inOutreach ? 'Outreach' : inTrade ? 'Trade Desk' : null
 
-  const items = inOutreach ? OUTREACH_NAV : inTrade ? TRADE_NAV : inBeviStoq ? BEVI_STOQ_NAV : []
+  const items = inOutreach ? OUTREACH_NAV : inTrade ? TRADE_NAV : []
   const visible = [...items, ...SHARED_NAV].filter(
     (item) => !item.roles || (user && item.roles.includes(user.role)),
   )
@@ -159,13 +144,6 @@ export function AppShell() {
               >
                 <Send size={17} />
                 Outreach
-              </NavLink>
-              <NavLink
-                to="/app/bevi-stoq"
-                className="flex min-h-[44px] items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium text-latte/55 transition hover:bg-latte/5 hover:text-latte/85"
-              >
-                <Package size={17} />
-                Bevi Stoq
               </NavLink>
             </>
           )}

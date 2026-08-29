@@ -1,10 +1,1 @@
-export { BeviStoqDashboard } from './BeviStoqDashboard'
-export { BeviStoqProducts } from './BeviStoqProducts'
-export { BeviStoqCategories } from './BeviStoqCategories'
-export { BeviStoqLocations } from './BeviStoqLocations'
-export { BeviStoqStock } from './BeviStoqStock'
-export { BeviStoqDiagnostics } from './BeviStoqDiagnostics'
-export { BeviStoqRequirements } from './BeviStoqRequirements'
-export { BeviStoqCustomerPurchases } from './BeviStoqCustomerPurchases'
-export { BeviStoqRestockHistory } from './BeviStoqRestockHistory'
-export { BeviStoqHistory } from './BeviStoqHistory'
+// Bevi Stoq feature has been removed

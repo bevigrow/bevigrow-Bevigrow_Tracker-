@@ -71,6 +71,19 @@ export function BeviStoqProducts() {
   const handleSubmit = async (e: any) => {
     e.preventDefault()
     try {
+      console.log('FORM SUBMIT: Sending product data:', {
+        name: formData.name,
+        category_id: formData.category_id,
+        default_unit: formData.default_unit,
+        low_stock_threshold: formData.low_stock_threshold,
+        types: {
+          name: typeof formData.name,
+          category_id: typeof formData.category_id,
+          default_unit: typeof formData.default_unit,
+          low_stock_threshold: typeof formData.low_stock_threshold,
+        }
+      })
+
       let productId = editingId
       if (editingId) {
         await api.put(`/api/bevi-stoq/products/${editingId}`, formData)

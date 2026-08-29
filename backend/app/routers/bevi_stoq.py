@@ -139,32 +139,58 @@ def list_products(db: Session = Depends(get_db), _: User = Depends(get_current_u
 
 @router.post("/products", response_model=ProductOut, status_code=201)
 def create_product(data: ProductCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    # Check for duplicate product name in same category
-    existing = db.scalar(
-        select(Product).where(
-            and_(
-                Product.name.ilike(data.name),
-                Product.category_id == data.category_id,
-                Product.active == True
+    try:
+        log.info(f"CREATE PRODUCT: Received request: name={data.name}, category_id={data.category_id}, unit={data.default_unit}, threshold={data.low_stock_threshold}, user={user.id}")
+
+        # Validate category exists
+        if data.category_id:
+            category = db.get(Category, data.category_id)
+            if not category:
+                log.warning(f"CREATE PRODUCT: Invalid category_id {data.category_id}")
+                raise HTTPException(status_code=400, detail=f"Category {data.category_id} not found")
+
+        # Check for duplicate product name in same category
+        existing = db.scalar(
+            select(Product).where(
+                and_(
+                    Product.name.ilike(data.name),
+                    Product.category_id == data.category_id,
+                    Product.active == True
+                )
             )
         )
-    )
-    if existing:
-        raise HTTPException(status_code=400, detail=f"Product '{data.name}' already exists in this category")
+        if existing:
+            log.warning(f"CREATE PRODUCT: Duplicate product '{data.name}' in category {data.category_id}")
+            raise HTTPException(status_code=400, detail=f"Product '{data.name}' already exists in this category")
 
-    # Validate unit
-    if not validate_unit(data.default_unit):
-        raise HTTPException(status_code=400, detail=f"Invalid unit '{data.default_unit}'")
+        # Validate unit
+        if not validate_unit(data.default_unit):
+            log.warning(f"CREATE PRODUCT: Invalid unit '{data.default_unit}'")
+            raise HTTPException(status_code=400, detail=f"Invalid unit '{data.default_unit}'")
 
-    # Validate low stock threshold
-    if data.low_stock_threshold < 0:
-        raise HTTPException(status_code=400, detail="Low stock threshold must be non-negative")
+        # Validate low stock threshold
+        if data.low_stock_threshold < 0:
+            log.warning(f"CREATE PRODUCT: Invalid threshold {data.low_stock_threshold}")
+            raise HTTPException(status_code=400, detail="Low stock threshold must be non-negative")
 
-    prod = Product(name=data.name, category_id=data.category_id, default_unit=data.default_unit, low_stock_threshold=data.low_stock_threshold, created_by_user_id=user.id)
-    db.add(prod)
-    db.commit()
-    db.refresh(prod)
-    return prod
+        log.info(f"CREATE PRODUCT: Validation passed, creating product")
+        prod = Product(name=data.name, category_id=data.category_id, default_unit=data.default_unit, low_stock_threshold=data.low_stock_threshold, created_by_user_id=user.id)
+        db.add(prod)
+        db.commit()
+        db.refresh(prod)
+        log.info(f"CREATE PRODUCT: Success, created product {prod.id}")
+        return prod
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"CREATE PRODUCT: Unexpected error: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error creating product: {str(e)}")
+
+@router.post("/products/debug/echo", tags=["debug"])
+def debug_echo(data: ProductCreate):
+    """Debug endpoint: echo back the received payload"""
+    log.info(f"DEBUG ECHO: Received payload: {data.model_dump()}")
+    return {"received": data.model_dump(), "ok": True}
 
 @router.get("/products/{id}", response_model=ProductOut)
 def get_product(id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):

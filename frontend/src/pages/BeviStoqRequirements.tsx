@@ -1,7 +1,7 @@
 import { Check, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { request } from '../../lib/api'
-import { Button, Card, Input, Field, Modal, Select, Spinner, EmptyState, cx } from '../../components/ui'
+import { request } from '../lib/api'
+import { Button, Card, Input, Field, Modal, Select, Spinner, EmptyState, cx } from '../components/ui'
 
 interface Requirement {
   id: number
@@ -218,7 +218,7 @@ export function BeviStoqRequirements() {
         title="New Customer Requirement"
       >
         <form
-          onSubmit={(e) => {
+          onSubmit={(e: any) => {
             e.preventDefault()
             handleCreate()
           }}
@@ -232,7 +232,7 @@ export function BeviStoqRequirements() {
           <Field label="Customer Name *">
             <Input
               value={formData.customer_name}
-              onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
+              onChange={(e: any) => setFormData({ ...formData, customer_name: e.target.value })}
               placeholder="e.g. ABC Foods"
               required
             />
@@ -244,7 +244,7 @@ export function BeviStoqRequirements() {
                 <div key={idx} className="flex gap-2">
                   <Select
                     value={item.product_id}
-                    onChange={(e) => {
+                    onChange={(e: any) => {
                       const newItems = [...formData.items]
                       newItems[idx].product_id = e.target.value
                       setFormData({ ...formData, items: newItems })
@@ -255,7 +255,7 @@ export function BeviStoqRequirements() {
                     type="number"
                     placeholder="Qty"
                     value={item.quantity}
-                    onChange={(e) => {
+                    onChange={(e: any) => {
                       const newItems = [...formData.items]
                       newItems[idx].quantity = e.target.value
                       setFormData({ ...formData, items: newItems })
@@ -263,7 +263,7 @@ export function BeviStoqRequirements() {
                   />
                   <Select
                     value={item.unit}
-                    onChange={(e) => {
+                    onChange={(e: any) => {
                       const newItems = [...formData.items]
                       newItems[idx].unit = e.target.value
                       setFormData({ ...formData, items: newItems })

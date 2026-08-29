@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { request } from '../../lib/api'
-import { Button, Card, Input, Field, Select, Spinner, EmptyState, cx } from '../../components/ui'
+import { request } from '../lib/api'
+import { Button, Card, Input, Field, Select, Spinner, EmptyState, cx } from '../components/ui'
 
 interface Movement {
   id: number
@@ -85,7 +85,7 @@ export function BeviStoqHistory() {
             <Field label="Movement Type">
               <Select
                 value={filters.movement_type}
-                onChange={(e) => setFilters({ ...filters, movement_type: e.target.value })}
+                onChange={(e: any) => setFilters({ ...filters, movement_type: e.target.value })}
                 options={[
                   { value: '', label: 'All Types' },
                   { value: 'ADD', label: 'Add Stock' },
@@ -101,7 +101,7 @@ export function BeviStoqHistory() {
               <Input
                 type="date"
                 value={filters.date_from}
-                onChange={(e) => setFilters({ ...filters, date_from: e.target.value })}
+                onChange={(e: any) => setFilters({ ...filters, date_from: e.target.value })}
               />
             </Field>
 
@@ -109,7 +109,7 @@ export function BeviStoqHistory() {
               <Input
                 type="date"
                 value={filters.date_to}
-                onChange={(e) => setFilters({ ...filters, date_to: e.target.value })}
+                onChange={(e: any) => setFilters({ ...filters, date_to: e.target.value })}
               />
             </Field>
 
@@ -117,7 +117,7 @@ export function BeviStoqHistory() {
               <Input
                 placeholder="Product, location..."
                 value={filters.search}
-                onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                onChange={(e: any) => setFilters({ ...filters, search: e.target.value })}
               />
             </Field>
 

@@ -1,7 +1,7 @@
 import { Trash2, Edit2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { request } from '../../lib/api'
-import { Button, Card, Input, Field, Modal, Select, Spinner, EmptyState, ConfirmDialog } from '../../components/ui'
+import { request } from '../lib/api'
+import { Button, Card, Input, Field, Modal, Select, Spinner, EmptyState, ConfirmDialog } from '../components/ui'
 
 interface RestockRecord {
   id: number
@@ -235,7 +235,7 @@ export function BeviStoqRestockHistory() {
             <Field label="Category">
               <Select
                 value={filters.category_id}
-                onChange={(e) => setFilters({ ...filters, category_id: e.target.value })}
+                onChange={(e: any) => setFilters({ ...filters, category_id: e.target.value })}
                 options={[
                   { value: '', label: 'All Categories' },
                   ...categories.map(c => ({ value: c.id.toString(), label: c.name }))
@@ -246,7 +246,7 @@ export function BeviStoqRestockHistory() {
             <Field label="Product">
               <Select
                 value={filters.product_id}
-                onChange={(e) => setFilters({ ...filters, product_id: e.target.value })}
+                onChange={(e: any) => setFilters({ ...filters, product_id: e.target.value })}
                 options={[
                   { value: '', label: 'All Products' },
                   ...products.map(p => ({ value: p.id.toString(), label: p.name }))
@@ -258,7 +258,7 @@ export function BeviStoqRestockHistory() {
               <Input
                 type="date"
                 value={filters.date_from}
-                onChange={(e) => setFilters({ ...filters, date_from: e.target.value })}
+                onChange={(e: any) => setFilters({ ...filters, date_from: e.target.value })}
               />
             </Field>
 
@@ -266,7 +266,7 @@ export function BeviStoqRestockHistory() {
               <Input
                 type="date"
                 value={filters.date_to}
-                onChange={(e) => setFilters({ ...filters, date_to: e.target.value })}
+                onChange={(e: any) => setFilters({ ...filters, date_to: e.target.value })}
               />
             </Field>
           </div>
@@ -384,7 +384,7 @@ export function BeviStoqRestockHistory() {
         title={isEditing ? 'Edit Restock Record' : 'Record Restock'}
       >
         <form
-          onSubmit={(e) => {
+          onSubmit={(e: any) => {
             e.preventDefault()
             handleSave()
           }}
@@ -398,7 +398,7 @@ export function BeviStoqRestockHistory() {
           <Field label="Product *">
             <Select
               value={formData.product_id}
-              onChange={(e) => setFormData({ ...formData, product_id: e.target.value })}
+              onChange={(e: any) => setFormData({ ...formData, product_id: e.target.value })}
               options={products.map(p => ({ value: p.id.toString(), label: p.name }))}
               required
             />
@@ -407,7 +407,7 @@ export function BeviStoqRestockHistory() {
           <Field label="Location *">
             <Select
               value={formData.location_id}
-              onChange={(e) => setFormData({ ...formData, location_id: e.target.value })}
+              onChange={(e: any) => setFormData({ ...formData, location_id: e.target.value })}
               options={locations.map(l => ({ value: l.id.toString(), label: l.name }))}
               required
             />
@@ -418,7 +418,7 @@ export function BeviStoqRestockHistory() {
               type="number"
               placeholder="e.g. 100"
               value={formData.quantity_restocked}
-              onChange={(e) => setFormData({ ...formData, quantity_restocked: e.target.value })}
+              onChange={(e: any) => setFormData({ ...formData, quantity_restocked: e.target.value })}
               required
             />
           </Field>
@@ -426,7 +426,7 @@ export function BeviStoqRestockHistory() {
           <Field label="Unit *">
             <Select
               value={formData.unit}
-              onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+              onChange={(e: any) => setFormData({ ...formData, unit: e.target.value })}
               options={[
                 { value: 'kg', label: 'kg' },
                 { value: 'g', label: 'g' },
@@ -444,7 +444,7 @@ export function BeviStoqRestockHistory() {
             <Input
               type="date"
               value={formData.restock_date}
-              onChange={(e) => setFormData({ ...formData, restock_date: e.target.value })}
+              onChange={(e: any) => setFormData({ ...formData, restock_date: e.target.value })}
               required
             />
           </Field>
@@ -453,7 +453,7 @@ export function BeviStoqRestockHistory() {
             <Input
               placeholder="Supplier name"
               value={formData.supplier}
-              onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
+              onChange={(e: any) => setFormData({ ...formData, supplier: e.target.value })}
             />
           </Field>
 
@@ -462,7 +462,7 @@ export function BeviStoqRestockHistory() {
               type="number"
               placeholder="0.00"
               value={formData.cost_per_unit}
-              onChange={(e) => setFormData({ ...formData, cost_per_unit: e.target.value })}
+              onChange={(e: any) => setFormData({ ...formData, cost_per_unit: e.target.value })}
               step="0.01"
             />
           </Field>
@@ -472,7 +472,7 @@ export function BeviStoqRestockHistory() {
               type="number"
               placeholder="0.00"
               value={formData.total_cost}
-              onChange={(e) => setFormData({ ...formData, total_cost: e.target.value })}
+              onChange={(e: any) => setFormData({ ...formData, total_cost: e.target.value })}
               step="0.01"
             />
           </Field>
@@ -481,7 +481,7 @@ export function BeviStoqRestockHistory() {
             <Input
               placeholder="Reference number"
               value={formData.reference_id}
-              onChange={(e) => setFormData({ ...formData, reference_id: e.target.value })}
+              onChange={(e: any) => setFormData({ ...formData, reference_id: e.target.value })}
             />
           </Field>
 
@@ -489,7 +489,7 @@ export function BeviStoqRestockHistory() {
             <Input
               placeholder="Any additional notes..."
               value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              onChange={(e: any) => setFormData({ ...formData, notes: e.target.value })}
             />
           </Field>
 

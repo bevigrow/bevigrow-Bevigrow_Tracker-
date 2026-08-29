@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { request } from '../../lib/api'
-import { Button, Card, Input, Field, Modal, Select, Spinner, cx } from '../../components/ui'
+import { request } from '../lib/api'
+import { Button, Card, Input, Field, Modal, Select, Spinner, cx } from '../components/ui'
 
 interface Product {
   id: number
@@ -211,7 +211,7 @@ export function BeviStoqStock() {
       >
         {activeTab === 'add' ? (
           <form
-            onSubmit={(e) => {
+            onSubmit={(e: any) => {
               e.preventDefault()
               handleAddStock()
             }}
@@ -225,7 +225,7 @@ export function BeviStoqStock() {
             <Field label="Product *">
               <Select
                 value={formData.product_id}
-                onChange={(e) => setFormData({ ...formData, product_id: e.target.value })}
+                onChange={(e: any) => setFormData({ ...formData, product_id: e.target.value })}
                 options={products.map(p => ({ value: p.id.toString(), label: p.name }))}
                 required
               />
@@ -234,7 +234,7 @@ export function BeviStoqStock() {
             <Field label="Location *">
               <Select
                 value={formData.location_id}
-                onChange={(e) => setFormData({ ...formData, location_id: e.target.value })}
+                onChange={(e: any) => setFormData({ ...formData, location_id: e.target.value })}
                 options={locations.map(l => ({ value: l.id.toString(), label: l.name }))}
                 required
               />
@@ -245,7 +245,7 @@ export function BeviStoqStock() {
                 type="number"
                 placeholder="e.g. 100"
                 value={formData.quantity}
-                onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                onChange={(e: any) => setFormData({ ...formData, quantity: e.target.value })}
                 required
               />
             </Field>
@@ -253,7 +253,7 @@ export function BeviStoqStock() {
             <Field label="Unit *">
               <Select
                 value={formData.unit}
-                onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+                onChange={(e: any) => setFormData({ ...formData, unit: e.target.value })}
                 options={[
                   { value: 'kg', label: 'kg' },
                   { value: 'g', label: 'g' },
@@ -271,7 +271,7 @@ export function BeviStoqStock() {
               <Input
                 type="date"
                 value={formData.restock_date}
-                onChange={(e) => setFormData({ ...formData, restock_date: e.target.value })}
+                onChange={(e: any) => setFormData({ ...formData, restock_date: e.target.value })}
               />
             </Field>
 
@@ -279,7 +279,7 @@ export function BeviStoqStock() {
               <Input
                 placeholder="Supplier name"
                 value={formData.supplier}
-                onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
+                onChange={(e: any) => setFormData({ ...formData, supplier: e.target.value })}
               />
             </Field>
 
@@ -288,7 +288,7 @@ export function BeviStoqStock() {
                 type="number"
                 placeholder="₹0.00"
                 value={formData.cost_per_unit}
-                onChange={(e) => setFormData({ ...formData, cost_per_unit: e.target.value })}
+                onChange={(e: any) => setFormData({ ...formData, cost_per_unit: e.target.value })}
                 step="0.01"
               />
             </Field>
@@ -298,7 +298,7 @@ export function BeviStoqStock() {
                 type="number"
                 placeholder="₹0.00"
                 value={formData.total_cost}
-                onChange={(e) => setFormData({ ...formData, total_cost: e.target.value })}
+                onChange={(e: any) => setFormData({ ...formData, total_cost: e.target.value })}
                 step="0.01"
               />
             </Field>
@@ -308,7 +308,7 @@ export function BeviStoqStock() {
                 type="number"
                 placeholder="Order/Invoice ID"
                 value={formData.reference}
-                onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
+                onChange={(e: any) => setFormData({ ...formData, reference: e.target.value })}
               />
             </Field>
 
@@ -316,7 +316,7 @@ export function BeviStoqStock() {
               <Input
                 placeholder="Any additional info..."
                 value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                onChange={(e: any) => setFormData({ ...formData, notes: e.target.value })}
               />
             </Field>
 
@@ -331,7 +331,7 @@ export function BeviStoqStock() {
           </form>
         ) : (
           <form
-            onSubmit={(e) => {
+            onSubmit={(e: any) => {
               e.preventDefault()
               handleTransferStock()
             }}
@@ -345,7 +345,7 @@ export function BeviStoqStock() {
             <Field label="Product *">
               <Select
                 value={transferData.product_id}
-                onChange={(e) => setTransferData({ ...transferData, product_id: e.target.value })}
+                onChange={(e: any) => setTransferData({ ...transferData, product_id: e.target.value })}
                 options={products.map(p => ({ value: p.id.toString(), label: p.name }))}
                 required
               />
@@ -354,7 +354,7 @@ export function BeviStoqStock() {
             <Field label="From Location *">
               <Select
                 value={transferData.from_location_id}
-                onChange={(e) => setTransferData({ ...transferData, from_location_id: e.target.value })}
+                onChange={(e: any) => setTransferData({ ...transferData, from_location_id: e.target.value })}
                 options={locations.map(l => ({ value: l.id.toString(), label: l.name }))}
                 required
               />
@@ -363,7 +363,7 @@ export function BeviStoqStock() {
             <Field label="To Location *">
               <Select
                 value={transferData.to_location_id}
-                onChange={(e) => setTransferData({ ...transferData, to_location_id: e.target.value })}
+                onChange={(e: any) => setTransferData({ ...transferData, to_location_id: e.target.value })}
                 options={locations.map(l => ({ value: l.id.toString(), label: l.name }))}
                 required
               />
@@ -374,7 +374,7 @@ export function BeviStoqStock() {
                 type="number"
                 placeholder="e.g. 100"
                 value={transferData.quantity}
-                onChange={(e) => setTransferData({ ...transferData, quantity: e.target.value })}
+                onChange={(e: any) => setTransferData({ ...transferData, quantity: e.target.value })}
                 required
               />
             </Field>
@@ -382,7 +382,7 @@ export function BeviStoqStock() {
             <Field label="Unit *">
               <Select
                 value={transferData.unit}
-                onChange={(e) => setTransferData({ ...transferData, unit: e.target.value })}
+                onChange={(e: any) => setTransferData({ ...transferData, unit: e.target.value })}
                 options={[
                   { value: 'kg', label: 'kg' },
                   { value: 'g', label: 'g' },
@@ -400,7 +400,7 @@ export function BeviStoqStock() {
               <Input
                 type="date"
                 value={transferData.transfer_date}
-                onChange={(e) => setTransferData({ ...transferData, transfer_date: e.target.value })}
+                onChange={(e: any) => setTransferData({ ...transferData, transfer_date: e.target.value })}
               />
             </Field>
 
@@ -408,7 +408,7 @@ export function BeviStoqStock() {
               <Input
                 placeholder="Any additional info..."
                 value={transferData.notes}
-                onChange={(e) => setTransferData({ ...transferData, notes: e.target.value })}
+                onChange={(e: any) => setTransferData({ ...transferData, notes: e.target.value })}
               />
             </Field>
 

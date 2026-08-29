@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { request } from '../../lib/api'
-import { Button, Card, Input, Field, Modal, Select, Spinner, cx } from '../../components/ui'
+import { request } from '../lib/api'
+import { Button, Card, Input, Field, Select, Spinner, cx } from '../components/ui'
 
 interface Category {
   id: number
@@ -86,7 +86,7 @@ export function BeviStoqDiagnostics() {
           <Field label="Category">
             <Select
               value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
+              onChange={(e: any) => setSelectedCategory(e.target.value)}
               options={[
                 { value: '', label: 'Select category' },
                 ...categories.map(c => ({ value: c.id.toString(), label: c.name }))
@@ -98,8 +98,8 @@ export function BeviStoqDiagnostics() {
             <Input
               placeholder="e.g. Black Pepper"
               value={productName}
-              onChange={(e) => setProductName(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleCheck()}
+              onChange={(e: any) => setProductName(e.target.value)}
+              onKeyPress={(e: any) => e.key === 'Enter' && handleCheck()}
             />
           </Field>
 

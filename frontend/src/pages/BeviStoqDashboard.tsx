@@ -1,8 +1,8 @@
 import { Package, AlertCircle, ShoppingCart, TrendingDown } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { request } from '../../lib/api'
-import { Card, Button, Spinner, EmptyState, cx } from '../../components/ui'
+import { request } from '../lib/api'
+import { Card, Button, Spinner, EmptyState, cx } from '../components/ui'
 
 interface DashboardData {
   summary: {

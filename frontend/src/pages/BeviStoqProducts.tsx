@@ -1,8 +1,8 @@
 import { Trash2, Edit2, Warehouse, Calendar } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { request } from '../../lib/api'
-import { Button, Card, Input, Field, Modal, Select, Spinner, EmptyState, cx, ConfirmDialog } from '../../components/ui'
+import { request } from '../lib/api'
+import { Button, Card, Input, Field, Modal, Select, Spinner, EmptyState, cx, ConfirmDialog } from '../components/ui'
 
 interface Product {
   id: number
@@ -246,12 +246,12 @@ export function BeviStoqProducts() {
           <Input
             placeholder="Search products..."
             value={search}
-            onChange={(e) => setSearchParams({ search: e.target.value })}
+            onChange={(e: any) => setSearchParams({ search: e.target.value })}
             className="flex-1"
           />
           <Select
             value={categoryFilter}
-            onChange={(e) => setSearchParams({ category: e.target.value })}
+            onChange={(e: any) => setSearchParams({ category: e.target.value })}
             options={[
               { value: '', label: 'All Categories' },
               ...categories.map(c => ({ value: c.id.toString(), label: c.name }))
@@ -449,7 +449,7 @@ export function BeviStoqProducts() {
         title={isEditing ? 'Edit Product' : 'Add Product'}
       >
         <form
-          onSubmit={(e) => {
+          onSubmit={(e: any) => {
             e.preventDefault()
             if (!isSaving) {
               handleCreate()
@@ -465,7 +465,7 @@ export function BeviStoqProducts() {
           <Field label="Product Name *">
             <Input
               value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              onChange={(e: any) => setFormData({ ...formData, name: e.target.value })}
               placeholder="e.g. Pepper"
               required
             />
@@ -474,7 +474,7 @@ export function BeviStoqProducts() {
           <Field label="Category *">
             <Select
               value={formData.category_id}
-              onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
+              onChange={(e: any) => setFormData({ ...formData, category_id: e.target.value })}
               options={[
                 { value: '', label: 'Select category' },
                 ...categories.map(c => ({ value: c.id.toString(), label: c.name }))
@@ -486,7 +486,7 @@ export function BeviStoqProducts() {
           <Field label="Default Unit *">
             <Select
               value={formData.default_unit}
-              onChange={(e) => setFormData({ ...formData, default_unit: e.target.value })}
+              onChange={(e: any) => setFormData({ ...formData, default_unit: e.target.value })}
               options={[
                 { value: '', label: 'Select unit' },
                 { value: 'kg', label: 'kg' },
@@ -509,7 +509,7 @@ export function BeviStoqProducts() {
             <Input
               type="number"
               value={formData.low_stock_alert_level}
-              onChange={(e) => setFormData({ ...formData, low_stock_alert_level: e.target.value })}
+              onChange={(e: any) => setFormData({ ...formData, low_stock_alert_level: e.target.value })}
               placeholder="50"
               min="0"
               step="1"
@@ -529,7 +529,7 @@ export function BeviStoqProducts() {
                   type="number"
                   placeholder="e.g. 100"
                   value={formData.initial_quantity}
-                  onChange={(e) => setFormData({ ...formData, initial_quantity: e.target.value })}
+                  onChange={(e: any) => setFormData({ ...formData, initial_quantity: e.target.value })}
                   required={formData.initial_quantity !== ''}
                 />
               </Field>
@@ -537,7 +537,7 @@ export function BeviStoqProducts() {
               <Field label="Location *">
                 <Select
                   value={formData.initial_location_id}
-                  onChange={(e) => setFormData({ ...formData, initial_location_id: e.target.value })}
+                  onChange={(e: any) => setFormData({ ...formData, initial_location_id: e.target.value })}
                   options={[
                     { value: '', label: 'Select location' },
                     ...locations.map(l => ({ value: l.id.toString(), label: l.name }))
@@ -549,7 +549,7 @@ export function BeviStoqProducts() {
               <Field label="Unit *">
                 <Select
                   value={formData.initial_unit}
-                  onChange={(e) => setFormData({ ...formData, initial_unit: e.target.value })}
+                  onChange={(e: any) => setFormData({ ...formData, initial_unit: e.target.value })}
                   options={[
                     { value: 'kg', label: 'kg' },
                     { value: 'g', label: 'g' },
@@ -569,7 +569,7 @@ export function BeviStoqProducts() {
                   type="number"
                   placeholder="0.00"
                   value={formData.initial_cost}
-                  onChange={(e) => setFormData({ ...formData, initial_cost: e.target.value })}
+                  onChange={(e: any) => setFormData({ ...formData, initial_cost: e.target.value })}
                   step="0.01"
                 />
               </Field>

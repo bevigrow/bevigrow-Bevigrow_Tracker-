@@ -1,7 +1,7 @@
 import { Trash2, Edit2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { request } from '../../lib/api'
-import { Button, Card, Input, Field, Modal, Spinner, EmptyState, ConfirmDialog } from '../../components/ui'
+import { request } from '../lib/api'
+import { Button, Card, Input, Field, Modal, Spinner, EmptyState, ConfirmDialog } from '../components/ui'
 
 interface Category {
   id: number
@@ -131,7 +131,7 @@ export function BeviStoqCategories() {
         title={isEditing ? 'Edit Category' : 'Add Category'}
       >
         <form
-          onSubmit={(e) => {
+          onSubmit={(e: any) => {
             e.preventDefault()
             handleSave()
           }}
@@ -145,7 +145,7 @@ export function BeviStoqCategories() {
           <Field label="Category Name *">
             <Input
               value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              onChange={(e: any) => setFormData({ ...formData, name: e.target.value })}
               placeholder="e.g. Spices"
               required
             />
@@ -154,7 +154,7 @@ export function BeviStoqCategories() {
           <Field label="Description">
             <Input
               value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              onChange={(e: any) => setFormData({ ...formData, description: e.target.value })}
               placeholder="Optional description"
             />
           </Field>

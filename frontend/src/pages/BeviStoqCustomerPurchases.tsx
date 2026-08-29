@@ -1,7 +1,7 @@
 import { Trash2, Edit2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { request } from '../../lib/api'
-import { Button, Card, Input, Field, Modal, Select, Spinner, EmptyState, ConfirmDialog, cx } from '../../components/ui'
+import { request } from '../lib/api'
+import { Button, Card, Input, Field, Modal, Select, Spinner, EmptyState, ConfirmDialog, cx } from '../components/ui'
 
 interface CustomerPurchase {
   id: number
@@ -37,7 +37,7 @@ export function BeviStoqCustomerPurchases() {
     quantity: '',
     unit: 'kg',
     purchase_date: new Date().toISOString().split('T')[0],
-    payment_status: 'pending' as const,
+    payment_status: 'pending' as 'pending' | 'paid' | 'overdue',
     payment_method: 'cash',
     amount: '',
     notes: ''
@@ -211,7 +211,7 @@ export function BeviStoqCustomerPurchases() {
             <Field label="Payment Status">
               <Select
                 value={paymentFilter}
-                onChange={(e) => setPaymentFilter(e.target.value)}
+                onChange={(e: any) => setPaymentFilter(e.target.value)}
                 options={[
                   { value: '', label: 'All' },
                   { value: 'paid', label: 'Paid' },
@@ -224,14 +224,14 @@ export function BeviStoqCustomerPurchases() {
               <Input
                 type="date"
                 value={dateFilter.from}
-                onChange={(e) => setDateFilter({ ...dateFilter, from: e.target.value })}
+                onChange={(e: any) => setDateFilter({ ...dateFilter, from: e.target.value })}
               />
             </Field>
             <Field label="To Date">
               <Input
                 type="date"
                 value={dateFilter.to}
-                onChange={(e) => setDateFilter({ ...dateFilter, to: e.target.value })}
+                onChange={(e: any) => setDateFilter({ ...dateFilter, to: e.target.value })}
               />
             </Field>
           </div>
@@ -318,7 +318,7 @@ export function BeviStoqCustomerPurchases() {
         title={isEditing ? 'Edit Customer Purchase' : 'Record Customer Purchase'}
       >
         <form
-          onSubmit={(e) => {
+          onSubmit={(e: any) => {
             e.preventDefault()
             handleAdd()
           }}
@@ -333,7 +333,7 @@ export function BeviStoqCustomerPurchases() {
             <Input
               placeholder="e.g. ABC Foods"
               value={formData.customer_name}
-              onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
+              onChange={(e: any) => setFormData({ ...formData, customer_name: e.target.value })}
               required
             />
           </Field>
@@ -341,7 +341,7 @@ export function BeviStoqCustomerPurchases() {
           <Field label="Product *">
             <Select
               value={formData.product_id}
-              onChange={(e) => setFormData({ ...formData, product_id: e.target.value })}
+              onChange={(e: any) => setFormData({ ...formData, product_id: e.target.value })}
               options={products.map(p => ({ value: p.id.toString(), label: p.name }))}
               required
             />
@@ -352,7 +352,7 @@ export function BeviStoqCustomerPurchases() {
               type="number"
               placeholder="e.g. 100"
               value={formData.quantity}
-              onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+              onChange={(e: any) => setFormData({ ...formData, quantity: e.target.value })}
               required
             />
           </Field>
@@ -360,7 +360,7 @@ export function BeviStoqCustomerPurchases() {
           <Field label="Unit *">
             <Select
               value={formData.unit}
-              onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+              onChange={(e: any) => setFormData({ ...formData, unit: e.target.value })}
               options={[
                 { value: 'kg', label: 'kg' },
                 { value: 'g', label: 'g' },
@@ -374,7 +374,7 @@ export function BeviStoqCustomerPurchases() {
             <Input
               type="date"
               value={formData.purchase_date}
-              onChange={(e) => setFormData({ ...formData, purchase_date: e.target.value })}
+              onChange={(e: any) => setFormData({ ...formData, purchase_date: e.target.value })}
               required
             />
           </Field>
@@ -384,7 +384,7 @@ export function BeviStoqCustomerPurchases() {
               type="number"
               placeholder="₹0.00"
               value={formData.amount}
-              onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+              onChange={(e: any) => setFormData({ ...formData, amount: e.target.value })}
               step="0.01"
             />
           </Field>
@@ -392,7 +392,7 @@ export function BeviStoqCustomerPurchases() {
           <Field label="Payment Status">
             <Select
               value={formData.payment_status}
-              onChange={(e) => setFormData({ ...formData, payment_status: e.target.value as any })}
+              onChange={(e: any) => setFormData({ ...formData, payment_status: e.target.value as any })}
               options={[
                 { value: 'paid', label: 'Paid' },
                 { value: 'pending', label: 'Pending' },
@@ -404,7 +404,7 @@ export function BeviStoqCustomerPurchases() {
           <Field label="Payment Method">
             <Select
               value={formData.payment_method}
-              onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
+              onChange={(e: any) => setFormData({ ...formData, payment_method: e.target.value })}
               options={[
                 { value: 'cash', label: 'Cash' },
                 { value: 'online', label: 'Online Transfer' },
@@ -419,7 +419,7 @@ export function BeviStoqCustomerPurchases() {
             <Input
               placeholder="Optional notes..."
               value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              onChange={(e: any) => setFormData({ ...formData, notes: e.target.value })}
             />
           </Field>
 

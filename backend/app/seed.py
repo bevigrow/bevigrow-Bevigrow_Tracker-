@@ -76,27 +76,56 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("campaign_targets", "approved_by_id", "INTEGER"),
     ("campaign_targets", "approved_at", "TIMESTAMP WITH TIME ZONE"),
     # Bevi Stoq inventory management (added after initial BeviGrow release).
-    # Products low-stock threshold for alerts.
+    # ALL columns needed for complete Bevi Stoq schema
+
+    # Categories
+    ("bs_categories", "updated_at", "TIMESTAMP WITH TIME ZONE DEFAULT NOW()"),
+    ("bs_categories", "updated_by_user_id", "INTEGER"),
+
+    # Products
     ("bs_products", "low_stock_threshold", "FLOAT DEFAULT 0 NOT NULL"),
-    # Stock movements location tracking
+    ("bs_products", "updated_at", "TIMESTAMP WITH TIME ZONE DEFAULT NOW()"),
+    ("bs_products", "updated_by_user_id", "INTEGER"),
+
+    # Locations
+    ("bs_locations", "updated_at", "TIMESTAMP WITH TIME ZONE DEFAULT NOW()"),
+    ("bs_locations", "updated_by_user_id", "INTEGER"),
+
+    # Inventory
+    ("bs_inventory", "updated_at", "TIMESTAMP WITH TIME ZONE DEFAULT NOW()"),
+    ("bs_inventory", "updated_by_user_id", "INTEGER NOT NULL"),
+
+    # Stock movements
     ("bs_stock_movements", "from_location_id", "INTEGER"),
     ("bs_stock_movements", "to_location_id", "INTEGER"),
-    # Restock orders additional fields
+
+    # Restocks
+    ("bs_restocks", "restock_date", "TIMESTAMP WITH TIME ZONE"),
     ("bs_restocks", "cost_per_unit", "FLOAT"),
     ("bs_restocks", "total_cost", "FLOAT"),
+    ("bs_restocks", "status", "VARCHAR(50) DEFAULT 'pending'"),
+
     # Customer requirements
     ("bs_customer_requirements", "contact_id", "INTEGER"),
     ("bs_customer_requirements", "updated_at", "TIMESTAMP WITH TIME ZONE DEFAULT NOW()"),
     ("bs_customer_requirements", "updated_by_user_id", "INTEGER"),
+
     # Requirement items
     ("bs_requirement_items", "quantity_reserved", "FLOAT DEFAULT 0 NOT NULL"),
     ("bs_requirement_items", "quantity_fulfilled", "FLOAT DEFAULT 0 NOT NULL"),
+
     # Customer purchases
-    ("bs_customer_purchases", "payment_status", "VARCHAR(20) DEFAULT 'pending'"),
+    ("bs_customer_purchases", "contact_id", "INTEGER"),
+    ("bs_customer_purchases", "payment_status", "VARCHAR(50) DEFAULT 'pending'"),
     ("bs_customer_purchases", "payment_method", "VARCHAR(100)"),
-    ("bs_customer_purchases", "amount", "FLOAT DEFAULT 0 NOT NULL"),
-    ("bs_customer_purchases", "purchase_date", "TIMESTAMP WITH TIME ZONE DEFAULT NOW()"),
+    ("bs_customer_purchases", "amount", "FLOAT NOT NULL"),
     ("bs_customer_purchases", "notes", "TEXT"),
+    ("bs_customer_purchases", "updated_at", "TIMESTAMP WITH TIME ZONE DEFAULT NOW()"),
+    ("bs_customer_purchases", "updated_by_user_id", "INTEGER"),
+
+    # Combos
+    ("bs_combos", "updated_at", "TIMESTAMP WITH TIME ZONE DEFAULT NOW()"),
+    ("bs_combos", "updated_by_user_id", "INTEGER"),
 ]
 
 

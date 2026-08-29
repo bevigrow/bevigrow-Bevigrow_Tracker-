@@ -46,8 +46,11 @@ async def lifespan(app: FastAPI):
     def _apply_migrations():
         """Add missing columns to existing tables (data migration safety net)."""
         try:
-            with engine.connect() as conn:
+            with engine.begin() as conn:
                 schema = settings.schema
+                if "sqlite" in settings.DATABASE_URL.lower():
+                    return  # SQLite handles schemas differently, skip
+
                 # Check if low_stock_threshold exists on bs_products
                 result = conn.execute(text(f"""
                     SELECT EXISTS (
@@ -59,9 +62,10 @@ async def lifespan(app: FastAPI):
                 if not has_column:
                     log.warning("Adding missing low_stock_threshold column to bs_products")
                     conn.execute(text(f"ALTER TABLE {schema}.bs_products ADD COLUMN low_stock_threshold FLOAT DEFAULT 0"))
-                    conn.commit()
+                    log.info("Successfully added low_stock_threshold column")
         except Exception as exc:
-            log.warning('Migration check failed (may not be PostgreSQL): %s', exc)
+            log.error('Migration failed: %s', exc)
+            # Don't crash startup, but log the error for investigation
 
     def _init_async():
         try:

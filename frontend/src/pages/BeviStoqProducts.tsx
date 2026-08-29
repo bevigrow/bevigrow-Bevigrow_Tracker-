@@ -84,11 +84,21 @@ export function BeviStoqProducts() {
         }
       })
 
+      // Validate alert_quantity if provided
+      let alertQuantityValue: number | null = null
+      if (formData.alert_quantity.trim()) {
+        const parsed = parseFloat(formData.alert_quantity)
+        if (isNaN(parsed) || parsed < 0) {
+          throw new Error('Alert Quantity must be a positive number or empty')
+        }
+        alertQuantityValue = parsed
+      }
+
       const payload = {
         name: formData.name,
         category_id: formData.category_id,
         default_unit: formData.default_unit,
-        alert_quantity: formData.alert_quantity ? parseFloat(formData.alert_quantity) : null,
+        alert_quantity: alertQuantityValue,
       }
 
       let productId = editingId
@@ -141,7 +151,7 @@ export function BeviStoqProducts() {
       name: product.name,
       category_id: product.category_id,
       default_unit: product.default_unit,
-      alert_quantity: product.alert_quantity,
+      alert_quantity: product.alert_quantity ? String(product.alert_quantity) : '',
     })
     setEditingId(product.id)
     setShowForm(true)

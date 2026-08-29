@@ -1027,6 +1027,13 @@ class StockMovementType(str, enum.Enum):
     adjustment = "adjustment"
 
 
+class PaymentStatus(str, enum.Enum):
+    """Payment status for customer purchases."""
+    paid = "paid"
+    pending = "pending"
+    overdue = "overdue"
+
+
 class RequirementStatus(str, enum.Enum):
     """Status of customer requirements."""
     pending = "pending"
@@ -1076,6 +1083,7 @@ class Product(Base):
     stock_movements: Mapped[list["StockMovement"]] = relationship(back_populates="product", cascade="all, delete-orphan")
     requirement_items: Mapped[list["RequirementItem"]] = relationship(back_populates="product")
     combo_items: Mapped[list["ComboItem"]] = relationship(back_populates="product")
+    customer_purchases: Mapped[list["CustomerPurchase"]] = relationship(back_populates="product")
 
 
 class Location(Base):
@@ -1217,3 +1225,31 @@ class ComboItem(Base):
     unit: Mapped[str] = mapped_column(String(50))
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class CustomerPurchase(Base):
+    """Record of customer purchase transactions."""
+    __tablename__ = "bs_customer_purchases"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    customer_id: Mapped[int | None] = mapped_column(ForeignKey("contacts.id"))
+    customer_name: Mapped[str] = mapped_column(String(200), nullable=False)
+
+    product_id: Mapped[int] = mapped_column(ForeignKey("bs_products.id"), index=True)
+    product: Mapped["Product"] = relationship(back_populates="customer_purchases")
+
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    unit: Mapped[str] = mapped_column(String(50))
+
+    purchase_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    payment_status: Mapped[PaymentStatus] = mapped_column(
+        Enum(PaymentStatus, native_enum=False), default=PaymentStatus.pending, index=True
+    )
+    payment_method: Mapped[str | None] = mapped_column(String(100))
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))

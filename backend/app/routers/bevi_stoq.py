@@ -12,7 +12,8 @@ from ..deps import get_current_user
 from ..models import (
     User, Category, Product, Location, Inventory, StockMovement,
     CustomerRequirement, RequirementItem, Combo, ComboItem,
-    StockMovementType, RequirementStatus
+    CustomerPurchase,
+    StockMovementType, RequirementStatus, PaymentStatus
 )
 from ..schemas_bevi_stoq import (
     CategoryCreate, CategoryOut, CategoryUpdate,
@@ -25,7 +26,8 @@ from ..schemas_bevi_stoq import (
     RequirementAvailabilityCheck, RequirementItemOut,
     ComboCreate, ComboOut, ComboAvailabilityOut,
     DashboardOut, DashboardSummary, StockByCategory, StockByLocation,
-    RecentMovement, SearchResultsOut, SearchResult
+    RecentMovement, SearchResultsOut, SearchResult,
+    CustomerPurchaseCreate, CustomerPurchaseOut, CustomerPurchaseUpdate
 )
 
 router = APIRouter(prefix="/api/bevi-stoq", tags=["bevi-stoq"])
@@ -887,3 +889,130 @@ def get_dashboard(
         by_location=by_location,
         recent_movements=recent_movements
     )
+
+
+# ================================================================ CUSTOMER PURCHASES
+@router.get("/customer-purchases", response_model=list[CustomerPurchaseOut])
+def list_customer_purchases(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+    payment_status: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    limit: int = Query(100, le=1000),
+    offset: int = Query(0, ge=0)
+):
+    """List customer purchases with optional filters."""
+    query = select(CustomerPurchase)
+
+    if payment_status:
+        query = query.where(CustomerPurchase.payment_status == payment_status)
+
+    if date_from:
+        from_dt = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
+        query = query.where(CustomerPurchase.purchase_date >= from_dt)
+
+    if date_to:
+        to_dt = datetime.fromisoformat(date_to.replace('Z', '+00:00'))
+        query = query.where(CustomerPurchase.purchase_date <= to_dt)
+
+    query = query.order_by(CustomerPurchase.purchase_date.desc()).limit(limit).offset(offset)
+    return db.scalars(query).all()
+
+
+@router.post("/customer-purchases", response_model=CustomerPurchaseOut, status_code=201)
+def create_customer_purchase(
+    data: CustomerPurchaseCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Create a new customer purchase record."""
+    product = db.get(Product, data.product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    purchase = CustomerPurchase(
+        customer_name=data.customer_name,
+        product_id=data.product_id,
+        quantity=data.quantity,
+        unit=data.unit,
+        purchase_date=data.purchase_date,
+        payment_status=data.payment_status,
+        payment_method=data.payment_method,
+        amount=data.amount,
+        notes=data.notes,
+        created_by_user_id=current_user.id
+    )
+    db.add(purchase)
+    db.commit()
+    db.refresh(purchase)
+    return purchase
+
+
+@router.get("/customer-purchases/{purchase_id}", response_model=CustomerPurchaseOut)
+def get_customer_purchase(
+    purchase_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user)
+):
+    """Get customer purchase details."""
+    purchase = db.get(CustomerPurchase, purchase_id)
+    if not purchase:
+        raise HTTPException(status_code=404, detail="Purchase not found")
+    return purchase
+
+
+@router.put("/customer-purchases/{purchase_id}", response_model=CustomerPurchaseOut)
+def update_customer_purchase(
+    purchase_id: int,
+    data: CustomerPurchaseUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Update a customer purchase record."""
+    purchase = db.get(CustomerPurchase, purchase_id)
+    if not purchase:
+        raise HTTPException(status_code=404, detail="Purchase not found")
+
+    if data.customer_name is not None:
+        purchase.customer_name = data.customer_name
+    if data.product_id is not None:
+        product = db.get(Product, data.product_id)
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
+        purchase.product_id = data.product_id
+    if data.quantity is not None:
+        purchase.quantity = data.quantity
+    if data.unit is not None:
+        purchase.unit = data.unit
+    if data.purchase_date is not None:
+        purchase.purchase_date = data.purchase_date
+    if data.payment_status is not None:
+        purchase.payment_status = data.payment_status
+    if data.payment_method is not None:
+        purchase.payment_method = data.payment_method
+    if data.amount is not None:
+        purchase.amount = data.amount
+    if data.notes is not None:
+        purchase.notes = data.notes
+
+    purchase.updated_at = utcnow()
+    purchase.updated_by_user_id = current_user.id
+    db.commit()
+    db.refresh(purchase)
+    return purchase
+
+
+@router.delete("/customer-purchases/{purchase_id}", status_code=204)
+def delete_customer_purchase(
+    purchase_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Delete a customer purchase record."""
+    purchase = db.get(CustomerPurchase, purchase_id)
+    if not purchase:
+        raise HTTPException(status_code=404, detail="Purchase not found")
+
+    db.delete(purchase)
+    db.commit()

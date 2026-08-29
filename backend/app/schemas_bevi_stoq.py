@@ -309,3 +309,47 @@ class SearchResultsOut(BaseModel):
     products: list[SearchResult]
     categories: list[SearchResult]
     locations: list[SearchResult]
+
+
+# ================================================================ CUSTOMER PURCHASES
+class CustomerPurchaseCreate(BaseModel):
+    customer_name: str = Field(..., min_length=1, max_length=200)
+    product_id: int
+    quantity: float = Field(..., gt=0)
+    unit: str
+    purchase_date: datetime
+    payment_status: str = Field(default='pending')
+    payment_method: str | None = None
+    amount: float = Field(..., ge=0)
+    notes: str | None = None
+
+
+class CustomerPurchaseUpdate(BaseModel):
+    customer_name: str | None = Field(None, min_length=1, max_length=200)
+    product_id: int | None = None
+    quantity: float | None = Field(None, gt=0)
+    unit: str | None = None
+    purchase_date: datetime | None = None
+    payment_status: str | None = None
+    payment_method: str | None = None
+    amount: float | None = Field(None, ge=0)
+    notes: str | None = None
+
+
+class CustomerPurchaseOut(BaseModel):
+    id: int
+    customer_id: int | None
+    customer_name: str
+    product_id: int
+    quantity: float
+    unit: str
+    purchase_date: datetime
+    payment_status: str
+    payment_method: str | None
+    amount: float
+    notes: str | None
+    created_at: datetime
+    created_by_user_id: int
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}

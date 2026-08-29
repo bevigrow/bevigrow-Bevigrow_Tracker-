@@ -62,6 +62,7 @@ export function BeviStoqProducts() {
     e.preventDefault()
     if (submitting) return // Prevent double-submit
     setSubmitting(true)
+    setError(null)
     try {
       const payload = {
         name: formData.name.trim(),
@@ -73,9 +74,14 @@ export function BeviStoqProducts() {
       let productId = editingId
       if (editingId) {
         await api.put(`/api/bevi-stoq/products/${editingId}`, payload)
+        setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, notes: '' })
+        setEditingId(null)
+        setShowForm(false)
+        toast.success('Product updated successfully')
       } else {
         const newProduct = await api.post<Product>('/api/bevi-stoq/products', payload)
         productId = newProduct.id
+        console.log(`Product created: id=${productId}, name=${newProduct.name}`)
 
         // Create stock movement if quantity and location provided
         if (productId && formData.stock_quantity && formData.location_id > 0) {
@@ -83,6 +89,7 @@ export function BeviStoqProducts() {
           if (isNaN(qty) || qty <= 0) {
             throw new Error('Stock quantity must be a valid positive number')
           }
+          console.log(`Creating stock movement: product_id=${productId}, qty=${qty}, location=${formData.location_id}`)
           await api.post('/api/bevi-stoq/stock-movements', {
             product_id: productId,
             to_location_id: formData.location_id,
@@ -92,19 +99,23 @@ export function BeviStoqProducts() {
             reference_id: null,
             notes: formData.notes || 'Initial stock',
           })
+          console.log('Stock movement created successfully')
+        } else if (!formData.stock_quantity || formData.location_id === 0) {
+          console.log('Stock quantity or location not provided, skipping stock movement')
         }
-      }
 
-      setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, notes: '' })
-      setEditingId(null)
-      setShowForm(false)
-      setError(null)
-      toast.success(editingId ? 'Product updated successfully' : 'Product created successfully')
+        setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, notes: '' })
+        setEditingId(null)
+        setShowForm(false)
+        toast.success('Product created successfully with stock')
+      }
       await fetchData()
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save product'
+      console.error('Form submission error:', err)
       setError(message)
       toast.error(message)
+      // Keep form open on error so user can retry
     } finally {
       setSubmitting(false)
     }
@@ -157,6 +168,11 @@ export function BeviStoqProducts() {
 
       {showForm && (
         <form onSubmit={handleSubmit} className="rounded-lg border border-caramel/15 bg-espresso/40 p-6">
+          {error && (
+            <div className="mb-4 rounded-lg bg-red-500/20 p-4 text-red-400">
+              <p className="text-sm font-medium">Error: {error}</p>
+            </div>
+          )}
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>

@@ -458,4 +458,7 @@ export const api = {
   get: <T extends any>(path: string): Promise<T> => request<T>(path),
   post: <T extends any>(path: string, body: any): Promise<T> =>
     request<T>(path, { method: 'POST', body: JSON.stringify(body) }),
+  put: <T extends any>(path: string, body: any): Promise<T> =>
+    request<T>(path, { method: 'PUT', body: JSON.stringify(body) }),
+  delete: <T extends any>(path: string): Promise<T> => request<T>(path, { method: 'DELETE' }),
 }

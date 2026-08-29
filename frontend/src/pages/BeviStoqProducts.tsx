@@ -213,13 +213,11 @@ export function BeviStoqProducts() {
                 <label className="block text-sm font-medium text-latte">Alert Quantity (Optional)</label>
                 <p className="text-xs text-latte/50 mb-1">Set a custom quantity to receive a low-stock alert. Leave empty if you don't want an alert for this product.</p>
                 <input
-                  type="number"
+                  type="text"
                   value={formData.alert_quantity}
                   onChange={(e) => setFormData({ ...formData, alert_quantity: e.target.value })}
                   className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte placeholder-latte/40 focus:outline-none focus:ring-2 focus:ring-gold/50"
                   placeholder="Leave empty for no alert"
-                  step="0.01"
-                  min="0"
                 />
               </div>
             </div>

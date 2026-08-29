@@ -149,19 +149,32 @@ def create_product(data: ProductCreate, db: Session = Depends(get_db), user: Use
                 log.warning(f"CREATE PRODUCT: Invalid category_id {data.category_id}")
                 raise HTTPException(status_code=400, detail=f"Category {data.category_id} not found")
 
-        # Check for duplicate product name in same category
-        existing = db.scalar(
-            select(Product).where(
-                and_(
-                    Product.name.ilike(data.name),
-                    Product.category_id == data.category_id,
-                    Product.active == True
+        # Check for duplicate product name (if category is provided, check within category; otherwise check globally)
+        if data.category_id is not None:
+            existing = db.scalar(
+                select(Product).where(
+                    and_(
+                        Product.name.ilike(data.name),
+                        Product.category_id == data.category_id,
+                        Product.active == True
+                    )
                 )
             )
-        )
-        if existing:
-            log.warning(f"CREATE PRODUCT: Duplicate product '{data.name}' in category {data.category_id}")
-            raise HTTPException(status_code=400, detail=f"Product '{data.name}' already exists in this category")
+            if existing:
+                log.warning(f"CREATE PRODUCT: Duplicate product '{data.name}' in category {data.category_id}")
+                raise HTTPException(status_code=400, detail=f"Product '{data.name}' already exists in this category")
+        else:
+            existing = db.scalar(
+                select(Product).where(
+                    and_(
+                        Product.name.ilike(data.name),
+                        Product.active == True
+                    )
+                )
+            )
+            if existing:
+                log.warning(f"CREATE PRODUCT: Duplicate product '{data.name}'")
+                raise HTTPException(status_code=400, detail=f"Product '{data.name}' already exists")
 
         # Validate unit
         if not validate_unit(data.default_unit):

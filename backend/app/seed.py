@@ -232,6 +232,16 @@ def migrate_columns() -> None:
             except Exception as e:
                 log.warning(f"Could not drop old low_stock_alert_level column: {e}")
 
+        # Make category_id nullable (category is no longer required for products)
+        if not settings.is_sqlite:
+            try:
+                conn.execute(
+                    text(f"ALTER TABLE {prefix}bs_products ALTER COLUMN category_id DROP NOT NULL")
+                )
+                log.info("Made bs_products.category_id nullable")
+            except Exception as e:
+                log.warning(f"Could not make category_id nullable (may already be nullable): {e}")
+
 
 def create_tables() -> None:
     ensure_schema()

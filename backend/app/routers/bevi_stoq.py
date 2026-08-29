@@ -45,7 +45,6 @@ class StockReportItem(BaseModel):
 class InventoryReport(BaseModel):
     total_products: int
     total_stock_value: float
-    low_stock_count: int
     out_of_stock_count: int
     items: list[StockReportItem]
 
@@ -135,7 +134,41 @@ def delete_location(id: int, db: Session = Depends(get_db), _: User = Depends(ge
 # ================================================================ PRODUCTS
 @router.get("/products", response_model=list[ProductOut])
 def list_products(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    return db.scalars(select(Product).where(Product.active == True)).all()
+    products = db.scalars(select(Product).where(Product.active == True)).all()
+    log.info(f"LIST PRODUCTS: Retrieved {len(products)} active products")
+    return products
+
+@router.get("/debug/schema", tags=["debug"])
+def debug_schema(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Debug endpoint to check database schema and state"""
+    try:
+        from sqlalchemy import text, inspect
+
+        inspector = inspect(db.connection().connection)
+        bs_products_cols = inspector.get_columns('bs_products', schema='bevigrow')
+        bs_movements_cols = inspector.get_columns('bs_stock_movements', schema='bevigrow')
+
+        product_count = db.scalar(select(func.count(Product.id)))
+        movement_count = db.scalar(select(func.count(StockMovement.id)))
+        location_count = db.scalar(select(func.count(Location.id)))
+
+        # Check movement_type column size
+        movement_type_col = next((c for c in bs_movements_cols if c['name'] == 'movement_type'), None)
+
+        return {
+            "status": "ok",
+            "products_table_columns": [f"{c['name']} ({c['type']})" for c in bs_products_cols],
+            "movements_table_columns": [f"{c['name']} ({c['type']})" for c in bs_movements_cols],
+            "movement_type_info": f"{movement_type_col['name']} {movement_type_col['type']}" if movement_type_col else "NOT FOUND",
+            "data_counts": {
+                "products": product_count,
+                "movements": movement_count,
+                "locations": location_count
+            }
+        }
+    except Exception as e:
+        log.error(f"DEBUG SCHEMA ERROR: {e}", exc_info=True)
+        return {"status": "error", "detail": str(e)}
 
 @router.post("/products", response_model=ProductOut, status_code=201)
 def create_product(data: ProductCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
@@ -187,17 +220,37 @@ def create_product(data: ProductCreate, db: Session = Depends(get_db), user: Use
             log.warning(f"CREATE PRODUCT: Invalid alert_quantity {data.alert_quantity}")
             raise HTTPException(status_code=400, detail="Alert quantity must be non-negative")
 
-        log.info(f"CREATE PRODUCT: Validation passed, creating product")
-        prod = Product(name=product_name, category_id=data.category_id, default_unit=data.default_unit, alert_quantity=data.alert_quantity, created_by_user_id=user.id)
+        log.info(f"CREATE PRODUCT: Validation passed, creating product with user_id={user.id}")
+
+        # Verify user exists
+        from sqlalchemy import text
+        user_check = db.scalar(select(func.count(User.id)).where(User.id == user.id))
+        if user_check == 0:
+            log.error(f"CREATE PRODUCT: User {user.id} not found in database")
+            raise HTTPException(status_code=400, detail=f"Current user (id={user.id}) not found in database")
+
+        prod = Product(
+            name=product_name,
+            category_id=data.category_id,
+            default_unit=data.default_unit,
+            alert_quantity=data.alert_quantity,
+            created_by_user_id=user.id
+        )
+        log.info(f"CREATE PRODUCT: Product object created (not yet in DB)")
         db.add(prod)
+        db.flush()
+        log.info(f"CREATE PRODUCT: Flushed to session")
         db.commit()
+        log.info(f"CREATE PRODUCT: Committed to database")
         db.refresh(prod)
-        log.info(f"CREATE PRODUCT: Success, created product {prod.id}")
+        log.info(f"CREATE PRODUCT: Success, created product {prod.id} with name='{prod.name}'")
         return prod
     except HTTPException:
         raise
     except Exception as e:
         log.error(f"CREATE PRODUCT: Unexpected error: {type(e).__name__}: {str(e)}", exc_info=True)
+        import traceback
+        log.error(f"CREATE PRODUCT: Full traceback:\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Error creating product: {str(e)}")
 
 @router.post("/products/debug/echo", tags=["debug"])

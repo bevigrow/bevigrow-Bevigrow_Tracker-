@@ -37,16 +37,6 @@ const Outreach = lazy(() => import('./pages/Outreach').then((m) => ({ default: m
 const Team = lazy(() => import('./pages/Team').then((m) => ({ default: m.Team })))
 const Profile = lazy(() => import('./pages/Profile').then((m) => ({ default: m.Profile })))
 
-// Bevi Stoq inventory management
-const BeviStoqDashboard = lazy(() => import('./pages/BeviStoqDashboard').then((m) => ({ default: m.BeviStoqDashboard })))
-const BeviStoqProducts = lazy(() => import('./pages/BeviStoqProducts').then((m) => ({ default: m.BeviStoqProducts })))
-const BeviStoqCategories = lazy(() => import('./pages/BeviStoqCategories').then((m) => ({ default: m.BeviStoqCategories })))
-const BeviStoqLocations = lazy(() => import('./pages/BeviStoqLocations').then((m) => ({ default: m.BeviStoqLocations })))
-const BeviStoqStock = lazy(() => import('./pages/BeviStoqStock').then((m) => ({ default: m.BeviStoqStock })))
-const BeviStoqRequirements = lazy(() => import('./pages/BeviStoqRequirements').then((m) => ({ default: m.BeviStoqRequirements })))
-const BeviStoqCustomerPurchases = lazy(() => import('./pages/BeviStoqCustomerPurchases').then((m) => ({ default: m.BeviStoqCustomerPurchases })))
-const BeviStoqHistory = lazy(() => import('./pages/BeviStoqHistory').then((m) => ({ default: m.BeviStoqHistory })))
-
 
 function RequireAuth({ children, roles }: { children: ReactNode; roles?: Role[] }) {
   const { user, loading } = useAuth()
@@ -115,17 +105,6 @@ export default function App() {
                 <Route path="outreach/campaigns/:id" element={<CampaignDetail />} />
                 <Route path="outreach/settings" element={<OutreachSettings />} />
                 <Route path="outreach/report" element={<OutreachReport />} />
-
-                {/* workspace 3 — inventory management */}
-                <Route path="bevi-stoq" element={<BeviStoqDashboard />} />
-                <Route path="bevi-stoq/dashboard" element={<BeviStoqDashboard />} />
-                <Route path="bevi-stoq/products" element={<BeviStoqProducts />} />
-                <Route path="bevi-stoq/categories" element={<BeviStoqCategories />} />
-                <Route path="bevi-stoq/locations" element={<BeviStoqLocations />} />
-                <Route path="bevi-stoq/stock" element={<BeviStoqStock />} />
-                <Route path="bevi-stoq/requirements" element={<BeviStoqRequirements />} />
-                <Route path="bevi-stoq/purchases" element={<BeviStoqCustomerPurchases />} />
-                <Route path="bevi-stoq/history" element={<BeviStoqHistory />} />
 
                 {/* shared */}
                 <Route path="profile" element={<Profile />} />

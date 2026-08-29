@@ -70,7 +70,7 @@ export function BeviStoqProducts() {
     low_stock_alert_level: '0',
     initial_quantity: '',
     initial_location_id: '',
-    initial_supplier: '',
+    initial_unit: 'kg',
     initial_cost: ''
   })
 
@@ -146,7 +146,7 @@ export function BeviStoqProducts() {
             product_id: productId,
             location_id: parseInt(formData.initial_location_id),
             quantity: parseFloat(formData.initial_quantity),
-            unit: formData.default_unit,
+            unit: formData.initial_unit || formData.default_unit,
             cost_per_unit: formData.initial_cost ? parseFloat(formData.initial_cost) : null
           })
         })
@@ -159,7 +159,7 @@ export function BeviStoqProducts() {
         low_stock_alert_level: '0',
         initial_quantity: '',
         initial_location_id: '',
-        initial_supplier: '',
+        initial_unit: 'kg',
         initial_cost: ''
       })
       setIsCreating(false)
@@ -179,7 +179,7 @@ export function BeviStoqProducts() {
       low_stock_alert_level: product.low_stock_alert_level.toString(),
       initial_quantity: '',
       initial_location_id: '',
-      initial_supplier: '',
+      initial_unit: 'kg',
       initial_cost: ''
     })
     setEditingId(product.id)
@@ -403,7 +403,7 @@ export function BeviStoqProducts() {
             low_stock_alert_level: '0',
             initial_quantity: '',
             initial_location_id: '',
-            initial_supplier: '',
+            initial_unit: 'kg',
             initial_cost: ''
           })
         }}
@@ -495,6 +495,24 @@ export function BeviStoqProducts() {
                 />
               </Field>
 
+              <Field label="Unit *">
+                <Select
+                  value={formData.initial_unit}
+                  onChange={(e) => setFormData({ ...formData, initial_unit: e.target.value })}
+                  options={[
+                    { value: 'kg', label: 'kg' },
+                    { value: 'g', label: 'g' },
+                    { value: 'tonne', label: 'tonne' },
+                    { value: 'pcs', label: 'pcs' },
+                    { value: 'litre', label: 'litre' },
+                    { value: 'ml', label: 'ml' },
+                    { value: 'box', label: 'box' },
+                    { value: 'bag', label: 'bag' }
+                  ]}
+                  required={formData.initial_quantity !== ''}
+                />
+              </Field>
+
               <Field label="Cost per Unit (₹)">
                 <Input
                   type="number"
@@ -520,7 +538,7 @@ export function BeviStoqProducts() {
                   low_stock_alert_level: '0',
                   initial_quantity: '',
                   initial_location_id: '',
-                  initial_supplier: '',
+                  initial_unit: 'kg',
                   initial_cost: ''
                 })
               }}

@@ -121,9 +121,7 @@ class Location(Base):
 class Inventory(Base):
     """Stock levels per product per location."""
     __tablename__ = "bs_inventory"
-    __table_args__ = (
-        ("schema", "bevigrow"),
-    )
+    __table_args__ = {"schema": "bevigrow"}
 
     id: Mapped[int] = mapped_column(primary_key=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("bevigrow.bs_products.id"), index=True)

@@ -62,6 +62,8 @@ export function BeviStoqProducts() {
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
   const [expandedProduct, setExpandedProduct] = useState<number | null>(null)
   const [expandedRestock, setExpandedRestock] = useState<number | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState<string>('')
 
   const [formData, setFormData] = useState({
     name: '',
@@ -108,34 +110,37 @@ export function BeviStoqProducts() {
 
   const handleCreate = async () => {
     try {
+      setError('')
+      setIsSaving(true)
+
       // Validate required fields
-      if (!formData.name) {
-        alert('Product Name is required')
+      if (!formData.name || !formData.name.trim()) {
+        setError('Product Name is required')
         return
       }
       if (!formData.category_id) {
-        alert('Category is required')
+        setError('Category is required')
         return
       }
       if (!formData.default_unit) {
-        alert('Default Unit is required')
+        setError('Default Unit is required')
         return
       }
 
       // Validate initial quantity fields if quantity is entered
       if (formData.initial_quantity) {
         if (!formData.initial_location_id) {
-          alert('Location is required when adding initial quantity')
+          setError('Location is required when adding initial quantity')
           return
         }
         if (!formData.initial_unit) {
-          alert('Unit is required when adding initial quantity')
+          setError('Unit is required when adding initial quantity')
           return
         }
       }
 
       const payload = {
-        name: formData.name,
+        name: formData.name.trim(),
         category_id: parseInt(formData.category_id),
         default_unit: formData.default_unit,
         low_stock_alert_level: parseFloat(formData.low_stock_alert_level) || 0
@@ -154,7 +159,7 @@ export function BeviStoqProducts() {
           body: JSON.stringify(payload)
         })
         if (!response || !response.id) {
-          alert('Error creating product. Please try again.')
+          setError('Error creating product. Please try again.')
           return
         }
         productId = response.id
@@ -175,7 +180,7 @@ export function BeviStoqProducts() {
           })
         } catch (stockError) {
           console.error('Error adding stock:', stockError)
-          alert('Product created but error adding initial stock. You can add it manually.')
+          setError('Product created but error adding initial stock. You can add it manually.')
         }
       }
 
@@ -196,7 +201,9 @@ export function BeviStoqProducts() {
     } catch (error) {
       console.error('Error creating product:', error)
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
-      alert(`Error: ${errorMessage}`)
+      setError(errorMessage)
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -422,29 +429,39 @@ export function BeviStoqProducts() {
       <Modal
         open={isCreating || isEditing}
         onClose={() => {
-          setIsCreating(false)
-          setIsEditing(false)
-          setEditingId(null)
-          setFormData({
-            name: '',
-            category_id: '',
-            default_unit: 'kg',
-            low_stock_alert_level: '0',
-            initial_quantity: '',
-            initial_location_id: '',
-            initial_unit: 'kg',
-            initial_cost: ''
-          })
+          if (!isSaving) {
+            setIsCreating(false)
+            setIsEditing(false)
+            setEditingId(null)
+            setError('')
+            setFormData({
+              name: '',
+              category_id: '',
+              default_unit: 'kg',
+              low_stock_alert_level: '0',
+              initial_quantity: '',
+              initial_location_id: '',
+              initial_unit: 'kg',
+              initial_cost: ''
+            })
+          }
         }}
         title={isEditing ? 'Edit Product' : 'Add Product'}
       >
         <form
           onSubmit={(e) => {
             e.preventDefault()
-            handleCreate()
+            if (!isSaving) {
+              handleCreate()
+            }
           }}
           className="space-y-4"
         >
+          {error && (
+            <div className="rounded-lg bg-red-500/20 px-3 py-2 text-sm text-red-300">
+              {error}
+            </div>
+          )}
           <Field label="Product Name *">
             <Input
               value={formData.name}
@@ -565,6 +582,7 @@ export function BeviStoqProducts() {
               onClick={() => {
                 setIsCreating(false)
                 setIsEditing(false)
+                setError('')
                 setFormData({
                   name: '',
                   category_id: '',
@@ -577,11 +595,12 @@ export function BeviStoqProducts() {
                 })
               }}
               type="button"
+              disabled={isSaving}
             >
               Cancel
             </Button>
-            <Button type="submit" className="flex-1">
-              {isEditing ? 'Update' : 'Create'} Product
+            <Button type="submit" className="flex-1" disabled={isSaving}>
+              {isSaving ? 'Saving...' : (isEditing ? 'Update' : 'Create')} Product
             </Button>
           </div>
         </form>

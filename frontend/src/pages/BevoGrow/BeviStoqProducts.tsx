@@ -458,7 +458,10 @@ export function BeviStoqProducts() {
             <Select
               value={formData.category_id}
               onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
-              options={categories.map(c => ({ value: c.id.toString(), label: c.name }))}
+              options={[
+                { value: '', label: 'Select category' },
+                ...categories.map(c => ({ value: c.id.toString(), label: c.name }))
+              ]}
               required
             />
           </Field>
@@ -468,6 +471,7 @@ export function BeviStoqProducts() {
               value={formData.default_unit}
               onChange={(e) => setFormData({ ...formData, default_unit: e.target.value })}
               options={[
+                { value: '', label: 'Select unit' },
                 { value: 'kg', label: 'kg' },
                 { value: 'g', label: 'g' },
                 { value: 'tonne', label: 'tonne' },
@@ -477,6 +481,7 @@ export function BeviStoqProducts() {
                 { value: 'box', label: 'box' },
                 { value: 'bag', label: 'bag' }
               ]}
+              required
             />
           </Field>
 

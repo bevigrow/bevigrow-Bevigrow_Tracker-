@@ -78,6 +78,25 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     # Bevi Stoq inventory management (added after initial BeviGrow release).
     # Products low-stock threshold for alerts.
     ("bs_products", "low_stock_threshold", "FLOAT DEFAULT 0 NOT NULL"),
+    # Stock movements location tracking
+    ("bs_stock_movements", "from_location_id", "INTEGER"),
+    ("bs_stock_movements", "to_location_id", "INTEGER"),
+    # Restock orders additional fields
+    ("bs_restocks", "cost_per_unit", "FLOAT"),
+    ("bs_restocks", "total_cost", "FLOAT"),
+    # Customer requirements
+    ("bs_customer_requirements", "contact_id", "INTEGER"),
+    ("bs_customer_requirements", "updated_at", "TIMESTAMP WITH TIME ZONE DEFAULT NOW()"),
+    ("bs_customer_requirements", "updated_by_user_id", "INTEGER"),
+    # Requirement items
+    ("bs_requirement_items", "quantity_reserved", "FLOAT DEFAULT 0 NOT NULL"),
+    ("bs_requirement_items", "quantity_fulfilled", "FLOAT DEFAULT 0 NOT NULL"),
+    # Customer purchases
+    ("bs_customer_purchases", "payment_status", "VARCHAR(20) DEFAULT 'pending'"),
+    ("bs_customer_purchases", "payment_method", "VARCHAR(100)"),
+    ("bs_customer_purchases", "amount", "FLOAT DEFAULT 0 NOT NULL"),
+    ("bs_customer_purchases", "purchase_date", "TIMESTAMP WITH TIME ZONE DEFAULT NOW()"),
+    ("bs_customer_purchases", "notes", "TEXT"),
 ]
 
 

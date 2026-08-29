@@ -9,8 +9,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = '003_create_bevi_stoq_schema'
-down_revision = '002_presend_review'
+revision = '002_bevi_stoq_schema'
+down_revision = '001_presend_review'
 branch_labels = None
 depends_on = None
 

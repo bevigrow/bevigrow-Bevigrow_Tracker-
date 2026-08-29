@@ -315,17 +315,25 @@ def list_requirements(db: Session = Depends(get_db), _: User = Depends(get_curre
 
 @router.post("/customer-requirements/{id}/reserve", response_model=RequirementOut)
 def reserve_requirement(id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    """Reserve stock for a customer requirement."""
+    """Reserve stock for a customer requirement (allocates from any location with available stock)."""
     req = db.get(CustomerRequirement, id)
     if not req: raise HTTPException(status_code=404, detail="Requirement not found")
     if req.status == RequirementStatus.reserved: raise HTTPException(status_code=400, detail="Already reserved")
 
     for item in req.items:
-        inv = db.scalar(select(Inventory).where(and_(Inventory.product_id == item.product_id, Inventory.location_id == 1)))
-        if not inv: raise HTTPException(status_code=400, detail=f"No inventory for product {item.product_id}")
-        if inv.physical_stock - inv.reserved_stock < item.quantity_required:
-            raise HTTPException(status_code=400, detail=f"Insufficient stock for {item.product_id}")
-        inv.reserved_stock += item.quantity_required
+        inventories = db.scalars(select(Inventory).where(Inventory.product_id == item.product_id).order_by(Inventory.location_id)).all()
+        total_available = sum(inv.physical_stock - inv.reserved_stock for inv in inventories)
+        if total_available < item.quantity_required:
+            raise HTTPException(status_code=400, detail=f"Insufficient stock for product {item.product_id}. Required: {item.quantity_required}, Available: {total_available}")
+
+        remaining = item.quantity_required
+        for inv in inventories:
+            available = inv.physical_stock - inv.reserved_stock
+            if available > 0 and remaining > 0:
+                reserve_qty = min(available, remaining)
+                inv.reserved_stock += reserve_qty
+                remaining -= reserve_qty
+
         item.quantity_reserved = item.quantity_required
 
     req.status = RequirementStatus.reserved
@@ -342,15 +350,19 @@ def fulfill_requirement(id: int, db: Session = Depends(get_db), user: User = Dep
     if req.status != RequirementStatus.reserved: raise HTTPException(status_code=400, detail="Requirement must be reserved first")
 
     for item in req.items:
-        inv = db.scalar(select(Inventory).where(and_(Inventory.product_id == item.product_id, Inventory.location_id == 1)))
-        if not inv: raise HTTPException(status_code=400, detail=f"No inventory for product {item.product_id}")
+        inventories = db.scalars(select(Inventory).where(Inventory.product_id == item.product_id)).all()
+        remaining = item.quantity_reserved
+        for inv in inventories:
+            if remaining <= 0: break
+            if inv.reserved_stock > 0:
+                deduct_qty = min(inv.reserved_stock, remaining)
+                inv.physical_stock -= deduct_qty
+                inv.reserved_stock -= deduct_qty
+                remaining -= deduct_qty
+                movement = StockMovement(product_id=item.product_id, from_location_id=inv.location_id, movement_type=StockMovementType.fulfillment, quantity=deduct_qty, unit=item.unit, reference_id=req.id, notes=f"Fulfillment for {req.customer_name}", created_by_user_id=user.id)
+                db.add(movement)
 
-        inv.physical_stock -= item.quantity_reserved
-        inv.reserved_stock -= item.quantity_reserved
         item.quantity_fulfilled = item.quantity_reserved
-
-        movement = StockMovement(product_id=item.product_id, from_location_id=1, movement_type=StockMovementType.fulfillment, quantity=item.quantity_reserved, unit=item.unit, reference_id=req.id, notes=f"Fulfillment for {req.customer_name}", created_by_user_id=user.id)
-        db.add(movement)
 
     req.status = RequirementStatus.fulfilled
     req.updated_by_user_id = user.id
@@ -367,10 +379,15 @@ def cancel_requirement(id: int, db: Session = Depends(get_db), user: User = Depe
 
     for item in req.items:
         if item.quantity_reserved > 0:
-            inv = db.scalar(select(Inventory).where(and_(Inventory.product_id == item.product_id, Inventory.location_id == 1)))
-            if inv:
-                inv.reserved_stock -= item.quantity_reserved
-                item.quantity_reserved = 0
+            inventories = db.scalars(select(Inventory).where(Inventory.product_id == item.product_id)).all()
+            remaining = item.quantity_reserved
+            for inv in inventories:
+                if remaining <= 0: break
+                if inv.reserved_stock > 0:
+                    release_qty = min(inv.reserved_stock, remaining)
+                    inv.reserved_stock -= release_qty
+                    remaining -= release_qty
+            item.quantity_reserved = 0
 
     req.status = RequirementStatus.cancelled
     req.updated_by_user_id = user.id
@@ -385,11 +402,16 @@ def create_purchase(data: CustomerPurchaseCreate, db: Session = Depends(get_db),
     db.add(purchase)
     db.flush()
 
-    inv = db.scalar(select(Inventory).where(and_(Inventory.product_id == data.product_id, Inventory.location_id == 1)))
-    if inv and inv.physical_stock >= data.quantity:
-        inv.physical_stock -= data.quantity
-        movement = StockMovement(product_id=data.product_id, from_location_id=1, movement_type=StockMovementType.fulfillment, quantity=data.quantity, unit=data.unit, reference_id=purchase.id, notes=f"Sale to {data.customer_name}", created_by_user_id=user.id)
-        db.add(movement)
+    inventories = db.scalars(select(Inventory).where(Inventory.product_id == data.product_id).order_by(Inventory.location_id)).all()
+    remaining = data.quantity
+    for inv in inventories:
+        if remaining <= 0: break
+        if inv.physical_stock > 0:
+            deduct_qty = min(inv.physical_stock, remaining)
+            inv.physical_stock -= deduct_qty
+            remaining -= deduct_qty
+            movement = StockMovement(product_id=data.product_id, from_location_id=inv.location_id, movement_type=StockMovementType.fulfillment, quantity=deduct_qty, unit=data.unit, reference_id=purchase.id, notes=f"Sale to {data.customer_name}", created_by_user_id=user.id)
+            db.add(movement)
 
     db.commit()
     db.refresh(purchase)

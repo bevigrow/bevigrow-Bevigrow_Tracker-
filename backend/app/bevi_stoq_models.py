@@ -21,6 +21,10 @@ class StockMovementType(str, enum.Enum):
     stock_removed = "stock_removed"
     transfer = "transfer"
     adjustment = "adjustment"
+    # Legacy values for backward compatibility with existing data
+    receipt = "receipt"
+    fulfillment = "fulfillment"
+    return_ = "return"
 
 
 class RequirementStatus(str, enum.Enum):

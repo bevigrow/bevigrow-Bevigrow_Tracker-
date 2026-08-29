@@ -11,10 +11,12 @@ from sqlalchemy import text
 from . import seed
 from .config import settings
 from .database import engine
+from . import bevi_stoq_models  # noqa: F401 - ensure Bevi Stoq tables are registered
 from .routers import (
     activities,
     ai_routes,
     auth,
+    bevi_stoq,
     campaigns,
     contacts,
     countries,
@@ -128,6 +130,7 @@ app.include_router(dashboard.router)
 app.include_router(outreach.router)
 app.include_router(ai_routes.router)
 app.include_router(resend.router)
+app.include_router(bevi_stoq.router)
 
 
 @app.get("/", tags=["health"])

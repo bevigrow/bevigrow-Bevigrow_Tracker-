@@ -2,6 +2,7 @@ import {
   BarChart3,
   Bell,
   Bot,
+  Box,
   ChevronLeft,
   ClipboardList,
   Coffee,
@@ -14,6 +15,7 @@ import {
   SlidersHorizontal,
   Users,
   Users2,
+  Warehouse,
   X,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -56,6 +58,18 @@ const OUTREACH_NAV: NavItem[] = [
   { to: '/app/outreach/settings', label: 'Settings', icon: SlidersHorizontal },
 ]
 
+const BEVI_STOQ_NAV: NavItem[] = [
+  { to: '/app/bevi-stoq', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/app/bevi-stoq/categories', label: 'Categories', icon: ClipboardList },
+  { to: '/app/bevi-stoq/products', label: 'Products', icon: Box },
+  { to: '/app/bevi-stoq/locations', label: 'Locations', icon: Warehouse },
+  { to: '/app/bevi-stoq/inventory', label: 'Inventory', icon: BarChart3 },
+  { to: '/app/bevi-stoq/combos', label: 'Combos', icon: ClipboardList },
+  { to: '/app/bevi-stoq/requirements', label: 'Requirements', icon: ClipboardList },
+  { to: '/app/bevi-stoq/purchases', label: 'Purchases', icon: FileText },
+  { to: '/app/bevi-stoq/reports', label: 'Reports', icon: BarChart3 },
+]
+
 const SHARED_NAV: NavItem[] = [
   { to: '/app/team', label: 'Team', icon: Users2, roles: ['admin', 'manager'] },
 ]
@@ -70,9 +84,10 @@ export function AppShell() {
 
   const inOutreach = location.pathname.startsWith('/app/outreach')
   const inTrade = location.pathname.startsWith('/app/trade')
-  const section = inOutreach ? 'Outreach' : inTrade ? 'Trade Desk' : null
+  const inBeviStoq = location.pathname.startsWith('/app/bevi-stoq')
+  const section = inBeviStoq ? 'Bevi Stoq' : inOutreach ? 'Outreach' : inTrade ? 'Trade Desk' : null
 
-  const items = inOutreach ? OUTREACH_NAV : inTrade ? TRADE_NAV : []
+  const items = inBeviStoq ? BEVI_STOQ_NAV : inOutreach ? OUTREACH_NAV : inTrade ? TRADE_NAV : []
   const visible = [...items, ...SHARED_NAV].filter(
     (item) => !item.roles || (user && item.roles.includes(user.role)),
   )
@@ -140,6 +155,13 @@ export function AppShell() {
               >
                 <Send size={17} />
                 Outreach
+              </NavLink>
+              <NavLink
+                to="/app/bevi-stoq"
+                className="flex min-h-[44px] items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium text-latte/55 transition hover:bg-latte/5 hover:text-latte/85"
+              >
+                <Warehouse size={17} />
+                Bevi Stoq
               </NavLink>
             </>
           )}

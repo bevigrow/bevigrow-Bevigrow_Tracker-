@@ -37,6 +37,19 @@ const Outreach = lazy(() => import('./pages/Outreach').then((m) => ({ default: m
 const Team = lazy(() => import('./pages/Team').then((m) => ({ default: m.Team })))
 const Profile = lazy(() => import('./pages/Profile').then((m) => ({ default: m.Profile })))
 
+// Bevi Stoq pages
+const BeviStoqDashboard = lazy(() => import('./pages/BeviStoqDashboard').then((m) => ({ default: m.BeviStoqDashboard })))
+const BeviStoqCategories = lazy(() => import('./pages/BeviStoqCategories').then((m) => ({ default: m.BeviStoqCategories })))
+const BeviStoqProducts = lazy(() => import('./pages/BeviStoqProducts').then((m) => ({ default: m.BeviStoqProducts })))
+const BeviStoqLocations = lazy(() => import('./pages/BeviStoqLocations').then((m) => ({ default: m.BeviStoqLocations })))
+const BeviStoqInventory = lazy(() => import('./pages/BeviStoqInventory').then((m) => ({ default: m.BeviStoqInventory })))
+const BeviStoqMovements = lazy(() => import('./pages/BeviStoqMovements').then((m) => ({ default: m.BeviStoqMovements })))
+const BeviStoqCombos = lazy(() => import('./pages/BeviStoqCombos').then((m) => ({ default: m.BeviStoqCombos })))
+const BeviStoqRequirements = lazy(() => import('./pages/BeviStoqRequirements').then((m) => ({ default: m.BeviStoqRequirements })))
+const BeviStoqPurchases = lazy(() => import('./pages/BeviStoqPurchases').then((m) => ({ default: m.BeviStoqPurchases })))
+const BeviStoqReports = lazy(() => import('./pages/BeviStoqReports').then((m) => ({ default: m.BeviStoqReports })))
+const BeviStoqRestocks = lazy(() => import('./pages/BeviStoqRestocks').then((m) => ({ default: m.BeviStoqRestocks })))
+
 
 function RequireAuth({ children, roles }: { children: ReactNode; roles?: Role[] }) {
   const { user, loading } = useAuth()
@@ -117,6 +130,19 @@ export default function App() {
                   }
                 />
 
+                {/* workspace 3 — inventory management */}
+                <Route path="bevi-stoq" element={<BeviStoqDashboard />} />
+                <Route path="bevi-stoq/dashboard" element={<BeviStoqDashboard />} />
+                <Route path="bevi-stoq/categories" element={<BeviStoqCategories />} />
+                <Route path="bevi-stoq/products" element={<BeviStoqProducts />} />
+                <Route path="bevi-stoq/locations" element={<BeviStoqLocations />} />
+                <Route path="bevi-stoq/inventory" element={<BeviStoqInventory />} />
+                <Route path="bevi-stoq/movements" element={<BeviStoqMovements />} />
+                <Route path="bevi-stoq/combos" element={<BeviStoqCombos />} />
+                <Route path="bevi-stoq/requirements" element={<BeviStoqRequirements />} />
+                <Route path="bevi-stoq/purchases" element={<BeviStoqPurchases />} />
+                <Route path="bevi-stoq/reports" element={<BeviStoqReports />} />
+                <Route path="bevi-stoq/restocks" element={<BeviStoqRestocks />} />
 
                 {/* the old flat URLs, kept so existing links and bookmarks work */}
                 <Route path="contacts" element={<Navigate to="/app/trade/quotes" replace />} />

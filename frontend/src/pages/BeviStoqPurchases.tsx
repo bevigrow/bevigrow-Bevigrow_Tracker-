@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 
 import { api } from '../lib/api'
 import { EmptyState, Spinner, useToast } from '../components/ui'
+import { UnitSelect } from '../lib/units'
 
 interface CustomerPurchase {
   id: number
@@ -199,7 +200,15 @@ export function BeviStoqPurchases() {
                 <label className="block text-sm font-medium text-latte">Product *</label>
                 <select
                   value={formData.product_id}
-                  onChange={(e) => setFormData({ ...formData, product_id: parseInt(e.target.value) })}
+                  onChange={(e) => {
+                    const prodId = parseInt(e.target.value)
+                    const prod = products.find((p) => p.id === prodId)
+                    setFormData({
+                      ...formData,
+                      product_id: prodId,
+                      unit: prod?.default_unit || formData.unit,
+                    })
+                  }}
                   className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
                   required
                 >
@@ -222,16 +231,12 @@ export function BeviStoqPurchases() {
                   required
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-latte">Unit</label>
-                <input
-                  type="text"
-                  value={formData.unit}
-                  onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                  className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte placeholder-latte/40 focus:outline-none focus:ring-2 focus:ring-gold/50"
-                  placeholder="kg, L, etc"
-                />
-              </div>
+              <UnitSelect
+                value={formData.unit}
+                onChange={(unit) => setFormData({ ...formData, unit })}
+                label="Unit"
+                required={true}
+              />
             </div>
             <div className="grid grid-cols-3 gap-4">
               <div>

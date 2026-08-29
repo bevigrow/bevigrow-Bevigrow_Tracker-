@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 
 import { api } from '../lib/api'
 import { EmptyState, Spinner } from '../components/ui'
+import { UnitSelect } from '../lib/units'
 
 interface Restock {
   id: number
@@ -185,16 +186,12 @@ export function BeviStoqRestocks() {
               </div>
             </div>
             <div className="grid grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-latte">Unit</label>
-                <input
-                  type="text"
-                  value={formData.unit}
-                  onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                  className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte placeholder-latte/40 focus:outline-none focus:ring-2 focus:ring-gold/50"
-                  placeholder="kg, L, etc"
-                />
-              </div>
+              <UnitSelect
+                value={formData.unit}
+                onChange={(unit) => setFormData({ ...formData, unit })}
+                label="Unit"
+                required={false}
+              />
               <div>
                 <label className="block text-sm font-medium text-latte">Date *</label>
                 <input

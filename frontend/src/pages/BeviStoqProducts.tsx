@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 
 import { api } from '../lib/api'
 import { EmptyState, Spinner, useToast } from '../components/ui'
+import { UnitSelect } from '../lib/units'
 
 interface Product {
   id: number
@@ -187,17 +188,12 @@ export function BeviStoqProducts() {
                   ))}
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-latte">Unit *</label>
-                <input
-                  type="text"
-                  value={formData.default_unit}
-                  onChange={(e) => setFormData({ ...formData, default_unit: e.target.value })}
-                  className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte placeholder-latte/40 focus:outline-none focus:ring-2 focus:ring-gold/50"
-                  placeholder="e.g., kg, lbs, L"
-                  required
-                />
-              </div>
+              <UnitSelect
+                value={formData.default_unit}
+                onChange={(unit) => setFormData({ ...formData, default_unit: unit })}
+                label="Unit"
+                required={true}
+              />
               <div>
                 <label className="block text-sm font-medium text-latte">Low Stock Threshold</label>
                 <input
@@ -231,16 +227,12 @@ export function BeviStoqProducts() {
                         required
                       />
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-latte">Unit *</label>
-                      <input
-                        type="text"
-                        value={initialStock.unit}
-                        onChange={(e) => setInitialStock({ ...initialStock, unit: e.target.value })}
-                        className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte placeholder-latte/40 focus:outline-none focus:ring-2 focus:ring-gold/50"
-                        placeholder={formData.default_unit || 'e.g., kg'}
-                      />
-                    </div>
+                    <UnitSelect
+                      value={initialStock.unit}
+                      onChange={(unit) => setInitialStock({ ...initialStock, unit })}
+                      label="Unit"
+                      required={true}
+                    />
                     <div className="col-span-2">
                       <label className="block text-sm font-medium text-latte">Location *</label>
                       <select

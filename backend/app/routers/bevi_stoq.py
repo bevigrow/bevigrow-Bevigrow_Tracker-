@@ -234,15 +234,16 @@ def create_stock_movement(data: StockMovementCreate, db: Session = Depends(get_d
 
     # For transfers between locations, validate stock and update inventory
     if data.from_location_id and data.to_location_id and data.movement_type == StockMovementType.transfer.value:
-        from_inv = db.scalar(select(Inventory).where(and_(Inventory.product_id == data.product_id, Inventory.location_id == data.from_location_id)))
+        from_inv = db.scalar(select(Inventory).where(and_(Inventory.product_id == data.product_id, Inventory.location_id == data.from_location_id)).with_for_update())
         if not from_inv or from_inv.physical_stock < data.quantity:
             raise HTTPException(status_code=400, detail=f"Insufficient stock at source location. Required: {data.quantity}, Available: {from_inv.physical_stock if from_inv else 0}")
 
-        to_inv = db.scalar(select(Inventory).where(and_(Inventory.product_id == data.product_id, Inventory.location_id == data.to_location_id)))
+        to_inv = db.scalar(select(Inventory).where(and_(Inventory.product_id == data.product_id, Inventory.location_id == data.to_location_id)).with_for_update())
         if not to_inv:
             to_inv = Inventory(product_id=data.product_id, location_id=data.to_location_id, physical_stock=0, reserved_stock=0, updated_by_user_id=user.id)
             db.add(to_inv)
             db.flush()
+            to_inv = db.scalar(select(Inventory).where(and_(Inventory.product_id == data.product_id, Inventory.location_id == data.to_location_id)).with_for_update())
 
         from_inv.physical_stock -= data.quantity
         to_inv.physical_stock += data.quantity
@@ -330,13 +331,16 @@ def list_requirements(db: Session = Depends(get_db), _: User = Depends(get_curre
 
 @router.post("/customer-requirements/{id}/reserve", response_model=RequirementOut)
 def reserve_requirement(id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    """Reserve stock for a customer requirement (allocates from any location with available stock)."""
+    """Reserve stock for a customer requirement (allocates from any location with available stock).
+
+    Uses row-level locking (SELECT FOR UPDATE) to prevent concurrent reservation race conditions.
+    """
     req = db.get(CustomerRequirement, id)
     if not req: raise HTTPException(status_code=404, detail="Requirement not found")
     if req.status == RequirementStatus.reserved: raise HTTPException(status_code=400, detail="Already reserved")
 
     for item in req.items:
-        inventories = db.scalars(select(Inventory).where(Inventory.product_id == item.product_id).order_by(Inventory.location_id)).all()
+        inventories = db.scalars(select(Inventory).where(Inventory.product_id == item.product_id).order_by(Inventory.location_id).with_for_update()).all()
         total_available = sum(inv.physical_stock - inv.reserved_stock for inv in inventories)
         if total_available < item.quantity_required:
             raise HTTPException(status_code=400, detail=f"Insufficient stock for product {item.product_id}. Required: {item.quantity_required}, Available: {total_available}")
@@ -359,13 +363,16 @@ def reserve_requirement(id: int, db: Session = Depends(get_db), user: User = Dep
 
 @router.post("/customer-requirements/{id}/fulfill", response_model=RequirementOut)
 def fulfill_requirement(id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    """Fulfill a reserved requirement (deduct from inventory)."""
+    """Fulfill a reserved requirement (deduct from inventory).
+
+    Uses row-level locking (SELECT FOR UPDATE) to prevent concurrent fulfillment race conditions.
+    """
     req = db.get(CustomerRequirement, id)
     if not req: raise HTTPException(status_code=404, detail="Requirement not found")
     if req.status != RequirementStatus.reserved: raise HTTPException(status_code=400, detail="Requirement must be reserved first")
 
     for item in req.items:
-        inventories = db.scalars(select(Inventory).where(Inventory.product_id == item.product_id)).all()
+        inventories = db.scalars(select(Inventory).where(Inventory.product_id == item.product_id).with_for_update()).all()
         remaining = item.quantity_reserved
         for inv in inventories:
             if remaining <= 0: break
@@ -413,8 +420,12 @@ def cancel_requirement(id: int, db: Session = Depends(get_db), user: User = Depe
 # ================================================================ CUSTOMER PURCHASES
 @router.post("/customer-purchases", response_model=CustomerPurchaseOut, status_code=201)
 def create_purchase(data: CustomerPurchaseCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    # Validate sufficient stock available
-    inventories = db.scalars(select(Inventory).where(Inventory.product_id == data.product_id)).all()
+    """Create customer purchase with automatic inventory deduction.
+
+    Uses row-level locking (SELECT FOR UPDATE) to prevent concurrent purchase race conditions.
+    Validates sufficient stock before creating purchase to prevent partial fulfillment.
+    """
+    inventories = db.scalars(select(Inventory).where(Inventory.product_id == data.product_id).with_for_update()).all()
     total_available = sum(inv.physical_stock for inv in inventories)
     if total_available < data.quantity:
         raise HTTPException(status_code=400, detail=f"Insufficient stock. Required: {data.quantity}, Available: {total_available}, Shortage: {data.quantity - total_available}")
@@ -423,7 +434,7 @@ def create_purchase(data: CustomerPurchaseCreate, db: Session = Depends(get_db),
     db.add(purchase)
     db.flush()
 
-    inventories = db.scalars(select(Inventory).where(Inventory.product_id == data.product_id).order_by(Inventory.location_id)).all()
+    inventories = db.scalars(select(Inventory).where(Inventory.product_id == data.product_id).order_by(Inventory.location_id).with_for_update()).all()
     remaining = data.quantity
     for inv in inventories:
         if remaining <= 0: break

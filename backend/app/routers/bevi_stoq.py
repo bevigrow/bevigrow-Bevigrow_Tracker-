@@ -5,6 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
+from ..utils_bevi_stoq import are_units_compatible, validate_unit
+
 log = logging.getLogger(__name__)
 
 from ..database import get_db
@@ -27,6 +29,30 @@ from ..schemas_bevi_stoq import (
     ComboCreate, ComboOut, ComboItemOut, ComboItemCreate,
     DashboardOut, DashboardSummary, ProductStatus
 )
+from pydantic import BaseModel
+
+class StockReportItem(BaseModel):
+    product_name: str
+    category_name: str
+    physical_stock: float
+    reserved_stock: float
+    available_stock: float
+    unit: str
+    low_stock_threshold: float
+    status: str
+    location: str
+
+class InventoryReport(BaseModel):
+    total_products: int
+    total_stock_value: float
+    low_stock_count: int
+    out_of_stock_count: int
+    items: list[StockReportItem]
+
+class MovementReport(BaseModel):
+    total_movements: int
+    by_type: dict
+    timeline: list[dict]
 
 router = APIRouter(prefix="/api/bevi-stoq", tags=["bevi-stoq"])
 
@@ -113,6 +139,27 @@ def list_products(db: Session = Depends(get_db), _: User = Depends(get_current_u
 
 @router.post("/products", response_model=ProductOut, status_code=201)
 def create_product(data: ProductCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    # Check for duplicate product name in same category
+    existing = db.scalar(
+        select(Product).where(
+            and_(
+                Product.name.ilike(data.name),
+                Product.category_id == data.category_id,
+                Product.active == True
+            )
+        )
+    )
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Product '{data.name}' already exists in this category")
+
+    # Validate unit
+    if not validate_unit(data.default_unit):
+        raise HTTPException(status_code=400, detail=f"Invalid unit '{data.default_unit}'")
+
+    # Validate low stock threshold
+    if data.low_stock_threshold < 0:
+        raise HTTPException(status_code=400, detail="Low stock threshold must be non-negative")
+
     prod = Product(name=data.name, category_id=data.category_id, default_unit=data.default_unit, low_stock_threshold=data.low_stock_threshold, created_by_user_id=user.id)
     db.add(prod)
     db.commit()
@@ -164,6 +211,27 @@ def get_inventory(product_id: int, location_id: int, db: Session = Depends(get_d
 # ================================================================ STOCK MOVEMENTS
 @router.post("/stock-movements", response_model=StockMovementOut, status_code=201)
 def create_stock_movement(data: StockMovementCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    # Validate product exists
+    product = db.get(Product, data.product_id)
+    if not product: raise HTTPException(status_code=404, detail="Product not found")
+
+    # Validate unit compatibility with product's unit
+    if data.unit and not are_units_compatible(data.unit, product.default_unit):
+        raise HTTPException(status_code=400, detail=f"Unit '{data.unit}' is not compatible with product unit '{product.default_unit}'")
+
+    # Validate locations if specified
+    if data.from_location_id:
+        from_loc = db.get(Location, data.from_location_id)
+        if not from_loc: raise HTTPException(status_code=404, detail="From location not found")
+
+    if data.to_location_id:
+        to_loc = db.get(Location, data.to_location_id)
+        if not to_loc: raise HTTPException(status_code=404, detail="To location not found")
+
+    # Validate quantity
+    if data.quantity <= 0:
+        raise HTTPException(status_code=400, detail="Quantity must be positive")
+
     movement = StockMovement(product_id=data.product_id, from_location_id=data.from_location_id, to_location_id=data.to_location_id, movement_type=StockMovementType(data.movement_type), quantity=data.quantity, unit=data.unit, reference_id=data.reference_id, notes=data.notes, created_by_user_id=user.id)
     db.add(movement)
     db.commit()
@@ -342,3 +410,133 @@ def get_dashboard(db: Session = Depends(get_db), _: User = Depends(get_current_u
         out_of_stock_products=out_of_stock_list,
         recent_movements=[StockMovementOut.model_validate(m) for m in recent]
     )
+
+# ================================================================ ADVANCED REPORTS
+@router.get("/reports/inventory", response_model=InventoryReport)
+def inventory_report(db: Session = Depends(get_db), _: User = Depends(get_current_user), category_id: int | None = None, location_id: int | None = None):
+    query = select(Product).where(Product.active == True)
+    if category_id:
+        query = query.where(Product.category_id == category_id)
+
+    products = db.scalars(query).all()
+    items = []
+    low_stock_count = 0
+    out_of_stock_count = 0
+
+    for prod in products:
+        inv_query = select(Inventory).where(Inventory.product_id == prod.id)
+        if location_id:
+            inv_query = inv_query.where(Inventory.location_id == location_id)
+
+        inventories = db.scalars(inv_query).all()
+
+        for inv in inventories:
+            available = inv.physical_stock - inv.reserved_stock
+            loc = db.get(Location, inv.location_id)
+            cat = db.get(Category, prod.category_id)
+
+            if available <= 0:
+                status = "OUT_OF_STOCK"
+                out_of_stock_count += 1
+            elif available <= prod.low_stock_threshold:
+                status = "LOW_STOCK"
+                low_stock_count += 1
+            else:
+                status = "NORMAL"
+
+            items.append(StockReportItem(
+                product_name=prod.name,
+                category_name=cat.name if cat else "Unknown",
+                physical_stock=inv.physical_stock,
+                reserved_stock=inv.reserved_stock,
+                available_stock=available,
+                unit=prod.default_unit,
+                low_stock_threshold=prod.low_stock_threshold,
+                status=status,
+                location=loc.name if loc else "Unknown"
+            ))
+
+    return InventoryReport(
+        total_products=len(products),
+        total_stock_value=0,
+        low_stock_count=low_stock_count,
+        out_of_stock_count=out_of_stock_count,
+        items=items
+    )
+
+@router.get("/reports/movements", response_model=MovementReport)
+def movements_report(db: Session = Depends(get_db), _: User = Depends(get_current_user), days: int = 30):
+    from datetime import timedelta
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+
+    movements = db.scalars(
+        select(StockMovement)
+        .where(StockMovement.created_at >= cutoff_date)
+        .order_by(StockMovement.created_at.desc())
+    ).all()
+
+    by_type = {}
+    for movement in movements:
+        type_name = movement.movement_type.value
+        by_type[type_name] = by_type.get(type_name, 0) + 1
+
+    timeline = [
+        {
+            "date": m.created_at.isoformat(),
+            "type": m.movement_type.value,
+            "product_id": m.product_id,
+            "quantity": m.quantity,
+            "unit": m.unit
+        }
+        for m in movements[:50]
+    ]
+
+    return MovementReport(
+        total_movements=len(movements),
+        by_type=by_type,
+        timeline=timeline
+    )
+
+@router.get("/reports/stock-by-category")
+def stock_by_category(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    categories = db.scalars(select(Category).where(Category.active == True)).all()
+    result = []
+
+    for cat in categories:
+        products = db.scalars(select(Product).where(and_(Product.category_id == cat.id, Product.active == True))).all()
+        total_physical = 0
+        total_available = 0
+
+        for prod in products:
+            phys = db.scalar(select(func.coalesce(func.sum(Inventory.physical_stock), 0)).where(Inventory.product_id == prod.id)) or 0
+            avail = db.scalar(select(func.coalesce(func.sum(Inventory.physical_stock - Inventory.reserved_stock), 0)).where(Inventory.product_id == prod.id)) or 0
+            total_physical += phys
+            total_available += avail
+
+        result.append({
+            "category": cat.name,
+            "product_count": len(products),
+            "total_physical_stock": total_physical,
+            "total_available_stock": total_available
+        })
+
+    return result
+
+@router.get("/reports/stock-by-location")
+def stock_by_location(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    locations = db.scalars(select(Location).where(Location.active == True)).all()
+    result = []
+
+    for loc in locations:
+        inventories = db.scalars(select(Inventory).where(Inventory.location_id == loc.id)).all()
+        total_physical = sum(inv.physical_stock for inv in inventories)
+        total_available = sum(inv.physical_stock - inv.reserved_stock for inv in inventories)
+
+        result.append({
+            "location": loc.name,
+            "item_count": len(inventories),
+            "total_physical_stock": total_physical,
+            "total_available_stock": total_available
+        })
+
+    return result

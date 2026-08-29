@@ -21,6 +21,7 @@ import {
   Briefcase,
   ShoppingCart,
   Archive,
+  PieChart,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
@@ -73,6 +74,7 @@ const BEVI_STOQ_NAV: NavItem[] = [
   { to: '/app/bevi-stoq/requirements', label: 'Requirements', icon: Briefcase },
   { to: '/app/bevi-stoq/movements', label: 'Movements', icon: TrendingDown },
   { to: '/app/bevi-stoq/combos', label: 'Combos', icon: Package },
+  { to: '/app/bevi-stoq/reports', label: 'Reports', icon: PieChart },
 ]
 
 const SHARED_NAV: NavItem[] = [

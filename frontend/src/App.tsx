@@ -48,6 +48,7 @@ const BeviStoqRestocks = lazy(() => import('./pages/BeviStoqRestocks').then((m) 
 const BeviStoqRequirements = lazy(() => import('./pages/BeviStoqRequirements').then((m) => ({ default: m.BeviStoqRequirements })))
 const BeviStoqPurchases = lazy(() => import('./pages/BeviStoqPurchases').then((m) => ({ default: m.BeviStoqPurchases })))
 const BeviStoqCombos = lazy(() => import('./pages/BeviStoqCombos').then((m) => ({ default: m.BeviStoqCombos })))
+const BeviStoqReports = lazy(() => import('./pages/BeviStoqReports').then((m) => ({ default: m.BeviStoqReports })))
 
 
 function RequireAuth({ children, roles }: { children: ReactNode; roles?: Role[] }) {
@@ -129,6 +130,7 @@ export default function App() {
                 <Route path="bevi-stoq/requirements" element={<BeviStoqRequirements />} />
                 <Route path="bevi-stoq/purchases" element={<BeviStoqPurchases />} />
                 <Route path="bevi-stoq/combos" element={<BeviStoqCombos />} />
+                <Route path="bevi-stoq/reports" element={<BeviStoqReports />} />
 
                 {/* shared */}
                 <Route path="profile" element={<Profile />} />

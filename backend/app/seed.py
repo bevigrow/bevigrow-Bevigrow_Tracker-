@@ -83,9 +83,8 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("bs_categories", "updated_at", "TIMESTAMP WITH TIME ZONE DEFAULT NOW()"),
     ("bs_categories", "updated_by_user_id", "INTEGER"),
 
-    # Products: low-stock threshold + audit
-    ("bs_products", "low_stock_alert_level", "FLOAT DEFAULT 0 NOT NULL"),  # Legacy column, kept for compatibility
-    ("bs_products", "low_stock_threshold", "FLOAT DEFAULT 0 NOT NULL"),
+    # Products: low-stock alert level + audit
+    ("bs_products", "low_stock_alert_level", "FLOAT DEFAULT 0 NOT NULL"),
     ("bs_products", "updated_at", "TIMESTAMP WITH TIME ZONE DEFAULT NOW()"),
     ("bs_products", "updated_by_user_id", "INTEGER"),
 

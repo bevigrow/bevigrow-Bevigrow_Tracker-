@@ -17,7 +17,7 @@ interface Product {
   id: number
   name: string
   default_unit: string
-  low_stock_threshold: number
+  low_stock_alert_level: number
 }
 
 interface Location {
@@ -62,7 +62,7 @@ export function BeviStoqInventory() {
 
   const getProductName = (id: number) => products.find((p) => p.id === id)?.name || 'Unknown'
   const getProductUnit = (id: number) => products.find((p) => p.id === id)?.default_unit || ''
-  const getProductThreshold = (id: number) => products.find((p) => p.id === id)?.low_stock_threshold || 0
+  const getProductThreshold = (id: number) => products.find((p) => p.id === id)?.low_stock_alert_level || 0
   const getLocationName = (id: number) => locations.find((l) => l.id === id)?.name || 'Unknown'
   const getStockStatus = (availableStock: number, threshold: number) => {
     if (availableStock <= 0) return { label: 'OUT OF STOCK', color: 'bg-red-500/20 text-red-400' }

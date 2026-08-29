@@ -38,7 +38,7 @@ class StockReportItem(BaseModel):
     reserved_stock: float
     available_stock: float
     unit: str
-    low_stock_threshold: float
+    low_stock_alert_level: float
     status: str
     location: str
 
@@ -140,7 +140,7 @@ def list_products(db: Session = Depends(get_db), _: User = Depends(get_current_u
 @router.post("/products", response_model=ProductOut, status_code=201)
 def create_product(data: ProductCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     try:
-        log.info(f"CREATE PRODUCT: Received request: name={data.name}, category_id={data.category_id}, unit={data.default_unit}, threshold={data.low_stock_threshold}, user={user.id}")
+        log.info(f"CREATE PRODUCT: Received request: name={data.name}, category_id={data.category_id}, unit={data.default_unit}, threshold={data.low_stock_alert_level}, user={user.id}")
 
         # Validate category exists
         if data.category_id:
@@ -169,12 +169,12 @@ def create_product(data: ProductCreate, db: Session = Depends(get_db), user: Use
             raise HTTPException(status_code=400, detail=f"Invalid unit '{data.default_unit}'")
 
         # Validate low stock threshold
-        if data.low_stock_threshold < 0:
-            log.warning(f"CREATE PRODUCT: Invalid threshold {data.low_stock_threshold}")
+        if data.low_stock_alert_level < 0:
+            log.warning(f"CREATE PRODUCT: Invalid threshold {data.low_stock_alert_level}")
             raise HTTPException(status_code=400, detail="Low stock threshold must be non-negative")
 
         log.info(f"CREATE PRODUCT: Validation passed, creating product")
-        prod = Product(name=data.name, category_id=data.category_id, default_unit=data.default_unit, low_stock_threshold=data.low_stock_threshold, created_by_user_id=user.id)
+        prod = Product(name=data.name, category_id=data.category_id, default_unit=data.default_unit, low_stock_alert_level=data.low_stock_alert_level, created_by_user_id=user.id)
         db.add(prod)
         db.commit()
         db.refresh(prod)
@@ -205,7 +205,7 @@ def update_product(id: int, data: ProductUpdate, db: Session = Depends(get_db), 
     if data.name: prod.name = data.name
     if data.category_id: prod.category_id = data.category_id
     if data.default_unit: prod.default_unit = data.default_unit
-    if data.low_stock_threshold is not None: prod.low_stock_threshold = data.low_stock_threshold
+    if data.low_stock_alert_level is not None: prod.low_stock_alert_level = data.low_stock_alert_level
     if data.active is not None: prod.active = data.active
     prod.updated_by_user_id = user.id
     db.commit()
@@ -554,20 +554,20 @@ def get_dashboard(db: Session = Depends(get_db), _: User = Depends(get_current_u
             select(
                 Product.id,
                 Product.name,
-                Product.low_stock_threshold,
+                Product.low_stock_alert_level,
                 func.coalesce(func.sum(Inventory.physical_stock - Inventory.reserved_stock), 0).label("available")
             )
             .outerjoin(Inventory, Inventory.product_id == Product.id)
             .where(Product.active == True)
-            .group_by(Product.id, Product.name, Product.low_stock_threshold)
+            .group_by(Product.id, Product.name, Product.low_stock_alert_level)
         )
 
         for row in db.execute(stmt):
             available = row.available or 0
             if available <= 0:
-                out_of_stock_list.append(ProductStatus(product_id=row.id, product_name=row.name, status="OUT_OF_STOCK", current_stock=available, threshold=row.low_stock_threshold))
-            elif available <= row.low_stock_threshold:
-                low_stock_list.append(ProductStatus(product_id=row.id, product_name=row.name, status="LOW_STOCK", current_stock=available, threshold=row.low_stock_threshold))
+                out_of_stock_list.append(ProductStatus(product_id=row.id, product_name=row.name, status="OUT_OF_STOCK", current_stock=available, threshold=row.low_stock_alert_level))
+            elif available <= row.low_stock_alert_level:
+                low_stock_list.append(ProductStatus(product_id=row.id, product_name=row.name, status="LOW_STOCK", current_stock=available, threshold=row.low_stock_alert_level))
 
         recent = db.scalars(select(StockMovement).order_by(StockMovement.created_at.desc()).limit(10)).all()
 
@@ -591,7 +591,7 @@ def inventory_report(db: Session = Depends(get_db), _: User = Depends(get_curren
                 Product.name,
                 Product.category_id,
                 Product.default_unit,
-                Product.low_stock_threshold,
+                Product.low_stock_alert_level,
                 Category.name.label("category_name"),
                 Inventory.id.label("inv_id"),
                 Inventory.physical_stock,
@@ -625,7 +625,7 @@ def inventory_report(db: Session = Depends(get_db), _: User = Depends(get_curren
             if available <= 0:
                 status = "OUT_OF_STOCK"
                 out_of_stock_count += 1
-            elif available <= row.low_stock_threshold:
+            elif available <= row.low_stock_alert_level:
                 status = "LOW_STOCK"
                 low_stock_count += 1
             else:
@@ -638,7 +638,7 @@ def inventory_report(db: Session = Depends(get_db), _: User = Depends(get_curren
                 reserved_stock=row.reserved_stock,
                 available_stock=available,
                 unit=row.default_unit,
-                low_stock_threshold=row.low_stock_threshold,
+                low_stock_alert_level=row.low_stock_alert_level,
                 status=status,
                 location=row.location_name or "Unknown"
             ))

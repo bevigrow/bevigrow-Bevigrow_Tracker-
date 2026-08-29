@@ -31,14 +31,14 @@ class ProductCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     category_id: int
     default_unit: str = Field(..., min_length=1, max_length=50)
-    low_stock_threshold: float = Field(default=0, ge=0)
+    low_stock_alert_level: float = Field(default=0, ge=0)
 
 
 class ProductUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=200)
     category_id: int | None = None
     default_unit: str | None = Field(None, min_length=1, max_length=50)
-    low_stock_threshold: float | None = Field(None, ge=0)
+    low_stock_alert_level: float | None = Field(None, ge=0)
     active: bool | None = None
 
 
@@ -47,7 +47,7 @@ class ProductOut(BaseModel):
     name: str
     category_id: int
     default_unit: str
-    low_stock_threshold: float
+    low_stock_alert_level: float
     active: bool
     created_at: datetime
     created_by_user_id: int

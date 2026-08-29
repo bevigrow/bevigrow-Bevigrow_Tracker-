@@ -15,7 +15,7 @@ interface StockReport {
     reserved_stock: number
     available_stock: number
     unit: string
-    low_stock_threshold: number
+    low_stock_alert_level: number
     status: string
     location: string
   }>

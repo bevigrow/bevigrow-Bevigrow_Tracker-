@@ -11,7 +11,7 @@ interface Product {
   name: string
   category_id: number
   default_unit: string
-  low_stock_threshold: number
+  low_stock_alert_level: number
   active: boolean
   created_at: string
 }
@@ -38,7 +38,7 @@ export function BeviStoqProducts() {
     name: '',
     category_id: 0,
     default_unit: '',
-    low_stock_threshold: 0,
+    low_stock_alert_level: 0,
   })
   const [initialStock, setInitialStock] = useState({
     quantity: '',
@@ -75,12 +75,12 @@ export function BeviStoqProducts() {
         name: formData.name,
         category_id: formData.category_id,
         default_unit: formData.default_unit,
-        low_stock_threshold: formData.low_stock_threshold,
+        low_stock_alert_level: formData.low_stock_alert_level,
         types: {
           name: typeof formData.name,
           category_id: typeof formData.category_id,
           default_unit: typeof formData.default_unit,
-          low_stock_threshold: typeof formData.low_stock_threshold,
+          low_stock_alert_level: typeof formData.low_stock_alert_level,
         }
       })
 
@@ -105,7 +105,7 @@ export function BeviStoqProducts() {
         })
       }
 
-      setFormData({ name: '', category_id: 0, default_unit: '', low_stock_threshold: 0 })
+      setFormData({ name: '', category_id: 0, default_unit: '', low_stock_alert_level: 0 })
       setInitialStock({ quantity: '', unit: '', location_id: 0 })
       setEditingId(null)
       setShowForm(false)
@@ -134,7 +134,7 @@ export function BeviStoqProducts() {
       name: product.name,
       category_id: product.category_id,
       default_unit: product.default_unit,
-      low_stock_threshold: product.low_stock_threshold,
+      low_stock_alert_level: product.low_stock_alert_level,
     })
     setEditingId(product.id)
     setShowForm(true)
@@ -154,7 +154,7 @@ export function BeviStoqProducts() {
         </div>
         <button
           onClick={() => {
-            setFormData({ name: '', category_id: 0, default_unit: '', low_stock_threshold: 0 })
+            setFormData({ name: '', category_id: 0, default_unit: '', low_stock_alert_level: 0 })
             setEditingId(null)
             setShowForm(!showForm)
           }}
@@ -206,11 +206,11 @@ export function BeviStoqProducts() {
                 <label className="block text-sm font-medium text-latte">Low Stock Threshold</label>
                 <input
                   type="number"
-                  value={formData.low_stock_threshold}
+                  value={formData.low_stock_alert_level}
                   onChange={(e) => {
                     const val = e.target.value;
                     const num = val === '' ? 0 : parseFloat(val);
-                    setFormData({ ...formData, low_stock_threshold: isNaN(num) ? 0 : num })
+                    setFormData({ ...formData, low_stock_alert_level: isNaN(num) ? 0 : num })
                   }}
                   className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
                   placeholder="0"
@@ -304,7 +304,7 @@ export function BeviStoqProducts() {
                   <td className="px-4 py-3 text-sm text-latte">{product.name}</td>
                   <td className="px-4 py-3 text-sm text-latte/70">{getCategoryName(product.category_id)}</td>
                   <td className="px-4 py-3 text-sm text-latte/70">{product.default_unit}</td>
-                  <td className="px-4 py-3 text-sm text-latte/70">{product.low_stock_threshold}</td>
+                  <td className="px-4 py-3 text-sm text-latte/70">{product.low_stock_alert_level}</td>
                   <td className="px-4 py-3 text-sm">
                     <span className="text-xs text-latte/50">{product.active ? '✓ Active' : '✗ Inactive'}</span>
                   </td>

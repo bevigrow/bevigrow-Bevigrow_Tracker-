@@ -371,22 +371,39 @@ def create_stock_movement(data: StockMovementCreate, db: Session = Depends(get_d
                 to_inv = db.scalar(select(Inventory).where(and_(Inventory.product_id == data.product_id, Inventory.location_id == data.to_location_id)).with_for_update())
 
             from_inv.physical_stock -= data.quantity
+            from_inv.updated_by_user_id = user.id
+            from_inv.updated_at = datetime.now(timezone.utc)
+            log.info(f"CREATE STOCK MOVEMENT: Transfer from location {data.from_location_id}: {data.quantity} {data.unit}")
+
             to_inv.physical_stock += data.quantity
+            to_inv.updated_by_user_id = user.id
+            to_inv.updated_at = datetime.now(timezone.utc)
+            log.info(f"CREATE STOCK MOVEMENT: Transfer to location {data.to_location_id}: {data.quantity} {data.unit}")
+
         elif data.to_location_id:
             # For simple stock additions, create or update inventory for the target location
             to_inv = db.scalar(select(Inventory).where(and_(Inventory.product_id == data.product_id, Inventory.location_id == data.to_location_id)).with_for_update())
             if not to_inv:
+                log.info(f"CREATE STOCK MOVEMENT: Creating new inventory for product {data.product_id}, location {data.to_location_id}")
                 to_inv = Inventory(product_id=data.product_id, location_id=data.to_location_id, physical_stock=0, reserved_stock=0, updated_by_user_id=user.id)
                 db.add(to_inv)
                 db.flush()
                 to_inv = db.scalar(select(Inventory).where(and_(Inventory.product_id == data.product_id, Inventory.location_id == data.to_location_id)).with_for_update())
+
+            old_stock = to_inv.physical_stock
             to_inv.physical_stock += data.quantity
+            to_inv.updated_by_user_id = user.id
+            to_inv.updated_at = datetime.now(timezone.utc)
+            log.info(f"CREATE STOCK MOVEMENT: Updated inventory for product {data.product_id}, location {data.to_location_id}: {old_stock} → {to_inv.physical_stock} {data.unit}")
 
         movement = StockMovement(product_id=data.product_id, from_location_id=data.from_location_id, to_location_id=data.to_location_id, movement_type=StockMovementType(data.movement_type), quantity=data.quantity, unit=data.unit, reference_id=data.reference_id, notes=data.notes, created_by_user_id=user.id)
         db.add(movement)
+        db.flush()
+        log.info(f"CREATE STOCK MOVEMENT: Added stock movement record {movement.id}")
         db.commit()
         db.refresh(movement)
-        log.info(f"CREATE STOCK MOVEMENT: Success, created movement {movement.id}")
+        db.refresh(to_inv) if data.to_location_id else None
+        log.info(f"CREATE STOCK MOVEMENT: Success, created movement {movement.id}, inventory updated and committed")
         return movement
     except HTTPException:
         raise

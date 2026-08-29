@@ -141,7 +141,7 @@ export function AppShell() {
             </NavLink>
           )}
 
-          {/* From the hub, offer both doors before anything shared. */}
+          {/* From the hub, offer all workspaces before anything shared. */}
           {!section && (
             <>
               <NavLink
@@ -157,6 +157,13 @@ export function AppShell() {
               >
                 <Send size={17} />
                 Outreach
+              </NavLink>
+              <NavLink
+                to="/app/bevi-stoq"
+                className="flex min-h-[44px] items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium text-latte/55 transition hover:bg-latte/5 hover:text-latte/85"
+              >
+                <Package size={17} />
+                Bevi Stoq
               </NavLink>
             </>
           )}

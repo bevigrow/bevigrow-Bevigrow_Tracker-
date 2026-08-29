@@ -75,55 +75,61 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("campaign_targets", "resend_notes", "TEXT"),
     ("campaign_targets", "approved_by_id", "INTEGER"),
     ("campaign_targets", "approved_at", "TIMESTAMP WITH TIME ZONE"),
-    # Bevi Stoq inventory management (added after initial BeviGrow release).
-    # ALL columns needed for complete Bevi Stoq schema
+    # Bevi Stoq inventory management - COMPLETE SCHEMA
+    # Added in phases; safe to re-run (uses ADD COLUMN IF NOT EXISTS)
 
-    # Categories
+    # Categories: audit timestamps
     ("bs_categories", "updated_at", "TIMESTAMP WITH TIME ZONE DEFAULT NOW()"),
     ("bs_categories", "updated_by_user_id", "INTEGER"),
 
-    # Products
+    # Products: low-stock threshold + audit
     ("bs_products", "low_stock_threshold", "FLOAT DEFAULT 0 NOT NULL"),
     ("bs_products", "updated_at", "TIMESTAMP WITH TIME ZONE DEFAULT NOW()"),
     ("bs_products", "updated_by_user_id", "INTEGER"),
 
-    # Locations
+    # Locations: audit timestamps
     ("bs_locations", "updated_at", "TIMESTAMP WITH TIME ZONE DEFAULT NOW()"),
     ("bs_locations", "updated_by_user_id", "INTEGER"),
 
-    # Inventory
+    # Inventory: audit timestamps (updated_by_user_id required for FK)
     ("bs_inventory", "updated_at", "TIMESTAMP WITH TIME ZONE DEFAULT NOW()"),
-    ("bs_inventory", "updated_by_user_id", "INTEGER NOT NULL"),
+    ("bs_inventory", "updated_by_user_id", "INTEGER DEFAULT 1"),
 
-    # Stock movements
+    # Stock movements: location tracking
     ("bs_stock_movements", "from_location_id", "INTEGER"),
     ("bs_stock_movements", "to_location_id", "INTEGER"),
 
-    # Restocks
-    ("bs_restocks", "restock_date", "TIMESTAMP WITH TIME ZONE"),
+    # Restocks: supplier + cost tracking + status
+    ("bs_restocks", "restock_date", "TIMESTAMP WITH TIME ZONE DEFAULT NOW()"),
+    ("bs_restocks", "supplier_name", "VARCHAR(200)"),
     ("bs_restocks", "cost_per_unit", "FLOAT"),
     ("bs_restocks", "total_cost", "FLOAT"),
+    ("bs_restocks", "reference_id", "VARCHAR(100)"),
+    ("bs_restocks", "notes", "TEXT"),
     ("bs_restocks", "status", "VARCHAR(50) DEFAULT 'pending'"),
+    ("bs_restocks", "updated_at", "TIMESTAMP WITH TIME ZONE DEFAULT NOW()"),
+    ("bs_restocks", "updated_by_user_id", "INTEGER"),
 
-    # Customer requirements
+    # Customer requirements: contact link + audit
     ("bs_customer_requirements", "contact_id", "INTEGER"),
+    ("bs_customer_requirements", "status", "VARCHAR(50) DEFAULT 'pending'"),
     ("bs_customer_requirements", "updated_at", "TIMESTAMP WITH TIME ZONE DEFAULT NOW()"),
     ("bs_customer_requirements", "updated_by_user_id", "INTEGER"),
 
-    # Requirement items
+    # Requirement items: fulfilled tracking
     ("bs_requirement_items", "quantity_reserved", "FLOAT DEFAULT 0 NOT NULL"),
     ("bs_requirement_items", "quantity_fulfilled", "FLOAT DEFAULT 0 NOT NULL"),
 
-    # Customer purchases
+    # Customer purchases: payment + audit
     ("bs_customer_purchases", "contact_id", "INTEGER"),
     ("bs_customer_purchases", "payment_status", "VARCHAR(50) DEFAULT 'pending'"),
     ("bs_customer_purchases", "payment_method", "VARCHAR(100)"),
-    ("bs_customer_purchases", "amount", "FLOAT NOT NULL"),
+    ("bs_customer_purchases", "amount", "FLOAT DEFAULT 0 NOT NULL"),
     ("bs_customer_purchases", "notes", "TEXT"),
     ("bs_customer_purchases", "updated_at", "TIMESTAMP WITH TIME ZONE DEFAULT NOW()"),
     ("bs_customer_purchases", "updated_by_user_id", "INTEGER"),
 
-    # Combos
+    # Combos: audit timestamps
     ("bs_combos", "updated_at", "TIMESTAMP WITH TIME ZONE DEFAULT NOW()"),
     ("bs_combos", "updated_by_user_id", "INTEGER"),
 ]

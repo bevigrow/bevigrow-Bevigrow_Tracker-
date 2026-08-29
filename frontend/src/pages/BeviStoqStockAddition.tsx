@@ -2,7 +2,8 @@ import { Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { api } from '../lib/api'
-import { EmptyState, Spinner, useToast } from '../components/ui'
+import { EmptyState, Spinner } from '../components/ui'
+import { useToast } from '../lib/toast'
 import { UnitSelect } from '../lib/units'
 
 interface Product {
@@ -31,7 +32,6 @@ export function BeviStoqStockAddition() {
     stock_date: new Date().toISOString().split('T')[0],
     notes: '',
   })
-  const [submissions, setSubmissions] = useState<any[]>([])
 
   useEffect(() => {
     fetchData()
@@ -82,9 +82,6 @@ export function BeviStoqStockAddition() {
       toast.error(message)
     }
   }
-
-  const getProductName = (id: number) => products.find((p) => p.id === id)?.name || 'Unknown'
-  const getLocationName = (id: number) => locations.find((l) => l.id === id)?.name || 'Unknown'
 
   if (loading) return <Spinner label="Loading…" />
   if (error && !showForm) return <EmptyState emoji="⚠️" title="Error" hint={error} />

@@ -2,7 +2,8 @@ import { Plus, Edit2, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { api } from '../lib/api'
-import { EmptyState, Spinner, useToast } from '../components/ui'
+import { EmptyState, Spinner } from '../components/ui'
+import { useToast } from '../lib/toast'
 import { UnitSelect } from '../lib/units'
 
 interface Product {

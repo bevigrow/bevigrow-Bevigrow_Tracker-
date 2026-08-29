@@ -2,7 +2,8 @@ import { Plus, DollarSign } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { api } from '../lib/api'
-import { EmptyState, Spinner, useToast } from '../components/ui'
+import { EmptyState, Spinner } from '../components/ui'
+import { useToast } from '../lib/toast'
 import { UnitSelect } from '../lib/units'
 
 interface CustomerPurchase {
@@ -23,6 +24,7 @@ interface CustomerPurchase {
 interface Product {
   id: number
   name: string
+  default_unit: string
 }
 
 export function BeviStoqPurchases() {

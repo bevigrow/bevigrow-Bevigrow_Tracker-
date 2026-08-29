@@ -6,18 +6,14 @@ import {
   ClipboardList,
   Coffee,
   FileText,
-  History,
   LayoutDashboard,
   LogOut,
   Menu,
   MessageSquare,
   Send,
-  ShoppingCart,
   SlidersHorizontal,
   Users,
   Users2,
-  Warehouse,
-  Box,
   X,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'

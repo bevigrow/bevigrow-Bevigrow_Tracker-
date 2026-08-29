@@ -519,15 +519,24 @@ def get_dashboard(db: Session = Depends(get_db), _: User = Depends(get_current_u
     low_stock_list = []
     out_of_stock_list = []
 
-    products = db.scalars(select(Product).where(Product.active == True)).all()
-    for prod in products:
-        stmt = select(func.coalesce(func.sum(Inventory.physical_stock - Inventory.reserved_stock), 0)).where(Inventory.product_id == prod.id)
-        available = db.scalar(stmt) or 0
+    stmt = (
+        select(
+            Product.id,
+            Product.name,
+            Product.low_stock_threshold,
+            func.coalesce(func.sum(Inventory.physical_stock - Inventory.reserved_stock), 0).label("available")
+        )
+        .outerjoin(Inventory, Inventory.product_id == Product.id)
+        .where(Product.active == True)
+        .group_by(Product.id, Product.name, Product.low_stock_threshold)
+    )
 
+    for row in db.execute(stmt):
+        available = row.available or 0
         if available <= 0:
-            out_of_stock_list.append(ProductStatus(product_id=prod.id, product_name=prod.name, status="OUT_OF_STOCK", current_stock=available, threshold=prod.low_stock_threshold))
-        elif available <= prod.low_stock_threshold:
-            low_stock_list.append(ProductStatus(product_id=prod.id, product_name=prod.name, status="LOW_STOCK", current_stock=available, threshold=prod.low_stock_threshold))
+            out_of_stock_list.append(ProductStatus(product_id=row.id, product_name=row.name, status="OUT_OF_STOCK", current_stock=available, threshold=row.low_stock_threshold))
+        elif available <= row.low_stock_threshold:
+            low_stock_list.append(ProductStatus(product_id=row.id, product_name=row.name, status="LOW_STOCK", current_stock=available, threshold=row.low_stock_threshold))
 
     recent = db.scalars(select(StockMovement).order_by(StockMovement.created_at.desc()).limit(10)).all()
 
@@ -541,50 +550,66 @@ def get_dashboard(db: Session = Depends(get_db), _: User = Depends(get_current_u
 # ================================================================ ADVANCED REPORTS
 @router.get("/reports/inventory", response_model=InventoryReport)
 def inventory_report(db: Session = Depends(get_db), _: User = Depends(get_current_user), category_id: int | None = None, location_id: int | None = None):
-    query = select(Product).where(Product.active == True)
-    if category_id:
-        query = query.where(Product.category_id == category_id)
+    stmt = (
+        select(
+            Product.id,
+            Product.name,
+            Product.category_id,
+            Product.default_unit,
+            Product.low_stock_threshold,
+            Category.name.label("category_name"),
+            Inventory.id.label("inv_id"),
+            Inventory.physical_stock,
+            Inventory.reserved_stock,
+            Inventory.location_id,
+            Location.name.label("location_name"),
+        )
+        .join(Category, Category.id == Product.category_id)
+        .outerjoin(Inventory, Inventory.product_id == Product.id)
+        .outerjoin(Location, Location.id == Inventory.location_id)
+        .where(Product.active == True)
+    )
 
-    products = db.scalars(query).all()
+    if category_id:
+        stmt = stmt.where(Product.category_id == category_id)
+    if location_id:
+        stmt = stmt.where(Inventory.location_id == location_id)
+
     items = []
     low_stock_count = 0
     out_of_stock_count = 0
+    products_seen = set()
 
-    for prod in products:
-        inv_query = select(Inventory).where(Inventory.product_id == prod.id)
-        if location_id:
-            inv_query = inv_query.where(Inventory.location_id == location_id)
+    for row in db.execute(stmt):
+        if row.inv_id is None:
+            continue
 
-        inventories = db.scalars(inv_query).all()
+        available = row.physical_stock - row.reserved_stock
+        products_seen.add(row.id)
 
-        for inv in inventories:
-            available = inv.physical_stock - inv.reserved_stock
-            loc = db.get(Location, inv.location_id)
-            cat = db.get(Category, prod.category_id)
+        if available <= 0:
+            status = "OUT_OF_STOCK"
+            out_of_stock_count += 1
+        elif available <= row.low_stock_threshold:
+            status = "LOW_STOCK"
+            low_stock_count += 1
+        else:
+            status = "NORMAL"
 
-            if available <= 0:
-                status = "OUT_OF_STOCK"
-                out_of_stock_count += 1
-            elif available <= prod.low_stock_threshold:
-                status = "LOW_STOCK"
-                low_stock_count += 1
-            else:
-                status = "NORMAL"
-
-            items.append(StockReportItem(
-                product_name=prod.name,
-                category_name=cat.name if cat else "Unknown",
-                physical_stock=inv.physical_stock,
-                reserved_stock=inv.reserved_stock,
-                available_stock=available,
-                unit=prod.default_unit,
-                low_stock_threshold=prod.low_stock_threshold,
-                status=status,
-                location=loc.name if loc else "Unknown"
-            ))
+        items.append(StockReportItem(
+            product_name=row.name,
+            category_name=row.category_name or "Unknown",
+            physical_stock=row.physical_stock,
+            reserved_stock=row.reserved_stock,
+            available_stock=available,
+            unit=row.default_unit,
+            low_stock_threshold=row.low_stock_threshold,
+            status=status,
+            location=row.location_name or "Unknown"
+        ))
 
     return InventoryReport(
-        total_products=len(products),
+        total_products=len(products_seen),
         total_stock_value=0,
         low_stock_count=low_stock_count,
         out_of_stock_count=out_of_stock_count,

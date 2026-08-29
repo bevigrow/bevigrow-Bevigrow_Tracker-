@@ -43,8 +43,29 @@ async def lifespan(app: FastAPI):
     # This lets the API become responsive ASAP.
     import threading
 
+    def _apply_migrations():
+        """Add missing columns to existing tables (data migration safety net)."""
+        try:
+            with engine.connect() as conn:
+                schema = settings.schema
+                # Check if low_stock_threshold exists on bs_products
+                result = conn.execute(text(f"""
+                    SELECT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_schema = '{schema}' AND table_name = 'bs_products' AND column_name = 'low_stock_threshold'
+                    )
+                """))
+                has_column = result.scalar()
+                if not has_column:
+                    log.warning("Adding missing low_stock_threshold column to bs_products")
+                    conn.execute(text(f"ALTER TABLE {schema}.bs_products ADD COLUMN low_stock_threshold FLOAT DEFAULT 0"))
+                    conn.commit()
+        except Exception as exc:
+            log.warning('Migration check failed (may not be PostgreSQL): %s', exc)
+
     def _init_async():
         try:
+            _apply_migrations()
             seed.run()
         except Exception as exc:
             log.error('Seed failed: %s', exc)

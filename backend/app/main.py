@@ -49,23 +49,48 @@ async def lifespan(app: FastAPI):
             with engine.begin() as conn:
                 schema = settings.schema
                 if "sqlite" in settings.DATABASE_URL.lower():
-                    return  # SQLite handles schemas differently, skip
+                    log.info("SQLite detected, skipping schema migrations")
+                    return
+
+                log.info("Checking database schema migrations...")
 
                 # Check if low_stock_threshold exists on bs_products
-                result = conn.execute(text(f"""
-                    SELECT EXISTS (
-                        SELECT 1 FROM information_schema.columns
-                        WHERE table_schema = '{schema}' AND table_name = 'bs_products' AND column_name = 'low_stock_threshold'
-                    )
-                """))
-                has_column = result.scalar()
+                try:
+                    result = conn.execute(text(f"""
+                        SELECT EXISTS (
+                            SELECT 1 FROM information_schema.columns
+                            WHERE table_schema = '{schema}' AND table_name = 'bs_products' AND column_name = 'low_stock_threshold'
+                        )
+                    """))
+                    has_column = result.scalar()
+                except Exception as check_err:
+                    log.warning(f"Could not check for low_stock_threshold column: {check_err}")
+                    return
+
                 if not has_column:
-                    log.warning("Adding missing low_stock_threshold column to bs_products")
-                    conn.execute(text(f"ALTER TABLE {schema}.bs_products ADD COLUMN low_stock_threshold FLOAT DEFAULT 0"))
-                    log.info("Successfully added low_stock_threshold column")
+                    try:
+                        log.warning(f"Adding missing low_stock_threshold column to {schema}.bs_products")
+                        conn.execute(text(f"ALTER TABLE {schema}.bs_products ADD COLUMN low_stock_threshold FLOAT DEFAULT 0"))
+                        log.info("✓ Successfully added low_stock_threshold column")
+                    except Exception as alter_err:
+                        log.error(f"Failed to add column (may already exist or permission denied): {alter_err}")
+                        # Try to verify it exists now
+                        try:
+                            verify = conn.execute(text(f"""
+                                SELECT 1 FROM information_schema.columns
+                                WHERE table_schema = '{schema}' AND table_name = 'bs_products' AND column_name = 'low_stock_threshold'
+                            """))
+                            if verify.scalar():
+                                log.info("✓ Column exists (likely added by concurrent process)")
+                            else:
+                                log.error("✗ Column still missing after migration attempt")
+                        except Exception:
+                            pass
+                else:
+                    log.info("✓ low_stock_threshold column already exists")
         except Exception as exc:
-            log.error('Migration failed: %s', exc)
-            # Don't crash startup, but log the error for investigation
+            log.error(f'Migration setup failed: {exc}')
+            # Don't crash startup, but log the error
 
     def _init_async():
         try:

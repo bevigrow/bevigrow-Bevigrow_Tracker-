@@ -196,10 +196,14 @@ def delete_product(id: int, db: Session = Depends(get_db), _: User = Depends(get
 # ================================================================ INVENTORY
 @router.get("/inventory", response_model=list[InventoryOut])
 def list_inventory(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    items = db.scalars(select(Inventory)).all()
-    for item in items:
-        item.available_stock = item.physical_stock - item.reserved_stock
-    return items
+    try:
+        items = db.scalars(select(Inventory)).all()
+        for item in items:
+            item.available_stock = item.physical_stock - item.reserved_stock
+        return items
+    except Exception as e:
+        log.error(f"Inventory list error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Inventory error: {str(e)}")
 
 @router.get("/inventory/{product_id}/{location_id}", response_model=InventoryOut)
 def get_inventory(product_id: int, location_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
@@ -512,109 +516,117 @@ def delete_combo(id: int, db: Session = Depends(get_db), _: User = Depends(get_c
 # ================================================================ DASHBOARD
 @router.get("/dashboard", response_model=DashboardOut)
 def get_dashboard(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    total_products = db.scalar(select(func.count(Product.id)).where(Product.active == True)) or 0
-    total_locations = db.scalar(select(func.count(Location.id)).where(Location.active == True)) or 0
-    total_categories = db.scalar(select(func.count(Category.id)).where(Category.active == True)) or 0
+    try:
+        total_products = db.scalar(select(func.count(Product.id)).where(Product.active == True)) or 0
+        total_locations = db.scalar(select(func.count(Location.id)).where(Location.active == True)) or 0
+        total_categories = db.scalar(select(func.count(Category.id)).where(Category.active == True)) or 0
 
-    low_stock_list = []
-    out_of_stock_list = []
+        low_stock_list = []
+        out_of_stock_list = []
 
-    stmt = (
-        select(
-            Product.id,
-            Product.name,
-            Product.low_stock_threshold,
-            func.coalesce(func.sum(Inventory.physical_stock - Inventory.reserved_stock), 0).label("available")
+        stmt = (
+            select(
+                Product.id,
+                Product.name,
+                Product.low_stock_threshold,
+                func.coalesce(func.sum(Inventory.physical_stock - Inventory.reserved_stock), 0).label("available")
+            )
+            .outerjoin(Inventory, Inventory.product_id == Product.id)
+            .where(Product.active == True)
+            .group_by(Product.id, Product.name, Product.low_stock_threshold)
         )
-        .outerjoin(Inventory, Inventory.product_id == Product.id)
-        .where(Product.active == True)
-        .group_by(Product.id, Product.name, Product.low_stock_threshold)
-    )
 
-    for row in db.execute(stmt):
-        available = row.available or 0
-        if available <= 0:
-            out_of_stock_list.append(ProductStatus(product_id=row.id, product_name=row.name, status="OUT_OF_STOCK", current_stock=available, threshold=row.low_stock_threshold))
-        elif available <= row.low_stock_threshold:
-            low_stock_list.append(ProductStatus(product_id=row.id, product_name=row.name, status="LOW_STOCK", current_stock=available, threshold=row.low_stock_threshold))
+        for row in db.execute(stmt):
+            available = row.available or 0
+            if available <= 0:
+                out_of_stock_list.append(ProductStatus(product_id=row.id, product_name=row.name, status="OUT_OF_STOCK", current_stock=available, threshold=row.low_stock_threshold))
+            elif available <= row.low_stock_threshold:
+                low_stock_list.append(ProductStatus(product_id=row.id, product_name=row.name, status="LOW_STOCK", current_stock=available, threshold=row.low_stock_threshold))
 
-    recent = db.scalars(select(StockMovement).order_by(StockMovement.created_at.desc()).limit(10)).all()
+        recent = db.scalars(select(StockMovement).order_by(StockMovement.created_at.desc()).limit(10)).all()
 
-    return DashboardOut(
-        summary=DashboardSummary(total_products=total_products, low_stock_count=len(low_stock_list), out_of_stock_count=len(out_of_stock_list), total_locations=total_locations, total_categories=total_categories),
-        low_stock_products=low_stock_list,
-        out_of_stock_products=out_of_stock_list,
-        recent_movements=[StockMovementOut.model_validate(m) for m in recent]
-    )
+        return DashboardOut(
+            summary=DashboardSummary(total_products=total_products, low_stock_count=len(low_stock_list), out_of_stock_count=len(out_of_stock_list), total_locations=total_locations, total_categories=total_categories),
+            low_stock_products=low_stock_list,
+            out_of_stock_products=out_of_stock_list,
+            recent_movements=[StockMovementOut.model_validate(m) for m in recent]
+        )
+    except Exception as e:
+        log.error(f"Dashboard error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Dashboard error: {str(e)}")
 
 # ================================================================ ADVANCED REPORTS
 @router.get("/reports/inventory", response_model=InventoryReport)
 def inventory_report(db: Session = Depends(get_db), _: User = Depends(get_current_user), category_id: int | None = None, location_id: int | None = None):
-    stmt = (
-        select(
-            Product.id,
-            Product.name,
-            Product.category_id,
-            Product.default_unit,
-            Product.low_stock_threshold,
-            Category.name.label("category_name"),
-            Inventory.id.label("inv_id"),
-            Inventory.physical_stock,
-            Inventory.reserved_stock,
-            Inventory.location_id,
-            Location.name.label("location_name"),
+    try:
+        stmt = (
+            select(
+                Product.id,
+                Product.name,
+                Product.category_id,
+                Product.default_unit,
+                Product.low_stock_threshold,
+                Category.name.label("category_name"),
+                Inventory.id.label("inv_id"),
+                Inventory.physical_stock,
+                Inventory.reserved_stock,
+                Inventory.location_id,
+                Location.name.label("location_name"),
+            )
+            .join(Category, Category.id == Product.category_id)
+            .outerjoin(Inventory, Inventory.product_id == Product.id)
+            .outerjoin(Location, Location.id == Inventory.location_id)
+            .where(Product.active == True)
         )
-        .join(Category, Category.id == Product.category_id)
-        .outerjoin(Inventory, Inventory.product_id == Product.id)
-        .outerjoin(Location, Location.id == Inventory.location_id)
-        .where(Product.active == True)
-    )
 
-    if category_id:
-        stmt = stmt.where(Product.category_id == category_id)
-    if location_id:
-        stmt = stmt.where(Inventory.location_id == location_id)
+        if category_id:
+            stmt = stmt.where(Product.category_id == category_id)
+        if location_id:
+            stmt = stmt.where(Inventory.location_id == location_id)
 
-    items = []
-    low_stock_count = 0
-    out_of_stock_count = 0
-    products_seen = set()
+        items = []
+        low_stock_count = 0
+        out_of_stock_count = 0
+        products_seen = set()
 
-    for row in db.execute(stmt):
-        if row.inv_id is None:
-            continue
+        for row in db.execute(stmt):
+            if row.inv_id is None:
+                continue
 
-        available = row.physical_stock - row.reserved_stock
-        products_seen.add(row.id)
+            available = row.physical_stock - row.reserved_stock
+            products_seen.add(row.id)
 
-        if available <= 0:
-            status = "OUT_OF_STOCK"
-            out_of_stock_count += 1
-        elif available <= row.low_stock_threshold:
-            status = "LOW_STOCK"
-            low_stock_count += 1
-        else:
-            status = "NORMAL"
+            if available <= 0:
+                status = "OUT_OF_STOCK"
+                out_of_stock_count += 1
+            elif available <= row.low_stock_threshold:
+                status = "LOW_STOCK"
+                low_stock_count += 1
+            else:
+                status = "NORMAL"
 
-        items.append(StockReportItem(
-            product_name=row.name,
-            category_name=row.category_name or "Unknown",
-            physical_stock=row.physical_stock,
-            reserved_stock=row.reserved_stock,
-            available_stock=available,
-            unit=row.default_unit,
-            low_stock_threshold=row.low_stock_threshold,
-            status=status,
-            location=row.location_name or "Unknown"
-        ))
+            items.append(StockReportItem(
+                product_name=row.name,
+                category_name=row.category_name or "Unknown",
+                physical_stock=row.physical_stock,
+                reserved_stock=row.reserved_stock,
+                available_stock=available,
+                unit=row.default_unit,
+                low_stock_threshold=row.low_stock_threshold,
+                status=status,
+                location=row.location_name or "Unknown"
+            ))
 
-    return InventoryReport(
-        total_products=len(products_seen),
-        total_stock_value=0,
-        low_stock_count=low_stock_count,
-        out_of_stock_count=out_of_stock_count,
-        items=items
-    )
+        return InventoryReport(
+            total_products=len(products_seen),
+            total_stock_value=0,
+            low_stock_count=low_stock_count,
+            out_of_stock_count=out_of_stock_count,
+            items=items
+        )
+    except Exception as e:
+        log.error(f"Inventory report error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Inventory report error: {str(e)}")
 
 @router.get("/reports/movements", response_model=MovementReport)
 def movements_report(db: Session = Depends(get_db), _: User = Depends(get_current_user), days: int = 30):

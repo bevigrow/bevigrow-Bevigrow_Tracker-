@@ -48,6 +48,8 @@ export function BeviStoqReports() {
   }, [])
 
   const fetchReports = async () => {
+    setLoading(true)
+    setError(null)
     try {
       const [stockRes, catRes, locRes] = await Promise.all([
         api.get<StockReport>('/api/bevi-stoq/reports/inventory'),
@@ -55,10 +57,13 @@ export function BeviStoqReports() {
         api.get<LocationReport[]>('/api/bevi-stoq/reports/stock-by-location'),
       ])
       setStockReport(stockRes)
-      setCategoryReports(catRes)
-      setLocationReports(locRes)
+      setCategoryReports(catRes || [])
+      setLocationReports(locRes || [])
+      setError(null)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load reports')
+      const errorMsg = err instanceof Error ? err.message : 'Failed to load reports'
+      console.error('Reports fetch error:', err)
+      setError(errorMsg)
     } finally {
       setLoading(false)
     }

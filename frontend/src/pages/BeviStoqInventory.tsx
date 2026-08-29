@@ -39,6 +39,8 @@ export function BeviStoqInventory() {
   }, [])
 
   const fetchData = async () => {
+    setLoading(true)
+    setError(null)
     try {
       const [invRes, prodRes, locRes] = await Promise.all([
         api.get<InventoryItem[]>('/api/bevi-stoq/inventory'),
@@ -48,8 +50,11 @@ export function BeviStoqInventory() {
       setInventory(invRes || [])
       setProducts(prodRes || [])
       setLocations(locRes || [])
+      setError(null)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load inventory')
+      const errorMsg = err instanceof Error ? err.message : 'Failed to load inventory'
+      console.error('Inventory fetch error:', err)
+      setError(errorMsg)
     } finally {
       setLoading(false)
     }

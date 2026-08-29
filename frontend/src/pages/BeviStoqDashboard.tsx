@@ -43,11 +43,16 @@ export function BeviStoqDashboard() {
 
   useEffect(() => {
     const fetchDashboard = async () => {
+      setLoading(true)
+      setError(null)
       try {
         const response = await api.get<DashboardData>('/api/bevi-stoq/dashboard')
         setData(response)
+        setError(null)
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load dashboard')
+        const errorMsg = err instanceof Error ? err.message : 'Failed to load dashboard'
+        console.error('Dashboard fetch error:', err)
+        setError(errorMsg)
       } finally {
         setLoading(false)
       }

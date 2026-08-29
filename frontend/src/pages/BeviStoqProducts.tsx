@@ -85,7 +85,7 @@ export function BeviStoqProducts() {
             movement_type: 'opening_stock',
             quantity: parseFloat(formData.stock_quantity),
             unit: formData.default_unit,
-            reference_id: 0,
+            reference_id: null,
             notes: formData.notes || 'Initial stock',
           })
         }

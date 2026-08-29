@@ -242,6 +242,17 @@ def migrate_columns() -> None:
             except Exception as e:
                 log.warning(f"Could not make category_id nullable (may already be nullable): {e}")
 
+        # Increase movement_type column size from VARCHAR(12) to VARCHAR(30)
+        # 'opening_stock' is 13 chars, and we need room for other movement types
+        if not settings.is_sqlite:
+            try:
+                conn.execute(
+                    text(f"ALTER TABLE {prefix}bs_stock_movements ALTER COLUMN movement_type TYPE VARCHAR(30)")
+                )
+                log.info("Increased bs_stock_movements.movement_type column size to VARCHAR(30)")
+            except Exception as e:
+                log.warning(f"Could not increase movement_type column size (may already be larger): {e}")
+
 
 def create_tables() -> None:
     ensure_schema()

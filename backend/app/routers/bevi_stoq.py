@@ -255,48 +255,69 @@ def get_inventory(product_id: int, location_id: int, db: Session = Depends(get_d
 # ================================================================ STOCK MOVEMENTS
 @router.post("/stock-movements", response_model=StockMovementOut, status_code=201)
 def create_stock_movement(data: StockMovementCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    # Validate product exists
-    product = db.get(Product, data.product_id)
-    if not product: raise HTTPException(status_code=404, detail="Product not found")
+    try:
+        log.info(f"CREATE STOCK MOVEMENT: product_id={data.product_id}, type={data.movement_type}, quantity={data.quantity}, unit={data.unit}")
 
-    # Validate unit compatibility with product's unit
-    if data.unit and not are_units_compatible(data.unit, product.default_unit):
-        raise HTTPException(status_code=400, detail=f"Unit '{data.unit}' is not compatible with product unit '{product.default_unit}'")
+        # Validate product exists
+        product = db.get(Product, data.product_id)
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
 
-    # Validate locations if specified
-    if data.from_location_id:
-        from_loc = db.get(Location, data.from_location_id)
-        if not from_loc: raise HTTPException(status_code=404, detail="From location not found")
+        # Validate unit compatibility with product's unit
+        if data.unit and not are_units_compatible(data.unit, product.default_unit):
+            raise HTTPException(status_code=400, detail=f"Unit '{data.unit}' is not compatible with product unit '{product.default_unit}'")
 
-    if data.to_location_id:
-        to_loc = db.get(Location, data.to_location_id)
-        if not to_loc: raise HTTPException(status_code=404, detail="To location not found")
+        # Validate locations if specified
+        if data.from_location_id:
+            from_loc = db.get(Location, data.from_location_id)
+            if not from_loc:
+                raise HTTPException(status_code=404, detail="From location not found")
 
-    # Validate quantity
-    if data.quantity <= 0:
-        raise HTTPException(status_code=400, detail="Quantity must be positive")
+        if data.to_location_id:
+            to_loc = db.get(Location, data.to_location_id)
+            if not to_loc:
+                raise HTTPException(status_code=404, detail="To location not found")
 
-    # For transfers between locations, validate stock and update inventory
-    if data.from_location_id and data.to_location_id and data.movement_type == StockMovementType.transfer.value:
-        from_inv = db.scalar(select(Inventory).where(and_(Inventory.product_id == data.product_id, Inventory.location_id == data.from_location_id)).with_for_update())
-        if not from_inv or from_inv.physical_stock < data.quantity:
-            raise HTTPException(status_code=400, detail=f"Insufficient stock at source location. Required: {data.quantity}, Available: {from_inv.physical_stock if from_inv else 0}")
+        # Validate quantity
+        if data.quantity <= 0:
+            raise HTTPException(status_code=400, detail="Quantity must be positive")
 
-        to_inv = db.scalar(select(Inventory).where(and_(Inventory.product_id == data.product_id, Inventory.location_id == data.to_location_id)).with_for_update())
-        if not to_inv:
-            to_inv = Inventory(product_id=data.product_id, location_id=data.to_location_id, physical_stock=0, reserved_stock=0, updated_by_user_id=user.id)
-            db.add(to_inv)
-            db.flush()
+        # For transfers between locations, validate stock and update inventory
+        if data.from_location_id and data.to_location_id and data.movement_type == StockMovementType.transfer.value:
+            from_inv = db.scalar(select(Inventory).where(and_(Inventory.product_id == data.product_id, Inventory.location_id == data.from_location_id)).with_for_update())
+            if not from_inv or from_inv.physical_stock < data.quantity:
+                raise HTTPException(status_code=400, detail=f"Insufficient stock at source location. Required: {data.quantity}, Available: {from_inv.physical_stock if from_inv else 0}")
+
             to_inv = db.scalar(select(Inventory).where(and_(Inventory.product_id == data.product_id, Inventory.location_id == data.to_location_id)).with_for_update())
+            if not to_inv:
+                to_inv = Inventory(product_id=data.product_id, location_id=data.to_location_id, physical_stock=0, reserved_stock=0, updated_by_user_id=user.id)
+                db.add(to_inv)
+                db.flush()
+                to_inv = db.scalar(select(Inventory).where(and_(Inventory.product_id == data.product_id, Inventory.location_id == data.to_location_id)).with_for_update())
 
-        from_inv.physical_stock -= data.quantity
-        to_inv.physical_stock += data.quantity
+            from_inv.physical_stock -= data.quantity
+            to_inv.physical_stock += data.quantity
+        elif data.to_location_id:
+            # For simple stock additions, create or update inventory for the target location
+            to_inv = db.scalar(select(Inventory).where(and_(Inventory.product_id == data.product_id, Inventory.location_id == data.to_location_id)).with_for_update())
+            if not to_inv:
+                to_inv = Inventory(product_id=data.product_id, location_id=data.to_location_id, physical_stock=0, reserved_stock=0, updated_by_user_id=user.id)
+                db.add(to_inv)
+                db.flush()
+                to_inv = db.scalar(select(Inventory).where(and_(Inventory.product_id == data.product_id, Inventory.location_id == data.to_location_id)).with_for_update())
+            to_inv.physical_stock += data.quantity
 
-    movement = StockMovement(product_id=data.product_id, from_location_id=data.from_location_id, to_location_id=data.to_location_id, movement_type=StockMovementType(data.movement_type), quantity=data.quantity, unit=data.unit, reference_id=data.reference_id, notes=data.notes, created_by_user_id=user.id)
-    db.add(movement)
-    db.commit()
-    db.refresh(movement)
-    return movement
+        movement = StockMovement(product_id=data.product_id, from_location_id=data.from_location_id, to_location_id=data.to_location_id, movement_type=StockMovementType(data.movement_type), quantity=data.quantity, unit=data.unit, reference_id=data.reference_id, notes=data.notes, created_by_user_id=user.id)
+        db.add(movement)
+        db.commit()
+        db.refresh(movement)
+        log.info(f"CREATE STOCK MOVEMENT: Success, created movement {movement.id}")
+        return movement
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"CREATE STOCK MOVEMENT: Error: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Stock movement error: {str(e)}")
 
 @router.get("/stock-movements", response_model=list[StockMovementOut])
 def list_stock_movements(db: Session = Depends(get_db), _: User = Depends(get_current_user), product_id: int | None = None, limit: int = Query(100, le=1000)):
@@ -613,7 +634,7 @@ def inventory_report(db: Session = Depends(get_db), _: User = Depends(get_curren
                 Inventory.location_id,
                 Location.name.label("location_name"),
             )
-            .join(Category, Category.id == Product.category_id)
+            .outerjoin(Category, Category.id == Product.category_id)
             .outerjoin(Inventory, Inventory.product_id == Product.id)
             .outerjoin(Location, Location.id == Inventory.location_id)
             .where(Product.active == True)

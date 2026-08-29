@@ -15,6 +15,7 @@ import {
   Send,
   ShoppingCart,
   SlidersHorizontal,
+  Stethoscope,
   Users,
   Users2,
   Warehouse,
@@ -70,6 +71,7 @@ const BEVI_STOQ_NAV: NavItem[] = [
   { to: '/app/bevi-stoq/purchases', label: 'Customer Purchases', icon: Users },
   { to: '/app/bevi-stoq/restock', label: 'Restock History', icon: History },
   { to: '/app/bevi-stoq/history', label: 'Movement History', icon: FileText },
+  { to: '/app/bevi-stoq/diagnostics', label: 'Diagnostics', icon: Stethoscope },
 ]
 
 const SHARED_NAV: NavItem[] = [

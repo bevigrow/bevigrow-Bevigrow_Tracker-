@@ -170,6 +170,52 @@ def list_products(
     return products
 
 
+@router.get("/products/diagnostic/check", response_model=dict)
+def diagnostic_products_in_category(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    category_id: int = Query(...),
+    product_name: str = Query(...)
+):
+    """Diagnostic endpoint to check if product exists in category (all states)."""
+    category = db.get(Category, category_id)
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    # Search case-insensitive
+    products_exact = db.scalars(
+        select(Product).where(
+            func.lower(func.trim(Product.name)) == product_name.lower().strip(),
+            Product.category_id == category_id
+        )
+    ).all()
+
+    # Also search similar
+    products_similar = db.scalars(
+        select(Product).where(
+            Product.name.ilike(f"%{product_name}%"),
+            Product.category_id == category_id
+        )
+    ).all()
+
+    return {
+        "category": category.name,
+        "searched_name": product_name,
+        "exact_matches": [
+            {"id": p.id, "name": p.name, "active": p.active}
+            for p in products_exact
+        ],
+        "similar_matches": [
+            {"id": p.id, "name": p.name, "active": p.active}
+            for p in products_similar
+        ],
+        "all_in_category": [
+            {"id": p.id, "name": p.name, "active": p.active}
+            for p in db.scalars(select(Product).where(Product.category_id == category_id)).all()
+        ]
+    }
+
+
 @router.post("/products", response_model=ProductOut, status_code=201)
 def create_product(
     data: ProductCreate,

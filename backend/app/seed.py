@@ -75,6 +75,9 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("campaign_targets", "resend_notes", "TEXT"),
     ("campaign_targets", "approved_by_id", "INTEGER"),
     ("campaign_targets", "approved_at", "TIMESTAMP WITH TIME ZONE"),
+    # Bevi Stoq inventory management (added after initial BeviGrow release).
+    # Products low-stock threshold for alerts.
+    ("bs_products", "low_stock_threshold", "FLOAT DEFAULT 0 NOT NULL"),
 ]
 
 

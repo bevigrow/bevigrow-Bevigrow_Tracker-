@@ -179,7 +179,7 @@ export function BeviStoqProducts() {
         // Update the product in the local state immediately
         if (updatedProduct) {
           setProducts(prevProducts =>
-            prevProducts.map(p => p.id === editingId ? { ...updatedProduct, total_stock: p.total_stock } : p)
+            prevProducts.map(p => p.id === updatedProduct.id ? { ...updatedProduct, total_stock: p.total_stock } : p)
           )
           console.log('[UPDATE] Local state updated with response data')
         }

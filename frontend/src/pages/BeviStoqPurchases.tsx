@@ -98,14 +98,19 @@ export function BeviStoqPurchases() {
 
     try {
       const quantity = parseFloat(formData.quantity)
-      const amount = formData.amount ? parseFloat(formData.amount) : null
+      const amountStr = formData.amount.trim()
+      const amount = amountStr ? parseFloat(amountStr) : null
 
       if (isNaN(quantity) || quantity <= 0) {
         setError('Quantity must be a valid positive number')
         return
       }
-      if (amount !== null && (isNaN(amount) || amount < 0)) {
+      if (amount !== null && isNaN(amount)) {
         setError('Amount must be a valid number')
+        return
+      }
+      if (amount !== null && amount < 0) {
+        setError('Amount cannot be negative')
         return
       }
 

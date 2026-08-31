@@ -24,14 +24,15 @@ export function Hub() {
     Promise.all([
       api.listContacts().catch(() => []),
       api.outreachStats().catch(() => null),
-      api.get('/api/bevi-stoq/products').catch(() => []),
+      api.get<{ id: number }[]>('/api/bevi-stoq/products').catch(() => []),
     ]).then(([quotes, stats, products]) => {
       if (cancelled) return
+      const productsList = Array.isArray(products) ? products : []
       setCounts({
         quotes: quotes.length,
         outreach: stats?.total ?? 0,
         due: (stats?.due_today ?? 0) + (stats?.overdue ?? 0),
-        products: products.length ?? 0,
+        products: productsList.length,
       })
     })
     return () => {

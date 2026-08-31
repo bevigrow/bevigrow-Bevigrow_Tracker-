@@ -1,4 +1,4 @@
-import { ChevronRight, Package } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 

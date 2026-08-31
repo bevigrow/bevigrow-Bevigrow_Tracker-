@@ -270,48 +270,58 @@ def get_product(id: int, db: Session = Depends(get_db), _: User = Depends(get_cu
 def update_product(id: int, data: ProductUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     try:
         log.info(f"UPDATE PRODUCT: id={id}, data={data.model_dump()}, user={user.id}")
-        prod = db.get(Product, id)
+
+        # Ensure we use row-level locking to avoid race conditions
+        prod = db.scalars(select(Product).where(Product.id == id).with_for_update()).first()
         if not prod:
             log.error(f"UPDATE PRODUCT: Product {id} not found")
             raise HTTPException(status_code=404, detail="Product not found")
 
+        log.info(f"UPDATE PRODUCT: Before update - name={prod.name}, unit={prod.default_unit}, category={prod.category_id}, notes={prod.notes}")
+
         # Update only provided fields (not None = field was provided)
         if data.name is not None and data.name:
-            log.info(f"UPDATE PRODUCT: name '{prod.name}' → '{data.name}'")
+            log.info(f"UPDATE PRODUCT: Updating name from '{prod.name}' to '{data.name}'")
             prod.name = data.name
 
         if data.category_id is not None:
-            log.info(f"UPDATE PRODUCT: category_id '{prod.category_id}' → '{data.category_id}'")
+            log.info(f"UPDATE PRODUCT: Updating category_id from {prod.category_id} to {data.category_id}")
             prod.category_id = data.category_id
 
         if data.default_unit is not None and data.default_unit:
-            log.info(f"UPDATE PRODUCT: default_unit '{prod.default_unit}' → '{data.default_unit}'")
+            log.info(f"UPDATE PRODUCT: Updating default_unit from '{prod.default_unit}' to '{data.default_unit}'")
             prod.default_unit = data.default_unit
 
         if data.alert_quantity is not None:
-            log.info(f"UPDATE PRODUCT: alert_quantity '{prod.alert_quantity}' → '{data.alert_quantity}'")
+            log.info(f"UPDATE PRODUCT: Updating alert_quantity from {prod.alert_quantity} to {data.alert_quantity}")
             prod.alert_quantity = data.alert_quantity
 
         if data.notes is not None:
-            log.info(f"UPDATE PRODUCT: notes updated")
+            log.info(f"UPDATE PRODUCT: Updating notes from '{prod.notes}' to '{data.notes}'")
             prod.notes = data.notes
 
         if data.active is not None:
-            log.info(f"UPDATE PRODUCT: active '{prod.active}' → '{data.active}'")
+            log.info(f"UPDATE PRODUCT: Updating active from {prod.active} to {data.active}")
             prod.active = data.active
 
         prod.updated_by_user_id = user.id
         prod.updated_at = datetime.now(timezone.utc)
 
-        log.info(f"UPDATE PRODUCT: Committing changes for product {id}")
+        log.info(f"UPDATE PRODUCT: After update - name={prod.name}, unit={prod.default_unit}, category={prod.category_id}, notes={prod.notes}")
+        log.info(f"UPDATE PRODUCT: Flushing changes for product {id}")
+        db.flush()
+        log.info(f"UPDATE PRODUCT: Committing transaction for product {id}")
         db.commit()
+        log.info(f"UPDATE PRODUCT: Commit successful, refreshing product {id}")
         db.refresh(prod)
-        log.info(f"UPDATE PRODUCT: Success, product {id} fully updated with all fields")
+        log.info(f"UPDATE PRODUCT: After refresh - name={prod.name}, unit={prod.default_unit}, category={prod.category_id}, notes={prod.notes}")
+        log.info(f"UPDATE PRODUCT: SUCCESS - product {id} fully updated")
         return prod
     except HTTPException:
         raise
     except Exception as e:
-        log.error(f"UPDATE PRODUCT: Error: {type(e).__name__}: {str(e)}", exc_info=True)
+        db.rollback()
+        log.error(f"UPDATE PRODUCT: FAILED - Error: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error updating product: {str(e)}")
 
 @router.delete("/products/{id}", status_code=204)

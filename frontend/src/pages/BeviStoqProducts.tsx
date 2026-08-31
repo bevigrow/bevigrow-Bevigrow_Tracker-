@@ -321,12 +321,12 @@ export function BeviStoqProducts() {
                 Location {!editingId && <span className="text-red-400">*</span>}
               </label>
               <select
-                value={formData.location_id}
-                onChange={(e) => setFormData({ ...formData, location_id: parseInt(e.target.value) })}
+                value={formData.location_id || ''}
+                onChange={(e) => setFormData({ ...formData, location_id: e.target.value ? parseInt(e.target.value) : 0 })}
                 className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
                 required={!editingId}
               >
-                <option value={0}>Select location</option>
+                <option value="">Select location</option>
                 {locations.map((loc) => (
                   <option key={loc.id} value={loc.id}>
                     {loc.name}
@@ -337,15 +337,15 @@ export function BeviStoqProducts() {
 
             <div>
               <label className="block text-sm font-medium text-latte">
-                Category <span className="text-red-400">*</span>
+                Category {editingId ? <span className="text-latte/60">(optional)</span> : <span className="text-red-400">*</span>}
               </label>
               <select
-                value={formData.category_id}
-                onChange={(e) => setFormData({ ...formData, category_id: parseInt(e.target.value) })}
+                value={formData.category_id || ''}
+                onChange={(e) => setFormData({ ...formData, category_id: e.target.value ? parseInt(e.target.value) : 0 })}
                 className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
-                required
+                required={!editingId}
               >
-                <option value={0}>Select category</option>
+                <option value="">Select category</option>
                 {categories.map((cat) => (
                   <option key={cat.id} value={cat.id}>
                     {cat.name}

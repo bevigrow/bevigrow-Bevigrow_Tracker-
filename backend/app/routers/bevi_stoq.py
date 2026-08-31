@@ -650,24 +650,36 @@ def list_purchases(db: Session = Depends(get_db), _: User = Depends(get_current_
 
 @router.put("/customer-purchases/{id}", response_model=CustomerPurchaseOut)
 def update_purchase(id: int, data: CustomerPurchaseUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    purchase = db.get(CustomerPurchase, id)
-    if not purchase: raise HTTPException(status_code=404, detail="Purchase not found")
+    try:
+        purchase = db.get(CustomerPurchase, id)
+        if not purchase: raise HTTPException(status_code=404, detail="Purchase not found")
 
-    if data.customer_name is not None: purchase.customer_name = data.customer_name
-    if data.contact_id is not None: purchase.contact_id = data.contact_id
-    if data.product_id is not None: purchase.product_id = data.product_id
-    if data.quantity is not None: purchase.quantity = data.quantity
-    if data.unit is not None: purchase.unit = data.unit
-    if data.purchase_date is not None: purchase.purchase_date = data.purchase_date
-    if data.payment_status is not None: purchase.payment_status = PaymentStatus(data.payment_status)
-    if data.payment_method is not None: purchase.payment_method = data.payment_method
-    if data.amount is not None: purchase.amount = data.amount
-    if data.notes is not None: purchase.notes = data.notes
+        if data.customer_name is not None: purchase.customer_name = data.customer_name
+        if data.contact_id is not None: purchase.contact_id = data.contact_id
+        if data.product_id is not None: purchase.product_id = data.product_id
+        if data.quantity is not None: purchase.quantity = data.quantity
+        if data.unit is not None: purchase.unit = data.unit
+        if data.purchase_date is not None: purchase.purchase_date = data.purchase_date
+        if data.payment_status is not None:
+            try:
+                purchase.payment_status = PaymentStatus(data.payment_status)
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid payment status: {data.payment_status}")
+        if data.payment_method is not None: purchase.payment_method = data.payment_method
+        if data.amount is not None: purchase.amount = data.amount
+        if data.notes is not None: purchase.notes = data.notes
 
-    purchase.updated_by_user_id = user.id
-    db.commit()
-    db.refresh(purchase)
-    return purchase
+        purchase.updated_by_user_id = user.id
+        db.commit()
+        db.refresh(purchase)
+        return purchase
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        log = logging.getLogger("bevigrow.bevi_stoq")
+        log.error(f"Error updating purchase {id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update purchase: {str(e)}")
 
 # ================================================================ COMBOS
 @router.post("/combos", response_model=ComboOut, status_code=201)

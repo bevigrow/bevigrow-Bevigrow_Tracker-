@@ -333,6 +333,29 @@ def create_stock_movement(data: StockMovementCreate, db: Session = Depends(get_d
     try:
         log.info(f"CREATE STOCK MOVEMENT: product_id={data.product_id}, type={data.movement_type}, quantity={data.quantity}, unit={data.unit}")
 
+        # CRITICAL: Check if location_id column still exists and drop it if it does
+        # This column conflicts with from_location_id/to_location_id and causes NOT NULL constraint violations
+        try:
+            from sqlalchemy import text, inspect
+            inspector = inspect(db.connection().connection)
+            cols = inspector.get_columns('bs_stock_movements', schema='bevigrow')
+            col_names = {c['name'] for c in cols}
+
+            if 'location_id' in col_names:
+                log.warning("CRITICAL: Detected conflicting location_id column in bs_stock_movements table")
+                log.warning("Attempting to drop location_id column to fix schema...")
+                try:
+                    db.connection().connection.execute(text("ALTER TABLE bevigrow.bs_stock_movements ALTER COLUMN location_id DROP NOT NULL"))
+                    db.connection().connection.execute(text("ALTER TABLE bevigrow.bs_stock_movements DROP COLUMN location_id CASCADE"))
+                    db.connection().connection.commit()
+                    log.info("SUCCESS: Dropped conflicting location_id column")
+                except Exception as e:
+                    log.error(f"Failed to drop location_id column: {e}")
+                    # Continue anyway - might have been dropped already
+        except Exception as e:
+            log.warning(f"Could not check for location_id column: {e}")
+            # Continue - not critical if we can't verify
+
         # Validate product exists
         product = db.get(Product, data.product_id)
         if not product:

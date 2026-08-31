@@ -1,4 +1,4 @@
-import { Plus, DollarSign } from 'lucide-react'
+import { Plus, DollarSign, Edit2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { api } from '../lib/api'
@@ -35,6 +35,8 @@ export function BeviStoqPurchases() {
   const [error, setError] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [filterStatus, setFilterStatus] = useState('')
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [submitting, setSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     customer_name: '',
     contact_id: '',
@@ -69,30 +71,38 @@ export function BeviStoqPurchases() {
 
   const handleSubmit = async (e: any) => {
     e.preventDefault()
+    if (submitting) return
+    setSubmitting(true)
 
     // Validation
     if (!formData.customer_name.trim()) {
       setError('Customer Name is required')
+      setSubmitting(false)
       return
     }
     if (!formData.product_id) {
       setError('Product is required')
+      setSubmitting(false)
       return
     }
     if (!formData.quantity || parseFloat(formData.quantity) <= 0) {
       setError('Quantity must be a positive number')
+      setSubmitting(false)
       return
     }
     if (!formData.unit) {
       setError('Unit is required')
+      setSubmitting(false)
       return
     }
     if (!formData.purchase_date) {
       setError('Date is required')
+      setSubmitting(false)
       return
     }
     if (formData.amount && isNaN(parseFloat(formData.amount))) {
       setError('Amount must be a valid number')
+      setSubmitting(false)
       return
     }
 
@@ -103,18 +113,21 @@ export function BeviStoqPurchases() {
 
       if (isNaN(quantity) || quantity <= 0) {
         setError('Quantity must be a valid positive number')
+        setSubmitting(false)
         return
       }
       if (amount !== null && isNaN(amount)) {
         setError('Amount must be a valid number')
+        setSubmitting(false)
         return
       }
       if (amount !== null && amount < 0) {
         setError('Amount cannot be negative')
+        setSubmitting(false)
         return
       }
 
-      await api.post('/api/bevi-stoq/customer-purchases', {
+      const payload = {
         customer_name: formData.customer_name.trim(),
         contact_id: formData.contact_id ? parseInt(formData.contact_id) : null,
         product_id: parseInt(formData.product_id as any),
@@ -125,7 +138,16 @@ export function BeviStoqPurchases() {
         payment_method: formData.payment_method || null,
         amount: amount,
         notes: formData.notes || null,
-      })
+      }
+
+      if (editingId) {
+        await api.put(`/api/bevi-stoq/customer-purchases/${editingId}`, payload)
+        toast.success('Purchase updated successfully')
+      } else {
+        await api.post('/api/bevi-stoq/customer-purchases', payload)
+        toast.success('Purchase recorded successfully')
+      }
+
       setFormData({
         customer_name: '',
         contact_id: '',
@@ -138,14 +160,15 @@ export function BeviStoqPurchases() {
         amount: '',
         notes: '',
       })
+      setEditingId(null)
       setShowForm(false)
       setError(null)
-      toast.success('Purchase recorded successfully')
       await fetchData()
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to record purchase'
       setError(message)
       toast.error(message)
+      setSubmitting(false)
     }
   }
 
@@ -158,6 +181,23 @@ export function BeviStoqPurchases() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update purchase')
     }
+  }
+
+  const handleEdit = (purchase: CustomerPurchase) => {
+    setFormData({
+      customer_name: purchase.customer_name,
+      contact_id: purchase.contact_id?.toString() || '',
+      product_id: purchase.product_id,
+      quantity: purchase.quantity.toString(),
+      unit: purchase.unit || '',
+      purchase_date: purchase.purchase_date.split('T')[0],
+      payment_status: purchase.payment_status,
+      payment_method: purchase.payment_method || '',
+      amount: purchase.amount ? purchase.amount.toString() : '',
+      notes: purchase.notes || '',
+    })
+    setEditingId(purchase.id)
+    setShowForm(true)
   }
 
   const getProductName = (id: number) => products.find((p) => p.id === id)?.name || 'Unknown'
@@ -193,7 +233,22 @@ export function BeviStoqPurchases() {
           <p className="mt-1 text-sm text-latte/60">Track sales and payment status</p>
         </div>
         <button
-          onClick={() => setShowForm(!showForm)}
+          onClick={() => {
+            setFormData({
+              customer_name: '',
+              contact_id: '',
+              product_id: 0,
+              quantity: '',
+              unit: '',
+              purchase_date: new Date().toISOString().split('T')[0],
+              payment_status: 'pending',
+              payment_method: '',
+              amount: '',
+              notes: '',
+            })
+            setEditingId(null)
+            setShowForm(!showForm)
+          }}
           className="flex items-center gap-2 rounded-lg bg-gold/20 px-4 py-2 text-sm font-medium text-gold hover:bg-gold/30"
         >
           <Plus size={16} />
@@ -219,6 +274,21 @@ export function BeviStoqPurchases() {
 
       {showForm && (
         <form onSubmit={handleSubmit} className="rounded-lg border border-caramel/15 bg-espresso/40 p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-latte">
+              {editingId ? 'Edit Purchase' : 'New Purchase'}
+            </h2>
+            <button
+              type="button"
+              onClick={() => {
+                setShowForm(false)
+                setEditingId(null)
+              }}
+              className="text-latte/60 hover:text-latte"
+            >
+              <X size={20} />
+            </button>
+          </div>
           {error && (
             <div className="mb-4 rounded-lg bg-red-500/20 p-4 text-red-400">
               <p className="text-sm font-medium">Error: {error}</p>
@@ -328,14 +398,19 @@ export function BeviStoqPurchases() {
             <div className="flex gap-3">
               <button
                 type="submit"
-                className="rounded bg-gold/20 px-4 py-2 text-sm font-medium text-gold hover:bg-gold/30"
+                disabled={submitting}
+                className="rounded bg-gold/20 px-4 py-2 text-sm font-medium text-gold hover:bg-gold/30 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Record Purchase
+                {submitting ? 'Saving...' : editingId ? 'Update Purchase' : 'Record Purchase'}
               </button>
               <button
                 type="button"
-                onClick={() => setShowForm(false)}
-                className="rounded border border-caramel/30 px-4 py-2 text-sm font-medium text-latte/60 hover:bg-caramel/10"
+                onClick={() => {
+                  setShowForm(false)
+                  setEditingId(null)
+                }}
+                disabled={submitting}
+                className="rounded border border-caramel/30 px-4 py-2 text-sm font-medium text-latte/60 hover:bg-caramel/10 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>
@@ -372,6 +447,15 @@ export function BeviStoqPurchases() {
                   </div>
                 </div>
                 <div className="text-right">
+                  <div className="flex items-center justify-end gap-2 mb-2">
+                    <button
+                      onClick={() => handleEdit(purchase)}
+                      className="rounded p-1 hover:bg-caramel/20 text-latte/60 hover:text-gold"
+                      title="Edit purchase"
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                  </div>
                   <p className="text-lg font-bold text-gold">
                     {purchase.amount !== null ? `₹${purchase.amount.toFixed(2)}` : '—'}
                   </p>

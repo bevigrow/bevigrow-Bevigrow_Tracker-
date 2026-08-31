@@ -269,12 +269,11 @@ export function BeviStoqPurchases() {
               <div>
                 <label className="block text-sm font-medium text-latte">Quantity *</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   value={formData.quantity}
                   onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
                   className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
-                  step="0.01"
-                  min="0"
                   placeholder="e.g., 1.61"
                   required
                 />
@@ -300,12 +299,11 @@ export function BeviStoqPurchases() {
               <div>
                 <label className="block text-sm font-medium text-latte">Amount (₹) <span className="text-latte/60">(optional)</span></label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   value={formData.amount}
                   onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
                   className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
-                  step="0.01"
-                  min="0"
                   placeholder="e.g., 500.50"
                 />
               </div>

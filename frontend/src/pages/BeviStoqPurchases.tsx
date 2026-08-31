@@ -69,17 +69,56 @@ export function BeviStoqPurchases() {
 
   const handleSubmit = async (e: any) => {
     e.preventDefault()
+
+    // Validation
+    if (!formData.customer_name.trim()) {
+      setError('Customer Name is required')
+      return
+    }
+    if (!formData.product_id) {
+      setError('Product is required')
+      return
+    }
+    if (!formData.quantity || parseFloat(formData.quantity) <= 0) {
+      setError('Quantity must be a positive number')
+      return
+    }
+    if (!formData.unit) {
+      setError('Unit is required')
+      return
+    }
+    if (!formData.purchase_date) {
+      setError('Date is required')
+      return
+    }
+    if (formData.amount && isNaN(parseFloat(formData.amount))) {
+      setError('Amount must be a valid number')
+      return
+    }
+
     try {
+      const quantity = parseFloat(formData.quantity)
+      const amount = formData.amount ? parseFloat(formData.amount) : null
+
+      if (isNaN(quantity) || quantity <= 0) {
+        setError('Quantity must be a valid positive number')
+        return
+      }
+      if (amount !== null && (isNaN(amount) || amount < 0)) {
+        setError('Amount must be a valid number')
+        return
+      }
+
       await api.post('/api/bevi-stoq/customer-purchases', {
-        customer_name: formData.customer_name,
+        customer_name: formData.customer_name.trim(),
         contact_id: formData.contact_id ? parseInt(formData.contact_id) : null,
         product_id: parseInt(formData.product_id as any),
-        quantity: parseFloat(formData.quantity),
+        quantity: quantity,
         unit: formData.unit || null,
         purchase_date: formData.purchase_date,
         payment_status: formData.payment_status || 'pending',
         payment_method: formData.payment_method || null,
-        amount: formData.amount ? parseFloat(formData.amount) : null,
+        amount: amount,
         notes: formData.notes || null,
       })
       setFormData({
@@ -175,6 +214,11 @@ export function BeviStoqPurchases() {
 
       {showForm && (
         <form onSubmit={handleSubmit} className="rounded-lg border border-caramel/15 bg-espresso/40 p-6">
+          {error && (
+            <div className="mb-4 rounded-lg bg-red-500/20 p-4 text-red-400">
+              <p className="text-sm font-medium">Error: {error}</p>
+            </div>
+          )}
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -230,6 +274,8 @@ export function BeviStoqPurchases() {
                   onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
                   className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
                   step="0.01"
+                  min="0"
+                  placeholder="e.g., 1.61"
                   required
                 />
               </div>
@@ -252,14 +298,15 @@ export function BeviStoqPurchases() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-latte">Amount (₹)</label>
+                <label className="block text-sm font-medium text-latte">Amount (₹) <span className="text-latte/60">(optional)</span></label>
                 <input
                   type="number"
                   value={formData.amount}
                   onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
                   className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
                   step="0.01"
-                  placeholder="Optional"
+                  min="0"
+                  placeholder="e.g., 500.50"
                 />
               </div>
               <div>

@@ -41,6 +41,7 @@ const Profile = lazy(() => import('./pages/Profile').then((m) => ({ default: m.P
 const BeviStoqDashboard = lazy(() => import('./pages/BeviStoqDashboard').then((m) => ({ default: m.BeviStoqDashboard })))
 const BeviStoqCategories = lazy(() => import('./pages/BeviStoqCategories').then((m) => ({ default: m.BeviStoqCategories })))
 const BeviStoqProducts = lazy(() => import('./pages/BeviStoqProducts').then((m) => ({ default: m.BeviStoqProducts })))
+const BeviStoqProductDetail = lazy(() => import('./pages/BeviStoqProductDetail').then((m) => ({ default: m.BeviStoqProductDetail })))
 const BeviStoqLocations = lazy(() => import('./pages/BeviStoqLocations').then((m) => ({ default: m.BeviStoqLocations })))
 const BeviStoqInventory = lazy(() => import('./pages/BeviStoqInventory').then((m) => ({ default: m.BeviStoqInventory })))
 const BeviStoqStockAddition = lazy(() => import('./pages/BeviStoqStockAddition').then((m) => ({ default: m.BeviStoqStockAddition })))
@@ -136,6 +137,7 @@ export default function App() {
                 <Route path="bevi-stoq/dashboard" element={<BeviStoqDashboard />} />
                 <Route path="bevi-stoq/categories" element={<BeviStoqCategories />} />
                 <Route path="bevi-stoq/products" element={<BeviStoqProducts />} />
+                <Route path="bevi-stoq/products/:id" element={<BeviStoqProductDetail />} />
                 <Route path="bevi-stoq/locations" element={<BeviStoqLocations />} />
                 <Route path="bevi-stoq/inventory" element={<BeviStoqInventory />} />
                 <Route path="bevi-stoq/add-stock" element={<BeviStoqStockAddition />} />

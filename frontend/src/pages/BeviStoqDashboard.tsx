@@ -1,5 +1,6 @@
-import { AlertCircle, TrendingDown, Box } from 'lucide-react'
+import { AlertCircle, TrendingDown, Box, ChevronRight } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 import { api } from '../lib/api'
 import { EmptyState, Spinner } from '../components/ui'
@@ -28,8 +29,35 @@ interface DashboardData {
   }>
 }
 
+interface Product {
+  id: number
+  name: string
+  category_id: number | null
+  default_unit: string
+  alert_quantity: number | null
+  active: boolean
+  created_at: string
+}
+
+interface Category {
+  id: number
+  name: string
+}
+
+interface InventoryItem {
+  id: number
+  product_id: number
+  location_id: number
+  physical_stock: number
+  reserved_stock: number
+}
+
 export function BeviStoqDashboard() {
+  const navigate = useNavigate()
   const [data, setData] = useState<DashboardData | null>(null)
+  const [products, setProducts] = useState<Product[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [inventory, setInventory] = useState<InventoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -38,8 +66,16 @@ export function BeviStoqDashboard() {
       setLoading(true)
       setError(null)
       try {
-        const response = await api.get<DashboardData>('/api/bevi-stoq/dashboard')
-        setData(response)
+        const [dashRes, prodRes, catRes, invRes] = await Promise.all([
+          api.get<DashboardData>('/api/bevi-stoq/dashboard'),
+          api.get<Product[]>('/api/bevi-stoq/products'),
+          api.get<Category[]>('/api/bevi-stoq/categories'),
+          api.get<InventoryItem[]>('/api/bevi-stoq/inventory'),
+        ])
+        setData(dashRes)
+        setProducts(prodRes)
+        setCategories(catRes)
+        setInventory(invRes)
         setError(null)
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Failed to load dashboard'
@@ -90,6 +126,81 @@ export function BeviStoqDashboard() {
           icon="🚨"
           color="bg-red-500/10 text-red-400"
         />
+      </div>
+
+      {/* Products by Category */}
+      <div>
+        <h2 className="text-xl font-bold text-latte mb-4">Products by Category</h2>
+        <div className="space-y-4">
+          {categories.map((cat) => {
+            const catProducts = products.filter((p) => p.category_id === cat.id)
+            if (catProducts.length === 0) return null
+
+            return (
+              <div key={cat.id} className="rounded-lg border border-caramel/15 bg-espresso/40 p-4">
+                <h3 className="font-semibold text-latte mb-3">{cat.name}</h3>
+                <div className="space-y-2">
+                  {catProducts.map((prod) => {
+                    const totalStock = inventory
+                      .filter((inv) => inv.product_id === prod.id)
+                      .reduce((sum, inv) => sum + (inv.physical_stock - inv.reserved_stock), 0)
+
+                    return (
+                      <button
+                        key={prod.id}
+                        onClick={() => navigate(`/app/bevi-stoq/products/${prod.id}`)}
+                        className="w-full flex items-center justify-between rounded-lg bg-bean/50 p-3 hover:bg-bean/70 transition text-left"
+                      >
+                        <div className="flex-1">
+                          <p className="font-medium text-latte">{prod.name}</p>
+                          <p className="text-xs text-latte/60 mt-1">
+                            {totalStock.toFixed(2)} {prod.default_unit} in stock
+                          </p>
+                        </div>
+                        <ChevronRight size={18} className="text-gold/60" />
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+
+          {/* Uncategorized Products */}
+          {(() => {
+            const uncatProducts = products.filter((p) => !p.category_id)
+            if (uncatProducts.length === 0) return null
+
+            return (
+              <div className="rounded-lg border border-caramel/15 bg-espresso/40 p-4">
+                <h3 className="font-semibold text-latte mb-3">Uncategorized</h3>
+                <div className="space-y-2">
+                  {uncatProducts.map((prod) => {
+                    const totalStock = inventory
+                      .filter((inv) => inv.product_id === prod.id)
+                      .reduce((sum, inv) => sum + (inv.physical_stock - inv.reserved_stock), 0)
+
+                    return (
+                      <button
+                        key={prod.id}
+                        onClick={() => navigate(`/app/bevi-stoq/products/${prod.id}`)}
+                        className="w-full flex items-center justify-between rounded-lg bg-bean/50 p-3 hover:bg-bean/70 transition text-left"
+                      >
+                        <div className="flex-1">
+                          <p className="font-medium text-latte">{prod.name}</p>
+                          <p className="text-xs text-latte/60 mt-1">
+                            {totalStock.toFixed(2)} {prod.default_unit} in stock
+                          </p>
+                        </div>
+                        <ChevronRight size={18} className="text-gold/60" />
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
+        </div>
       </div>
 
       {/* Alerts Section */}

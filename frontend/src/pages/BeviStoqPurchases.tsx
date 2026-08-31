@@ -141,10 +141,14 @@ export function BeviStoqPurchases() {
       }
 
       if (editingId) {
-        await api.put(`/api/bevi-stoq/customer-purchases/${editingId}`, payload)
+        console.log(`Updating purchase ${editingId}:`, payload)
+        const response = await api.put(`/api/bevi-stoq/customer-purchases/${editingId}`, payload)
+        console.log('Purchase updated:', response)
         toast.success('Purchase updated successfully')
       } else {
-        await api.post('/api/bevi-stoq/customer-purchases', payload)
+        console.log('Creating new purchase:', payload)
+        const response = await api.post('/api/bevi-stoq/customer-purchases', payload)
+        console.log('Purchase created:', response)
         toast.success('Purchase recorded successfully')
       }
 

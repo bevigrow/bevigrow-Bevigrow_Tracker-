@@ -29,6 +29,11 @@ interface Location {
   name: string
 }
 
+interface Category {
+  id: number
+  name: string
+}
+
 const UNITS = ['g', 'kg', 'pcs']
 
 interface ProductWithStock extends Product {
@@ -39,6 +44,7 @@ export function BeviStoqProducts() {
   const toast = useToast()
   const [products, setProducts] = useState<ProductWithStock[]>([])
   const [locations, setLocations] = useState<Location[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
@@ -48,6 +54,7 @@ export function BeviStoqProducts() {
     default_unit: '',
     stock_quantity: '',
     location_id: 0,
+    category_id: 0,
     notes: '',
   })
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -58,9 +65,10 @@ export function BeviStoqProducts() {
 
   const fetchData = async () => {
     try {
-      const [productsRes, locationsRes, inventoryRes] = await Promise.all([
+      const [productsRes, locationsRes, categoriesRes, inventoryRes] = await Promise.all([
         api.get<Product[]>('/api/bevi-stoq/products'),
         api.get<Location[]>('/api/bevi-stoq/locations'),
+        api.get<Category[]>('/api/bevi-stoq/categories'),
         api.get<InventoryItem[]>('/api/bevi-stoq/inventory'),
       ])
 
@@ -80,6 +88,7 @@ export function BeviStoqProducts() {
 
       setProducts(productsWithStock)
       setLocations(locationsRes)
+      setCategories(categoriesRes)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data')
     } finally {
@@ -115,6 +124,11 @@ export function BeviStoqProducts() {
         setSubmitting(false)
         return
       }
+      if (formData.category_id === 0) {
+        setError('Category is required')
+        setSubmitting(false)
+        return
+      }
     }
 
     // Validation for UPDATE
@@ -129,12 +143,17 @@ export function BeviStoqProducts() {
         setSubmitting(false)
         return
       }
+      if (formData.category_id === 0) {
+        setError('Category is required')
+        setSubmitting(false)
+        return
+      }
     }
 
     try {
       const payload = {
         name: formData.name.trim(),
-        category_id: null,
+        category_id: formData.category_id || null,
         default_unit: formData.default_unit,
         alert_quantity: null,
         notes: formData.notes || null,
@@ -145,7 +164,7 @@ export function BeviStoqProducts() {
         console.log(`Updating product: id=${editingId}, name=${payload.name}, unit=${payload.default_unit}`)
         await api.put(`/api/bevi-stoq/products/${editingId}`, payload)
         console.log('Product updated successfully')
-        setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, notes: '' })
+        setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, category_id: 0, notes: '' })
         setEditingId(null)
         setShowForm(false)
         toast.success('Product updated successfully')
@@ -175,7 +194,7 @@ export function BeviStoqProducts() {
           console.log('Stock quantity or location not provided, skipping stock movement')
         }
 
-        setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, notes: '' })
+        setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, category_id: 0, notes: '' })
         setEditingId(null)
         setShowForm(false)
         toast.success('Product created successfully with stock')
@@ -208,6 +227,7 @@ export function BeviStoqProducts() {
       default_unit: product.default_unit,
       stock_quantity: '',
       location_id: 0,
+      category_id: product.category_id || 0,
       notes: '',
     })
     setEditingId(product.id)
@@ -226,7 +246,7 @@ export function BeviStoqProducts() {
         </div>
         <button
           onClick={() => {
-            setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, notes: '' })
+            setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, category_id: 0, notes: '' })
             setEditingId(null)
             setShowForm(!showForm)
           }}
@@ -245,72 +265,89 @@ export function BeviStoqProducts() {
             </div>
           )}
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-latte">
-                  Product Name <span className="text-red-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte placeholder-latte/40 focus:outline-none focus:ring-2 focus:ring-gold/50"
-                  placeholder="e.g., Arabica Beans"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-latte">
-                  Stock Quantity {!editingId && <span className="text-red-400">*</span>}
-                </label>
-                <input
-                  type="text"
-                  value={formData.stock_quantity}
-                  onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })}
-                  className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte placeholder-latte/40 focus:outline-none focus:ring-2 focus:ring-gold/50"
-                  placeholder="e.g., 1000"
-                  required={!editingId}
-                />
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-latte">
+                Product Name <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte placeholder-latte/40 focus:outline-none focus:ring-2 focus:ring-gold/50"
+                placeholder="e.g., Arabica Beans"
+                required
+              />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-latte">
-                  Unit <span className="text-red-400">*</span>
-                </label>
-                <select
-                  value={formData.default_unit}
-                  onChange={(e) => setFormData({ ...formData, default_unit: e.target.value })}
-                  className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
-                  required
-                >
-                  <option value="">Select unit</option>
-                  {UNITS.map((unit) => (
-                    <option key={unit} value={unit}>
-                      {unit}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-latte">
-                  Location {!editingId && <span className="text-red-400">*</span>}
-                </label>
-                <select
-                  value={formData.location_id}
-                  onChange={(e) => setFormData({ ...formData, location_id: parseInt(e.target.value) })}
-                  className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
-                  required={!editingId}
-                >
-                  <option value={0}>Select location</option>
-                  {locations.map((loc) => (
-                    <option key={loc.id} value={loc.id}>
-                      {loc.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-latte">
+                Stock Quantity {!editingId && <span className="text-red-400">*</span>}
+              </label>
+              <input
+                type="text"
+                value={formData.stock_quantity}
+                onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })}
+                className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte placeholder-latte/40 focus:outline-none focus:ring-2 focus:ring-gold/50"
+                placeholder="e.g., 1000"
+                required={!editingId}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-latte">
+                Unit <span className="text-red-400">*</span>
+              </label>
+              <select
+                value={formData.default_unit}
+                onChange={(e) => setFormData({ ...formData, default_unit: e.target.value })}
+                className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
+                required
+              >
+                <option value="">Select unit</option>
+                {UNITS.map((unit) => (
+                  <option key={unit} value={unit}>
+                    {unit}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-latte">
+                Location {!editingId && <span className="text-red-400">*</span>}
+              </label>
+              <select
+                value={formData.location_id}
+                onChange={(e) => setFormData({ ...formData, location_id: parseInt(e.target.value) })}
+                className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
+                required={!editingId}
+              >
+                <option value={0}>Select location</option>
+                {locations.map((loc) => (
+                  <option key={loc.id} value={loc.id}>
+                    {loc.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-latte">
+                Category <span className="text-red-400">*</span>
+              </label>
+              <select
+                value={formData.category_id}
+                onChange={(e) => setFormData({ ...formData, category_id: parseInt(e.target.value) })}
+                className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
+                required
+              >
+                <option value={0}>Select category</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>

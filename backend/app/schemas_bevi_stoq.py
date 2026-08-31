@@ -215,6 +215,7 @@ class CustomerPurchaseCreate(BaseModel):
 
 
 class CustomerPurchaseUpdate(BaseModel):
+    # Update schema for customer purchase editing
     customer_name: str | None = Field(None, min_length=1, max_length=200)
     contact_id: int | None = None
     product_id: int | None = None

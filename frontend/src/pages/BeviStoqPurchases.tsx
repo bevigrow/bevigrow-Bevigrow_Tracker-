@@ -170,8 +170,10 @@ export function BeviStoqPurchases() {
       await fetchData()
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to record purchase'
+      console.error('Purchase error:', message, err)
       setError(message)
       toast.error(message)
+    } finally {
       setSubmitting(false)
     }
   }

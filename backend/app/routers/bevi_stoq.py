@@ -652,8 +652,18 @@ def list_purchases(db: Session = Depends(get_db), _: User = Depends(get_current_
 def update_purchase(id: int, data: CustomerPurchaseUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     purchase = db.get(CustomerPurchase, id)
     if not purchase: raise HTTPException(status_code=404, detail="Purchase not found")
-    if data.payment_status: purchase.payment_status = PaymentStatus(data.payment_status)
-    if data.amount: purchase.amount = data.amount
+
+    if data.customer_name is not None: purchase.customer_name = data.customer_name
+    if data.contact_id is not None: purchase.contact_id = data.contact_id
+    if data.product_id is not None: purchase.product_id = data.product_id
+    if data.quantity is not None: purchase.quantity = data.quantity
+    if data.unit is not None: purchase.unit = data.unit
+    if data.purchase_date is not None: purchase.purchase_date = data.purchase_date
+    if data.payment_status is not None: purchase.payment_status = PaymentStatus(data.payment_status)
+    if data.payment_method is not None: purchase.payment_method = data.payment_method
+    if data.amount is not None: purchase.amount = data.amount
+    if data.notes is not None: purchase.notes = data.notes
+
     purchase.updated_by_user_id = user.id
     db.commit()
     db.refresh(purchase)

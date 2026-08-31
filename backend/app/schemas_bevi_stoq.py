@@ -216,6 +216,7 @@ class CustomerPurchaseCreate(BaseModel):
 
 class CustomerPurchaseUpdate(BaseModel):
     customer_name: str | None = Field(None, min_length=1, max_length=200)
+    contact_id: int | None = None
     product_id: int | None = None
     quantity: float | None = Field(None, gt=0)
     unit: str | None = None

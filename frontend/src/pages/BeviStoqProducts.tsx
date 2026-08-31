@@ -66,12 +66,16 @@ export function BeviStoqProducts() {
 
   const fetchData = async () => {
     try {
+      console.log('[fetchData] Starting data fetch...')
       const [productsRes, locationsRes, categoriesRes, inventoryRes] = await Promise.all([
         api.get<Product[]>('/api/bevi-stoq/products'),
         api.get<Location[]>('/api/bevi-stoq/locations'),
         api.get<Category[]>('/api/bevi-stoq/categories'),
         api.get<InventoryItem[]>('/api/bevi-stoq/inventory'),
       ])
+
+      console.log('[fetchData] Products fetched:', productsRes)
+      console.log('[fetchData] Inventory fetched:', inventoryRes)
 
       // Calculate total stock per product
       const stockByProduct = new Map<number, number>()
@@ -87,11 +91,15 @@ export function BeviStoqProducts() {
         total_stock: stockByProduct.get(prod.id) || 0,
       }))
 
+      console.log('[fetchData] Products with stock:', productsWithStock)
       setProducts(productsWithStock)
       setLocations(locationsRes)
       setCategories(categoriesRes)
+      console.log('[fetchData] State updated successfully')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load data')
+      const errMsg = err instanceof Error ? err.message : 'Failed to load data'
+      console.error('[fetchData] Error:', errMsg, err)
+      setError(errMsg)
     } finally {
       setLoading(false)
     }

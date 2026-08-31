@@ -11,6 +11,7 @@ interface Product {
   category_id: number | null
   default_unit: string
   alert_quantity: number | null
+  notes: string | null
   active: boolean
   created_at: string
 }
@@ -228,7 +229,7 @@ export function BeviStoqProducts() {
       stock_quantity: '',
       location_id: 0,
       category_id: product.category_id || 0,
-      notes: '',
+      notes: product.notes || '',
     })
     setEditingId(product.id)
     setShowForm(true)

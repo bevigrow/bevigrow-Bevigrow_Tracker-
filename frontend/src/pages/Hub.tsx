@@ -1,4 +1,4 @@
-import { ArrowRight, Briefcase, Send } from 'lucide-react'
+import { ArrowRight, Briefcase, Send, Package } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
@@ -15,7 +15,7 @@ import { useAuth } from '../lib/auth'
  */
 export function Hub() {
   const { user } = useAuth()
-  const [counts, setCounts] = useState<{ quotes: number; outreach: number; due: number } | null>(
+  const [counts, setCounts] = useState<{ quotes: number; outreach: number; due: number; products: number } | null>(
     null,
   )
 
@@ -24,12 +24,14 @@ export function Hub() {
     Promise.all([
       api.listContacts().catch(() => []),
       api.outreachStats().catch(() => null),
-    ]).then(([quotes, stats]) => {
+      api.get('/api/bevi-stoq/products').catch(() => []),
+    ]).then(([quotes, stats, products]) => {
       if (cancelled) return
       setCounts({
         quotes: quotes.length,
         outreach: stats?.total ?? 0,
         due: (stats?.due_today ?? 0) + (stats?.overdue ?? 0),
+        products: products.length ?? 0,
       })
     })
     return () => {
@@ -51,7 +53,7 @@ export function Hub() {
         <p className="mt-2 text-sm text-latte/50">Where are you working today?</p>
       </div>
 
-      <div className="grid gap-5 sm:grid-cols-2">
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         <WorkspaceCard
           to="/app/trade"
           icon={<Briefcase size={24} />}
@@ -74,6 +76,14 @@ export function Hub() {
           }
           urgent={!!counts && counts.due > 0}
           delay={70}
+        />
+        <WorkspaceCard
+          to="/app/bevi-stoq"
+          icon={<Package size={24} />}
+          title="Bevi Stoq"
+          blurb="Inventory management, stock levels, product categories, and warehouse locations."
+          stat={counts ? `${counts.products} product${counts.products === 1 ? '' : 's'}` : ' '}
+          delay={140}
         />
       </div>
     </div>

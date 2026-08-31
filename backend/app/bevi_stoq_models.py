@@ -266,7 +266,7 @@ class CustomerPurchase(Base):
         Enum(PaymentStatus, native_enum=False), default=PaymentStatus.pending, index=True
     )
     payment_method: Mapped[str | None] = mapped_column(String(100))
-    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    amount: Mapped[float | None] = mapped_column(Float, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

@@ -210,7 +210,7 @@ class CustomerPurchaseCreate(BaseModel):
     purchase_date: datetime
     payment_status: str = Field(default='pending')
     payment_method: str | None = None
-    amount: float = Field(..., ge=0)
+    amount: float | None = Field(None, ge=0)
     notes: str | None = None
 
 
@@ -236,7 +236,7 @@ class CustomerPurchaseOut(BaseModel):
     purchase_date: datetime
     payment_status: str
     payment_method: str | None
-    amount: float
+    amount: float | None
     notes: str | None
     created_at: datetime
     created_by_user_id: int

@@ -126,7 +126,7 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("bs_customer_purchases", "contact_id", "INTEGER"),
     ("bs_customer_purchases", "payment_status", "VARCHAR(50) DEFAULT 'pending'"),
     ("bs_customer_purchases", "payment_method", "VARCHAR(100)"),
-    ("bs_customer_purchases", "amount", "FLOAT DEFAULT 0 NOT NULL"),
+    ("bs_customer_purchases", "amount", "FLOAT"),
     ("bs_customer_purchases", "notes", "TEXT"),
     ("bs_customer_purchases", "updated_at", "TIMESTAMP WITH TIME ZONE DEFAULT NOW()"),
     ("bs_customer_purchases", "updated_by_user_id", "INTEGER"),
@@ -266,6 +266,16 @@ def migrate_columns() -> None:
                     log.info("Dropped old bs_stock_movements.location_id column (using from_location_id/to_location_id)")
             except Exception as e:
                 log.warning(f"Could not drop location_id column (may not exist): {e}")
+
+        # Make bs_customer_purchases.amount nullable (amount is optional)
+        if not settings.is_sqlite:
+            try:
+                conn.execute(
+                    text(f"ALTER TABLE {prefix}bs_customer_purchases ALTER COLUMN amount DROP NOT NULL")
+                )
+                log.info("Made bs_customer_purchases.amount nullable")
+            except Exception as e:
+                log.warning(f"Could not make amount nullable (may already be nullable): {e}")
 
         # Final schema validation - ensure all critical columns exist and have correct types
         if not settings.is_sqlite:

@@ -280,7 +280,8 @@ def update_product(id: int, data: ProductUpdate, db: Session = Depends(get_db), 
         log.info(f"UPDATE PRODUCT: Before update - name={prod.name}, unit={prod.default_unit}, category={prod.category_id}, notes={prod.notes}")
 
         # Update only provided fields (not None = field was provided)
-        if data.name is not None and data.name:
+        # Use explicit 'is not None' checks, not truthy checks
+        if data.name is not None:
             log.info(f"UPDATE PRODUCT: Updating name from '{prod.name}' to '{data.name}'")
             prod.name = data.name
 
@@ -288,7 +289,7 @@ def update_product(id: int, data: ProductUpdate, db: Session = Depends(get_db), 
             log.info(f"UPDATE PRODUCT: Updating category_id from {prod.category_id} to {data.category_id}")
             prod.category_id = data.category_id
 
-        if data.default_unit is not None and data.default_unit:
+        if data.default_unit is not None:
             log.info(f"UPDATE PRODUCT: Updating default_unit from '{prod.default_unit}' to '{data.default_unit}'")
             prod.default_unit = data.default_unit
 

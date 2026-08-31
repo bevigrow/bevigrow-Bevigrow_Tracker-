@@ -67,16 +67,22 @@ export function BeviStoqDashboard() {
     setLoading(true)
     setError(null)
     try {
-      const [dashboardRes, categoriesRes, productsRes, inventoryRes] = await Promise.all([
-        api.get<DashboardData>('/api/bevi-stoq/dashboard'),
-        api.get<Category[]>('/api/bevi-stoq/categories'),
-        api.get<Product[]>('/api/bevi-stoq/products'),
-        api.get<InventoryItem[]>('/api/bevi-stoq/inventory'),
-      ])
+      console.log('Fetching dashboard data...')
+      const dashboardRes = await api.get<DashboardData>('/api/bevi-stoq/dashboard')
+      console.log('Dashboard data loaded:', dashboardRes)
       setData(dashboardRes)
-      setCategories(categoriesRes)
-      setProducts(productsRes)
-      setInventory(inventoryRes)
+
+      const categoriesRes = await api.get<Category[]>('/api/bevi-stoq/categories').catch(() => [])
+      console.log('Categories loaded:', categoriesRes)
+      setCategories(categoriesRes || [])
+
+      const productsRes = await api.get<Product[]>('/api/bevi-stoq/products').catch(() => [])
+      console.log('Products loaded:', productsRes)
+      setProducts(productsRes || [])
+
+      const inventoryRes = await api.get<InventoryItem[]>('/api/bevi-stoq/inventory').catch(() => [])
+      console.log('Inventory loaded:', inventoryRes)
+      setInventory(inventoryRes || [])
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to load dashboard'
       console.error('Dashboard fetch error:', err)

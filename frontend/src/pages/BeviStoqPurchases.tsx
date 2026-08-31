@@ -181,9 +181,9 @@ export function BeviStoqPurchases() {
   if (loading) return <Spinner label="Loading purchases…" />
   if (error) return <EmptyState emoji="⚠️" title="Error" hint={error} />
 
-  const totalAmount = purchases.reduce((sum, p) => sum + p.amount, 0)
-  const paidAmount = purchases.filter((p) => p.payment_status === 'paid').reduce((sum, p) => sum + p.amount, 0)
-  const pendingAmount = purchases.filter((p) => p.payment_status === 'pending').reduce((sum, p) => sum + p.amount, 0)
+  const totalAmount = purchases.reduce((sum, p) => sum + (p.amount ?? 0), 0)
+  const paidAmount = purchases.filter((p) => p.payment_status === 'paid').reduce((sum, p) => sum + (p.amount ?? 0), 0)
+  const pendingAmount = purchases.filter((p) => p.payment_status === 'pending').reduce((sum, p) => sum + (p.amount ?? 0), 0)
 
   return (
     <div className="space-y-6">
@@ -372,7 +372,9 @@ export function BeviStoqPurchases() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-lg font-bold text-gold">₹{purchase.amount.toFixed(2)}</p>
+                  <p className="text-lg font-bold text-gold">
+                    {purchase.amount !== null ? `₹${purchase.amount.toFixed(2)}` : '—'}
+                  </p>
                   <p className="text-xs text-latte/50">{purchase.quantity} {purchase.unit}</p>
                   <div className="mt-2">
                     <span className={`inline-block rounded px-2 py-1 text-xs font-medium ${getStatusColor(purchase.payment_status)}`}>

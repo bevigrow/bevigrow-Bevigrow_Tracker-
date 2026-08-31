@@ -172,9 +172,18 @@ export function BeviStoqProducts() {
       let productId = editingId
       if (editingId) {
         console.log(`[UPDATE] Updating product id=${editingId} with payload:`, payload)
-        const response = await api.put(`/api/bevi-stoq/products/${editingId}`, payload)
-        console.log('[UPDATE] Response:', response)
+        const updatedProduct = await api.put<Product>(`/api/bevi-stoq/products/${editingId}`, payload)
+        console.log('[UPDATE] Response:', updatedProduct)
         console.log('Product updated successfully')
+
+        // Update the product in the local state immediately
+        if (updatedProduct) {
+          setProducts(prevProducts =>
+            prevProducts.map(p => p.id === editingId ? { ...updatedProduct, total_stock: p.total_stock } : p)
+          )
+          console.log('[UPDATE] Local state updated with response data')
+        }
+
         setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, category_id: 0, notes: '' })
         setEditingId(null)
         setShowForm(false)

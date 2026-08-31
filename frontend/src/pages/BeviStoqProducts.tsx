@@ -144,11 +144,6 @@ export function BeviStoqProducts() {
         setSubmitting(false)
         return
       }
-      if (formData.category_id === 0) {
-        setError('Category is required')
-        setSubmitting(false)
-        return
-      }
     }
 
     try {

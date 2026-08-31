@@ -99,7 +99,11 @@ export function BeviStoqProducts() {
 
   const handleSubmit = async (e: any) => {
     e.preventDefault()
-    if (submitting) return // Prevent double-submit
+    console.log('handleSubmit called, editingId:', editingId, 'formData:', formData, 'submitting:', submitting)
+    if (submitting) {
+      console.log('Already submitting, returning')
+      return
+    }
     setSubmitting(true)
     setError(null)
 
@@ -134,6 +138,7 @@ export function BeviStoqProducts() {
 
     // Validation for UPDATE
     if (editingId) {
+      console.log('Validating UPDATE: name=', formData.name, 'unit=', formData.default_unit)
       if (!formData.name.trim()) {
         setError('Product Name is required')
         setSubmitting(false)
@@ -155,10 +160,12 @@ export function BeviStoqProducts() {
         notes: formData.notes || null,
       }
 
+      console.log('Payload:', payload)
       let productId = editingId
       if (editingId) {
-        console.log(`Updating product: id=${editingId}, name=${payload.name}, unit=${payload.default_unit}`)
-        await api.put(`/api/bevi-stoq/products/${editingId}`, payload)
+        console.log(`[UPDATE] Updating product id=${editingId} with payload:`, payload)
+        const response = await api.put(`/api/bevi-stoq/products/${editingId}`, payload)
+        console.log('[UPDATE] Response:', response)
         console.log('Product updated successfully')
         setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, category_id: 0, notes: '' })
         setEditingId(null)
@@ -195,13 +202,14 @@ export function BeviStoqProducts() {
         setShowForm(false)
         toast.success('Product created successfully with stock')
       }
+      console.log('About to fetch data...')
       await fetchData()
+      console.log('Data fetched successfully')
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save product'
-      console.error('Form submission error:', err)
+      console.error('[ERROR] Form submission error:', message, err)
       setError(message)
       toast.error(message)
-      // Keep form open on error so user can retry
     } finally {
       setSubmitting(false)
     }

@@ -92,6 +92,45 @@ export function BeviStoqProducts() {
     if (submitting) return // Prevent double-submit
     setSubmitting(true)
     setError(null)
+
+    // Validation for CREATE
+    if (!editingId) {
+      if (!formData.name.trim()) {
+        setError('Product Name is required')
+        setSubmitting(false)
+        return
+      }
+      if (!formData.default_unit) {
+        setError('Unit is required')
+        setSubmitting(false)
+        return
+      }
+      if (!formData.stock_quantity || parseFloat(formData.stock_quantity) <= 0) {
+        setError('Stock Quantity is required and must be a positive number')
+        setSubmitting(false)
+        return
+      }
+      if (formData.location_id === 0) {
+        setError('Location is required')
+        setSubmitting(false)
+        return
+      }
+    }
+
+    // Validation for UPDATE
+    if (editingId) {
+      if (!formData.name.trim()) {
+        setError('Product Name is required')
+        setSubmitting(false)
+        return
+      }
+      if (!formData.default_unit) {
+        setError('Unit is required')
+        setSubmitting(false)
+        return
+      }
+    }
+
     try {
       const payload = {
         name: formData.name.trim(),
@@ -208,7 +247,9 @@ export function BeviStoqProducts() {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-latte">Product Name</label>
+                <label className="block text-sm font-medium text-latte">
+                  Product Name <span className="text-red-400">*</span>
+                </label>
                 <input
                   type="text"
                   value={formData.name}
@@ -219,20 +260,25 @@ export function BeviStoqProducts() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-latte">Stock Quantity</label>
+                <label className="block text-sm font-medium text-latte">
+                  Stock Quantity {!editingId && <span className="text-red-400">*</span>}
+                </label>
                 <input
                   type="text"
                   value={formData.stock_quantity}
                   onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })}
                   className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte placeholder-latte/40 focus:outline-none focus:ring-2 focus:ring-gold/50"
                   placeholder="e.g., 1000"
+                  required={!editingId}
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-latte">Unit</label>
+                <label className="block text-sm font-medium text-latte">
+                  Unit <span className="text-red-400">*</span>
+                </label>
                 <select
                   value={formData.default_unit}
                   onChange={(e) => setFormData({ ...formData, default_unit: e.target.value })}
@@ -248,11 +294,14 @@ export function BeviStoqProducts() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-latte">Location</label>
+                <label className="block text-sm font-medium text-latte">
+                  Location {!editingId && <span className="text-red-400">*</span>}
+                </label>
                 <select
                   value={formData.location_id}
                   onChange={(e) => setFormData({ ...formData, location_id: parseInt(e.target.value) })}
                   className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
+                  required={!editingId}
                 >
                   <option value={0}>Select location</option>
                   {locations.map((loc) => (
@@ -265,7 +314,9 @@ export function BeviStoqProducts() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-latte">Note (optional)</label>
+              <label className="block text-sm font-medium text-latte">
+                Note <span className="text-latte/60">(optional)</span>
+              </label>
               <input
                 type="text"
                 value={formData.notes}

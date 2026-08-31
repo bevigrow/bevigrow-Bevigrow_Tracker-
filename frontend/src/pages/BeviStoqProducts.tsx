@@ -296,7 +296,7 @@ export function BeviStoqProducts() {
         <form onSubmit={handleSubmit} className="rounded-lg border border-caramel/15 bg-espresso/40 p-6">
           <div className="mb-4 pb-4 border-b border-caramel/15">
             <h2 className="text-lg font-semibold text-latte">
-              {editingId ? '✏️ Edit Product Details' : '➕ Add New Product'}
+              {editingId ? 'Edit Product Details' : 'Add New Product'}
             </h2>
             <p className="text-xs text-latte/60 mt-1">
               {editingId

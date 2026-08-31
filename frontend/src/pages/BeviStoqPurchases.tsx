@@ -1,4 +1,4 @@
-import { Plus, DollarSign, Edit2, X } from 'lucide-react'
+import { Plus, DollarSign, Edit2, Trash2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { api } from '../lib/api'
@@ -204,6 +204,19 @@ export function BeviStoqPurchases() {
     })
     setEditingId(purchase.id)
     setShowForm(true)
+  }
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this purchase record?')) return
+    try {
+      await api.delete(`/api/bevi-stoq/customer-purchases/${id}`)
+      toast.success('Purchase deleted successfully')
+      await fetchData()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete purchase'
+      setError(message)
+      toast.error(message)
+    }
   }
 
   const getProductName = (id: number) => products.find((p) => p.id === id)?.name || 'Unknown'
@@ -460,6 +473,13 @@ export function BeviStoqPurchases() {
                       title="Edit purchase"
                     >
                       <Edit2 size={16} />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(purchase.id)}
+                      className="rounded p-1 hover:bg-caramel/20 text-latte/60 hover:text-red-400"
+                      title="Delete purchase"
+                    >
+                      <Trash2 size={16} />
                     </button>
                   </div>
                   <p className="text-lg font-bold text-gold">

@@ -98,6 +98,7 @@ export function BeviStoqProducts() {
         category_id: null,
         default_unit: formData.default_unit,
         alert_quantity: null,
+        notes: formData.notes || null,
       }
 
       let productId = editingId

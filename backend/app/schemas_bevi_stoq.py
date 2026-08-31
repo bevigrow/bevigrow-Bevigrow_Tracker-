@@ -32,6 +32,7 @@ class ProductCreate(BaseModel):
     category_id: int | None = None
     default_unit: str = Field(..., min_length=1, max_length=50)
     alert_quantity: float | None = Field(None, ge=0)
+    notes: str | None = None
 
 
 class ProductUpdate(BaseModel):
@@ -39,6 +40,7 @@ class ProductUpdate(BaseModel):
     category_id: int | None = None
     default_unit: str | None = Field(None, min_length=1, max_length=50)
     alert_quantity: float | None = Field(None, ge=0)
+    notes: str | None = None
     active: bool | None = None
 
 
@@ -48,6 +50,7 @@ class ProductOut(BaseModel):
     category_id: int | None
     default_unit: str
     alert_quantity: float | None
+    notes: str | None
     active: bool
     created_at: datetime
     created_by_user_id: int

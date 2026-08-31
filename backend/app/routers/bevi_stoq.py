@@ -234,6 +234,7 @@ def create_product(data: ProductCreate, db: Session = Depends(get_db), user: Use
             category_id=data.category_id,
             default_unit=data.default_unit,
             alert_quantity=data.alert_quantity,
+            notes=data.notes,
             created_by_user_id=user.id
         )
         log.info(f"CREATE PRODUCT: Product object created (not yet in DB)")
@@ -274,26 +275,38 @@ def update_product(id: int, data: ProductUpdate, db: Session = Depends(get_db), 
             log.error(f"UPDATE PRODUCT: Product {id} not found")
             raise HTTPException(status_code=404, detail="Product not found")
 
-        # Update only provided fields
-        if data.name:
-            log.info(f"UPDATE PRODUCT: Updating name from '{prod.name}' to '{data.name}'")
+        # Update only provided fields (not None = field was provided)
+        if data.name is not None and data.name:
+            log.info(f"UPDATE PRODUCT: name '{prod.name}' → '{data.name}'")
             prod.name = data.name
-        if data.category_id:
+
+        if data.category_id is not None:
+            log.info(f"UPDATE PRODUCT: category_id '{prod.category_id}' → '{data.category_id}'")
             prod.category_id = data.category_id
-        if data.default_unit:
+
+        if data.default_unit is not None and data.default_unit:
+            log.info(f"UPDATE PRODUCT: default_unit '{prod.default_unit}' → '{data.default_unit}'")
             prod.default_unit = data.default_unit
+
         if data.alert_quantity is not None:
+            log.info(f"UPDATE PRODUCT: alert_quantity '{prod.alert_quantity}' → '{data.alert_quantity}'")
             prod.alert_quantity = data.alert_quantity
+
+        if data.notes is not None:
+            log.info(f"UPDATE PRODUCT: notes updated")
+            prod.notes = data.notes
+
         if data.active is not None:
+            log.info(f"UPDATE PRODUCT: active '{prod.active}' → '{data.active}'")
             prod.active = data.active
 
         prod.updated_by_user_id = user.id
         prod.updated_at = datetime.now(timezone.utc)
 
-        log.info(f"UPDATE PRODUCT: Committing changes")
+        log.info(f"UPDATE PRODUCT: Committing changes for product {id}")
         db.commit()
         db.refresh(prod)
-        log.info(f"UPDATE PRODUCT: Success, product {id} updated")
+        log.info(f"UPDATE PRODUCT: Success, product {id} fully updated with all fields")
         return prod
     except HTTPException:
         raise

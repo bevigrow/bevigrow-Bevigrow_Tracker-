@@ -654,6 +654,9 @@ def update_purchase(id: int, data: CustomerPurchaseUpdate, db: Session = Depends
         purchase = db.get(CustomerPurchase, id)
         if not purchase: raise HTTPException(status_code=404, detail="Purchase not found")
 
+        old_quantity = purchase.quantity
+        old_product_id = purchase.product_id
+
         if data.customer_name is not None: purchase.customer_name = data.customer_name
         if data.contact_id is not None: purchase.contact_id = data.contact_id
         if data.product_id is not None: purchase.product_id = data.product_id
@@ -668,6 +671,41 @@ def update_purchase(id: int, data: CustomerPurchaseUpdate, db: Session = Depends
         if data.payment_method is not None: purchase.payment_method = data.payment_method
         if data.amount is not None: purchase.amount = data.amount
         if data.notes is not None: purchase.notes = data.notes
+
+        # Handle inventory adjustment if quantity changed
+        if data.quantity is not None and data.quantity != old_quantity:
+            qty_diff = data.quantity - old_quantity
+
+            if qty_diff > 0:
+                # Quantity increased: deduct more stock
+                inventories = db.scalars(select(Inventory).where(Inventory.product_id == purchase.product_id).with_for_update()).all()
+                total_available = sum(inv.physical_stock for inv in inventories)
+                if total_available < qty_diff:
+                    db.rollback()
+                    raise HTTPException(status_code=400, detail=f"Insufficient stock. Need: {qty_diff}, Available: {total_available}")
+
+                inventories = db.scalars(select(Inventory).where(Inventory.product_id == purchase.product_id).order_by(Inventory.location_id).with_for_update()).all()
+                remaining = qty_diff
+                for inv in inventories:
+                    if remaining <= 0: break
+                    if inv.physical_stock > 0:
+                        deduct = min(inv.physical_stock, remaining)
+                        inv.physical_stock -= deduct
+                        remaining -= deduct
+                        movement = StockMovement(product_id=purchase.product_id, from_location_id=inv.location_id, movement_type=StockMovementType.stock_removed, quantity=deduct, unit=purchase.unit, reference_id=purchase.id, notes=f"Purchase update: quantity +{qty_diff}", created_by_user_id=user.id)
+                        db.add(movement)
+            else:
+                # Quantity decreased: restore stock
+                abs_diff = abs(qty_diff)
+                inventories = db.scalars(select(Inventory).where(Inventory.product_id == purchase.product_id).order_by(Inventory.location_id).with_for_update()).all()
+                remaining = abs_diff
+                for inv in inventories:
+                    if remaining <= 0: break
+                    restore = min(remaining, abs_diff)
+                    inv.physical_stock += restore
+                    remaining -= restore
+                    movement = StockMovement(product_id=purchase.product_id, from_location_id=inv.location_id, movement_type=StockMovementType.stock_added, quantity=restore, unit=purchase.unit, reference_id=purchase.id, notes=f"Purchase update: quantity {qty_diff}", created_by_user_id=user.id)
+                    db.add(movement)
 
         purchase.updated_by_user_id = user.id
         db.commit()

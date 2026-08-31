@@ -172,22 +172,36 @@ export function BeviStoqProducts() {
       let productId = editingId
       if (editingId) {
         console.log(`[UPDATE] Updating product id=${editingId} with payload:`, payload)
-        const updatedProduct = await api.put<Product>(`/api/bevi-stoq/products/${editingId}`, payload)
-        console.log('[UPDATE] Response:', updatedProduct)
-        console.log('Product updated successfully')
+        try {
+          const apiResponse = await api.put<Product>(`/api/bevi-stoq/products/${editingId}`, payload)
+          console.log('[UPDATE] API Response:', apiResponse)
 
-        // Update the product in the local state immediately
-        if (updatedProduct) {
-          setProducts(prevProducts =>
-            prevProducts.map(p => p.id === updatedProduct.id ? { ...updatedProduct, total_stock: p.total_stock } : p)
-          )
-          console.log('[UPDATE] Local state updated with response data')
+          // Don't trust the API response - fetch fresh data from database to verify persistence
+          console.log('[UPDATE] Fetching fresh data to verify database persistence...')
+          await fetchData()
+          console.log('[UPDATE] Fresh data fetched - database update verified')
+
+          // Verify the update actually persisted by checking the fresh data
+          const updatedProductInList = products.find(p => p.id === editingId)
+          if (updatedProductInList && updatedProductInList.name === payload.name) {
+            console.log('[UPDATE] ✓ Database persistence confirmed - values match')
+            setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, category_id: 0, notes: '' })
+            setEditingId(null)
+            setShowForm(false)
+            toast.success('Product updated successfully')
+          } else {
+            console.error('[UPDATE] ✗ Database persistence FAILED - fresh data does not match sent values')
+            console.log('Sent:', payload.name, 'Got:', updatedProductInList?.name)
+            setError('Update failed: Database did not persist changes. Please try again.')
+            toast.error('Update failed: Changes were not saved to database')
+          }
+        } catch (apiError) {
+          console.error('[UPDATE] API call failed:', apiError)
+          const errorMsg = apiError instanceof Error ? apiError.message : 'API request failed'
+          setError(errorMsg)
+          toast.error(`Update failed: ${errorMsg}`)
+          throw apiError
         }
-
-        setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, category_id: 0, notes: '' })
-        setEditingId(null)
-        setShowForm(false)
-        toast.success('Product updated successfully')
       } else {
         const newProduct = await api.post<Product>('/api/bevi-stoq/products', payload)
         productId = newProduct.id

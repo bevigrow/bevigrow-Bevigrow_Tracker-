@@ -207,10 +207,13 @@ export function BeviStoqPurchases() {
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this purchase record?')) return
+    const purchase = purchases.find((p) => p.id === id)
+    const confirmMsg = `⚠️ Delete this purchase?\n\nThis will:\n• Remove the purchase record\n• Restore ${purchase?.quantity} ${purchase?.unit} of ${getProductName(purchase?.product_id || 0)} back to inventory\n\nThis action cannot be undone.`
+
+    if (!confirm(confirmMsg)) return
     try {
       await api.delete(`/api/bevi-stoq/customer-purchases/${id}`)
-      toast.success('Purchase deleted successfully')
+      toast.success('Purchase deleted and inventory restored')
       await fetchData()
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to delete purchase'

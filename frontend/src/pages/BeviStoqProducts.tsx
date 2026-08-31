@@ -294,6 +294,16 @@ export function BeviStoqProducts() {
 
       {showForm && (
         <form onSubmit={handleSubmit} className="rounded-lg border border-caramel/15 bg-espresso/40 p-6">
+          <div className="mb-4 pb-4 border-b border-caramel/15">
+            <h2 className="text-lg font-semibold text-latte">
+              {editingId ? '✏️ Edit Product Details' : '➕ Add New Product'}
+            </h2>
+            <p className="text-xs text-latte/60 mt-1">
+              {editingId
+                ? 'Update product name, unit, category, and notes. Use Stock Movements to adjust inventory.'
+                : 'Create a new product with initial stock level'}
+            </p>
+          </div>
           {error && (
             <div className="mb-4 rounded-lg bg-red-500/20 p-4 text-red-400">
               <p className="text-sm font-medium">Error: {error}</p>
@@ -314,19 +324,21 @@ export function BeviStoqProducts() {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-latte">
-                Stock Quantity {!editingId && <span className="text-red-400">*</span>}
-              </label>
-              <input
-                type="text"
-                value={formData.stock_quantity}
-                onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })}
-                className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte placeholder-latte/40 focus:outline-none focus:ring-2 focus:ring-gold/50"
-                placeholder="e.g., 1000"
-                required={!editingId}
-              />
-            </div>
+            {!editingId && (
+              <div>
+                <label className="block text-sm font-medium text-latte">
+                  Stock Quantity <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.stock_quantity}
+                  onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })}
+                  className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte placeholder-latte/40 focus:outline-none focus:ring-2 focus:ring-gold/50"
+                  placeholder="e.g., 1000"
+                  required
+                />
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-latte">
@@ -347,24 +359,26 @@ export function BeviStoqProducts() {
               </select>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-latte">
-                Location {!editingId && <span className="text-red-400">*</span>}
-              </label>
-              <select
-                value={formData.location_id || ''}
-                onChange={(e) => setFormData({ ...formData, location_id: e.target.value ? parseInt(e.target.value) : 0 })}
-                className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
-                required={!editingId}
-              >
-                <option value="">Select location</option>
-                {locations.map((loc) => (
-                  <option key={loc.id} value={loc.id}>
-                    {loc.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {!editingId && (
+              <div>
+                <label className="block text-sm font-medium text-latte">
+                  Location <span className="text-red-400">*</span>
+                </label>
+                <select
+                  value={formData.location_id || ''}
+                  onChange={(e) => setFormData({ ...formData, location_id: e.target.value ? parseInt(e.target.value) : 0 })}
+                  className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
+                  required
+                >
+                  <option value="">Select location</option>
+                  {locations.map((loc) => (
+                    <option key={loc.id} value={loc.id}>
+                      {loc.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-latte">

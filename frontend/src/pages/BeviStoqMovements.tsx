@@ -34,6 +34,7 @@ export function BeviStoqMovements() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [filterType, setFilterType] = useState('')
+  const [filterProduct, setFilterProduct] = useState('')
 
   useEffect(() => {
     fetchData()
@@ -62,6 +63,7 @@ export function BeviStoqMovements() {
   const movementTypes = ['opening_stock', 'stock_added', 'stock_removed', 'transfer', 'adjustment']
   let filtered = movements
   if (filterType) filtered = filtered.filter((m) => m.movement_type === filterType)
+  if (filterProduct) filtered = filtered.filter((m) => m.product_id === parseInt(filterProduct))
 
   const getMovementColor = (type: string) => {
     switch (type) {
@@ -90,19 +92,34 @@ export function BeviStoqMovements() {
         <p className="mt-1 text-sm text-latte/60">Complete history of all inventory movements</p>
       </div>
 
-      {/* Filter */}
-      <select
-        value={filterType}
-        onChange={(e) => setFilterType(e.target.value)}
-        className="rounded bg-bean/50 px-3 py-2 text-sm text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
-      >
-        <option value="">All Movement Types</option>
-        {movementTypes.map((type) => (
-          <option key={type} value={type}>
-            {type.charAt(0).toUpperCase() + type.slice(1)}
-          </option>
-        ))}
-      </select>
+      {/* Filters */}
+      <div className="flex gap-3 flex-wrap">
+        <select
+          value={filterType}
+          onChange={(e) => setFilterType(e.target.value)}
+          className="rounded bg-bean/50 px-3 py-2 text-sm text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
+        >
+          <option value="">All Movement Types</option>
+          {movementTypes.map((type) => (
+            <option key={type} value={type}>
+              {type.charAt(0).toUpperCase() + type.slice(1).replace(/_/g, ' ')}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={filterProduct}
+          onChange={(e) => setFilterProduct(e.target.value)}
+          className="rounded bg-bean/50 px-3 py-2 text-sm text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
+        >
+          <option value="">All Products</option>
+          {products.map((product) => (
+            <option key={product.id} value={product.id}>
+              {product.name}
+            </option>
+          ))}
+        </select>
+      </div>
 
       {filtered.length === 0 ? (
         <EmptyState emoji="📊" title="No movements" hint="Stock movements will appear here as you manage inventory" />

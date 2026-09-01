@@ -802,27 +802,36 @@ def create_purchase(data: CustomerPurchaseCreate, db: Session = Depends(get_db),
                 log.info(f"CREATE PURCHASE:   Inventory ID={inv.id}, current_physical={inv.physical_stock}, will deduct={deduct_qty}")
 
                 # Verify the inventory exists first
-                verify_stmt = text("SELECT id, physical_stock FROM bevigrow.bs_inventory WHERE id = :inv_id")
+                # Note: Use schema-qualified name to ensure we're updating the right table
+                from ..config import settings
+                schema_prefix = f'"{settings.schema}".' if settings.schema else ""
+
+                verify_sql = f"SELECT id, physical_stock FROM {schema_prefix}bs_inventory WHERE id = :inv_id"
+                verify_stmt = text(verify_sql)
                 verify_result = db.execute(verify_stmt, {"inv_id": inv.id}).first()
                 log.info(f"CREATE PURCHASE:   Database verify BEFORE: {verify_result}")
 
                 if not verify_result:
                     log.error(f"CREATE PURCHASE:   CRITICAL - Inventory ID {inv.id} not found in database!")
+                    log.error(f"CREATE PURCHASE:   Query was: {verify_sql}")
                     raise HTTPException(status_code=500, detail=f"Inventory record {inv.id} not found in database")
 
                 # Use raw SQL UPDATE - most direct approach
-                update_sql = text("""
-                    UPDATE bevigrow.bs_inventory
+                update_sql_str = f"""
+                    UPDATE {schema_prefix}bs_inventory
                     SET physical_stock = physical_stock - :deduct_amount
                     WHERE id = :inv_id
-                """)
+                """
+                log.info(f"CREATE PURCHASE:   Executing: {update_sql_str.strip()}")
+                update_sql = text(update_sql_str)
 
                 log.info(f"CREATE PURCHASE:   Executing raw SQL UPDATE...")
                 result = db.execute(update_sql, {"deduct_amount": deduct_qty, "inv_id": inv.id})
                 log.info(f"CREATE PURCHASE:   Raw SQL UPDATE result: {result.rowcount} rows affected")
 
                 # Verify the update worked
-                verify_after = db.execute(verify_stmt, {"inv_id": inv.id}).first()
+                verify_after_stmt = text(verify_sql)
+                verify_after = db.execute(verify_after_stmt, {"inv_id": inv.id}).first()
                 log.info(f"CREATE PURCHASE:   Database verify AFTER: {verify_after}")
 
                 if result.rowcount != 1:

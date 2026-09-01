@@ -270,107 +270,130 @@ def get_product(id: int, db: Session = Depends(get_db), _: User = Depends(get_cu
 @router.put("/products/{id}", response_model=ProductOut)
 def update_product(id: int, data: ProductUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     try:
+        from ..unit_converter import convert_to_base_unit, are_units_compatible
         log.info(f"UPDATE PRODUCT: id={id}, data={data.model_dump()}, user={user.id}")
 
-        # Ensure we use row-level locking to avoid race conditions
         prod = db.scalars(select(Product).where(Product.id == id).with_for_update()).first()
         if not prod:
             log.error(f"UPDATE PRODUCT: Product {id} not found")
             raise HTTPException(status_code=404, detail="Product not found")
 
-        log.info(f"UPDATE PRODUCT: Before update - name={prod.name}, unit={prod.default_unit}, category={prod.category_id}, notes={prod.notes}")
+        log.info(f"UPDATE PRODUCT: Before - name={prod.name}, unit={prod.default_unit}, category={prod.category_id}")
+        old_unit = prod.default_unit
+        old_quantity_in_base = None
 
-        # Update only provided fields (not None = field was provided)
-        # Use explicit 'is not None' checks, not truthy checks
-        if data.name is not None:
-            log.info(f"UPDATE PRODUCT: Updating name from '{prod.name}' to '{data.name}'")
-            prod.name = data.name
-
-        if data.category_id is not None:
-            log.info(f"UPDATE PRODUCT: Updating category_id from {prod.category_id} to {data.category_id}")
-            prod.category_id = data.category_id
-
-        if data.default_unit is not None:
-            log.info(f"UPDATE PRODUCT: Updating default_unit from '{prod.default_unit}' to '{data.default_unit}'")
-            prod.default_unit = data.default_unit
-
-        if data.alert_quantity is not None:
-            log.info(f"UPDATE PRODUCT: Updating alert_quantity from {prod.alert_quantity} to {data.alert_quantity}")
-            prod.alert_quantity = data.alert_quantity
-
-        if data.notes is not None:
-            log.info(f"UPDATE PRODUCT: Updating notes from '{prod.notes}' to '{data.notes}'")
-            prod.notes = data.notes
-
-        if data.active is not None:
-            log.info(f"UPDATE PRODUCT: Updating active from {prod.active} to {data.active}")
-            prod.active = data.active
-
-        # Handle quantity adjustment if provided
+        # CRITICAL: Handle quantity adjustment BEFORE changing unit
         if data.quantity is not None:
-            current_total = sum(
-                (inv.physical_stock - inv.reserved_stock)
-                for inv in db.scalars(select(Inventory).where(Inventory.product_id == id)).all()
-            )
-            qty_diff = data.quantity - current_total
-            log.info(f"UPDATE PRODUCT: Quantity adjustment: current={current_total}, new={data.quantity}, diff={qty_diff} {prod.default_unit}")
+            log.info(f"UPDATE PRODUCT: Quantity provided={data.quantity}")
 
-            if qty_diff != 0:
-                inventories = db.scalars(select(Inventory).where(Inventory.product_id == id).order_by(Inventory.location_id).with_for_update()).all()
+            # NEW unit: use data.default_unit if provided, otherwise use old unit
+            new_unit = data.default_unit if data.default_unit is not None else prod.default_unit
+            log.info(f"UPDATE PRODUCT: new_unit={new_unit}, old_unit={old_unit}")
+
+            # Validate unit compatibility
+            if not are_units_compatible(new_unit, old_unit):
+                log.error(f"UPDATE PRODUCT: Unit mismatch - cannot convert {new_unit} to {old_unit}")
+                raise HTTPException(status_code=400, detail=f"Cannot change from {old_unit} to {new_unit} - incompatible units")
+
+            # Get current stock across all locations
+            inventories_for_calc = db.scalars(select(Inventory).where(Inventory.product_id == id)).all()
+            current_total_in_base = sum((inv.physical_stock - inv.reserved_stock) for inv in inventories_for_calc)
+            log.info(f"UPDATE PRODUCT: Current total stock = {current_total_in_base} {old_unit}")
+
+            # Convert new quantity to old unit (base unit) for comparison
+            new_qty_in_base = convert_to_base_unit(data.quantity, new_unit, old_unit)
+            log.info(f"UPDATE PRODUCT: New quantity {data.quantity} {new_unit} = {new_qty_in_base} {old_unit}")
+
+            # Calculate difference
+            qty_diff = new_qty_in_base - current_total_in_base
+            log.info(f"UPDATE PRODUCT: Difference = {new_qty_in_base} - {current_total_in_base} = {qty_diff} {old_unit}")
+
+            # Apply stock adjustment if needed
+            if abs(qty_diff) > 0.000001:  # Use small epsilon for float comparison
+                inventories_for_update = db.scalars(
+                    select(Inventory).where(Inventory.product_id == id).order_by(Inventory.location_id).with_for_update()
+                ).all()
 
                 if qty_diff > 0:
                     # Add stock
                     remaining = qty_diff
-                    for inv in inventories:
-                        if remaining <= 0: break
+                    for inv in inventories_for_update:
+                        if remaining <= 0.000001: break
                         add_qty = min(remaining, qty_diff)
                         inv.physical_stock += add_qty
                         remaining -= add_qty
                         movement = StockMovement(
-                            product_id=id, from_location_id=inv.location_id,
+                            product_id=id, to_location_id=inv.location_id,
                             movement_type=StockMovementType.stock_added,
-                            quantity=add_qty, unit=prod.default_unit,
-                            notes=f"Product adjustment: {data.quantity} {prod.default_unit}",
+                            quantity=add_qty, unit=old_unit,
+                            notes=f"Product edit adjustment: {data.quantity} {new_unit} (was in {old_unit})",
                             created_by_user_id=user.id
                         )
                         db.add(movement)
+                        log.info(f"UPDATE PRODUCT: Stock added {add_qty} {old_unit} to location {inv.location_id}")
                 else:
                     # Remove stock
                     remaining = abs(qty_diff)
-                    for inv in inventories:
-                        if remaining <= 0: break
+                    for inv in inventories_for_update:
+                        if remaining <= 0.000001: break
                         available = inv.physical_stock - inv.reserved_stock
-                        if available > 0:
+                        if available > 0.000001:
                             remove_qty = min(available, remaining)
                             inv.physical_stock -= remove_qty
                             remaining -= remove_qty
                             movement = StockMovement(
                                 product_id=id, from_location_id=inv.location_id,
                                 movement_type=StockMovementType.stock_removed,
-                                quantity=remove_qty, unit=prod.default_unit,
-                                notes=f"Product adjustment: {data.quantity} {prod.default_unit}",
+                                quantity=remove_qty, unit=old_unit,
+                                notes=f"Product edit adjustment: {data.quantity} {new_unit} (was in {old_unit})",
                                 created_by_user_id=user.id
                             )
                             db.add(movement)
+                            log.info(f"UPDATE PRODUCT: Stock removed {remove_qty} {old_unit} from location {inv.location_id}")
+            else:
+                log.info(f"UPDATE PRODUCT: No stock adjustment needed (difference ≈ 0)")
+
+        # Update other fields
+        if data.name is not None:
+            prod.name = data.name
+            log.info(f"UPDATE PRODUCT: Updated name to '{prod.name}'")
+
+        if data.category_id is not None:
+            prod.category_id = data.category_id
+            log.info(f"UPDATE PRODUCT: Updated category to {prod.category_id}")
+
+        if data.default_unit is not None:
+            prod.default_unit = data.default_unit
+            log.info(f"UPDATE PRODUCT: Updated unit to '{prod.default_unit}'")
+
+        if data.alert_quantity is not None:
+            prod.alert_quantity = data.alert_quantity
+            log.info(f"UPDATE PRODUCT: Updated alert_quantity to {prod.alert_quantity}")
+
+        if data.notes is not None:
+            prod.notes = data.notes
+            log.info(f"UPDATE PRODUCT: Updated notes")
+
+        if data.active is not None:
+            prod.active = data.active
+            log.info(f"UPDATE PRODUCT: Updated active to {prod.active}")
 
         prod.updated_by_user_id = user.id
         prod.updated_at = datetime.now(timezone.utc)
 
-        log.info(f"UPDATE PRODUCT: After update - name={prod.name}, unit={prod.default_unit}, category={prod.category_id}, notes={prod.notes}")
-        log.info(f"UPDATE PRODUCT: Flushing changes for product {id}")
+        log.info(f"UPDATE PRODUCT: Flushing changes")
         db.flush()
-        log.info(f"UPDATE PRODUCT: Committing transaction for product {id}")
+        log.info(f"UPDATE PRODUCT: Committing transaction")
         db.commit()
-        log.info(f"UPDATE PRODUCT: Commit successful, refreshing product {id}")
+        log.info(f"UPDATE PRODUCT: Commit successful, refreshing")
         db.refresh(prod)
-        log.info(f"UPDATE PRODUCT: After refresh - name={prod.name}, unit={prod.default_unit}, category={prod.category_id}, notes={prod.notes}")
-        log.info(f"UPDATE PRODUCT: SUCCESS - product {id} fully updated")
+        log.info(f"UPDATE PRODUCT: SUCCESS - name={prod.name}, unit={prod.default_unit}")
         return prod
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
-        log.error(f"UPDATE PRODUCT: FAILED - Error: {type(e).__name__}: {str(e)}", exc_info=True)
+        log.error(f"UPDATE PRODUCT: FAILED - {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error updating product: {str(e)}")
 
 @router.delete("/products/{id}", status_code=204)

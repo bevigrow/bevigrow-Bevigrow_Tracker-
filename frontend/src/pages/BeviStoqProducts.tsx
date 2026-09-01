@@ -163,12 +163,20 @@ export function BeviStoqProducts() {
     }
 
     try {
-      const payload = {
+      const payload: any = {
         name: formData.name.trim(),
         category_id: formData.category_id || null,
         default_unit: formData.default_unit,
         alert_quantity: null,
         notes: formData.notes || null,
+      }
+
+      // For updates (edit mode), include quantity
+      if (editingId && formData.current_quantity) {
+        const qty = parseFloat(formData.current_quantity)
+        if (!isNaN(qty)) {
+          payload.quantity = qty
+        }
       }
 
       console.log('Payload:', payload)

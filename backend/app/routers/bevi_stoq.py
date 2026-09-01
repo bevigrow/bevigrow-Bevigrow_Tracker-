@@ -28,7 +28,8 @@ from ..schemas_bevi_stoq import (
     RequirementCreate, RequirementOut, RequirementItemOut,
     CustomerPurchaseCreate, CustomerPurchaseUpdate, CustomerPurchaseOut,
     ComboCreate, ComboOut, ComboItemOut, ComboItemCreate,
-    DashboardOut, DashboardSummary, ProductStatus
+    DashboardOut, DashboardSummary, ProductStatus,
+    StockTransferCreate
 )
 from pydantic import BaseModel
 
@@ -134,9 +135,23 @@ def delete_location(id: int, db: Session = Depends(get_db), _: User = Depends(ge
 
 # ================================================================ PRODUCTS
 @router.get("/products", response_model=list[ProductOut])
-def list_products(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    products = db.scalars(select(Product).where(Product.active == True)).all()
-    log.info(f"LIST PRODUCTS: Retrieved {len(products)} active products")
+def list_products(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+    category_id: int | None = Query(None),
+    packaging_status: str | None = Query(None),  # "packed", "unpacked", or None for all
+    location_id: int | None = Query(None),
+):
+    query = select(Product).where(Product.active == True)
+
+    if category_id is not None:
+        query = query.where(Product.category_id == category_id)
+
+    if packaging_status is not None:
+        query = query.where(Product.packaging_status == packaging_status)
+
+    products = db.scalars(query).all()
+    log.info(f"LIST PRODUCTS: Retrieved {len(products)} active products (category_id={category_id}, packaging_status={packaging_status})")
     return products
 
 @router.get("/debug/schema", tags=["debug"])
@@ -235,6 +250,8 @@ def create_product(data: ProductCreate, db: Session = Depends(get_db), user: Use
             category_id=data.category_id,
             default_unit=data.default_unit,
             alert_quantity=data.alert_quantity,
+            low_stock_threshold=data.low_stock_threshold,
+            packaging_status=data.packaging_status or "unpacked",
             notes=data.notes,
             created_by_user_id=user.id
         )
@@ -369,6 +386,14 @@ def update_product(id: int, data: ProductUpdate, db: Session = Depends(get_db), 
         if data.alert_quantity is not None:
             prod.alert_quantity = data.alert_quantity
             log.info(f"UPDATE PRODUCT: Updated alert_quantity to {prod.alert_quantity}")
+
+        if data.low_stock_threshold is not None:
+            prod.low_stock_threshold = data.low_stock_threshold
+            log.info(f"UPDATE PRODUCT: Updated low_stock_threshold to {prod.low_stock_threshold}")
+
+        if data.packaging_status is not None:
+            prod.packaging_status = data.packaging_status
+            log.info(f"UPDATE PRODUCT: Updated packaging_status to '{prod.packaging_status}'")
 
         if data.notes is not None:
             prod.notes = data.notes
@@ -1150,6 +1175,14 @@ def update_combo(id: int, data: ComboCreate, db: Session = Depends(get_db), user
     combo.name = data.name
     combo.description = data.description
     combo.updated_by_user_id = user.id
+
+    # Delete old items and add new ones
+    db.query(ComboItem).filter(ComboItem.combo_id == id).delete()
+
+    for item_data in data.items:
+        item = ComboItem(combo_id=id, product_id=item_data.product_id, quantity=item_data.quantity, unit=item_data.unit)
+        db.add(item)
+
     db.commit()
     db.refresh(combo)
     return combo
@@ -1161,6 +1194,56 @@ def delete_combo(id: int, db: Session = Depends(get_db), _: User = Depends(get_c
     db.delete(combo)
     db.commit()
 
+@router.get("/combos/{id}/validate-stock")
+def validate_combo_stock(id: int, quantity: float = Query(..., gt=0), db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Validate if sufficient stock exists for all combo components"""
+    try:
+        combo = db.get(Combo, id)
+        if not combo:
+            raise HTTPException(status_code=404, detail="Combo not found")
+
+        from ..unit_converter import convert_to_base_unit
+
+        insufficient_items = []
+
+        for item in combo.items:
+            prod = db.get(Product, item.product_id)
+            if not prod:
+                insufficient_items.append({"product_id": item.product_id, "reason": "Product not found"})
+                continue
+
+            # Calculate required quantity for this combo purchase
+            required_qty_base = convert_to_base_unit(item.quantity * quantity, item.unit or prod.default_unit, prod.default_unit)
+
+            # Get available stock
+            available = db.scalar(
+                select(func.coalesce(func.sum(Inventory.physical_stock - Inventory.reserved_stock), 0))
+                .where(Inventory.product_id == item.product_id)
+            ) or 0
+
+            if available < required_qty_base:
+                insufficient_items.append({
+                    "product_id": item.product_id,
+                    "product_name": prod.name,
+                    "required": required_qty_base,
+                    "available": available,
+                    "unit": prod.default_unit
+                })
+
+        if insufficient_items:
+            return {
+                "valid": False,
+                "insufficient_items": insufficient_items,
+                "message": f"Cannot fulfill combo: {len(insufficient_items)} component(s) have insufficient stock"
+            }
+
+        return {"valid": True, "message": "Sufficient stock available for all combo components"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Combo validation error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Validation error: {str(e)}")
+
 # ================================================================ DASHBOARD
 @router.get("/dashboard", response_model=DashboardOut)
 def get_dashboard(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
@@ -1170,34 +1253,133 @@ def get_dashboard(db: Session = Depends(get_db), _: User = Depends(get_current_u
         total_categories = db.scalar(select(func.count(Category.id)).where(Category.active == True)) or 0
 
         out_of_stock_list = []
+        low_stock_list = []
 
         stmt = (
             select(
                 Product.id,
                 Product.name,
+                Product.low_stock_threshold,
                 func.coalesce(func.sum(Inventory.physical_stock - Inventory.reserved_stock), 0).label("available")
             )
             .outerjoin(Inventory, Inventory.product_id == Product.id)
             .where(Product.active == True)
-            .group_by(Product.id, Product.name)
+            .group_by(Product.id, Product.name, Product.low_stock_threshold)
         )
 
         for row in db.execute(stmt):
             available = row.available or 0
-            # Only show OUT_OF_STOCK when stock is exactly 0 or below
+            threshold = row.low_stock_threshold
+
+            # OUT_OF_STOCK: available <= 0
             if available <= 0:
-                out_of_stock_list.append(ProductStatus(product_id=row.id, product_name=row.name, status="OUT_OF_STOCK", current_stock=available, threshold=None))
+                out_of_stock_list.append(ProductStatus(product_id=row.id, product_name=row.name, status="OUT_OF_STOCK", current_stock=available, threshold=threshold))
+            # LOW_STOCK: available > 0 AND available <= threshold
+            elif threshold is not None and available <= threshold:
+                low_stock_list.append(ProductStatus(product_id=row.id, product_name=row.name, status="LOW_STOCK", current_stock=available, threshold=threshold))
 
         recent = db.scalars(select(StockMovement).order_by(StockMovement.created_at.desc()).limit(10)).all()
 
         return DashboardOut(
-            summary=DashboardSummary(total_products=total_products, out_of_stock_count=len(out_of_stock_list), total_locations=total_locations, total_categories=total_categories),
+            summary=DashboardSummary(
+                total_products=total_products,
+                out_of_stock_count=len(out_of_stock_list),
+                low_stock_count=len(low_stock_list),
+                total_locations=total_locations,
+                total_categories=total_categories
+            ),
             out_of_stock_products=out_of_stock_list,
+            low_stock_products=low_stock_list,
             recent_movements=[StockMovementOut.model_validate(m) for m in recent]
         )
     except Exception as e:
         log.error(f"Dashboard error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Dashboard error: {str(e)}")
+
+# ================================================================ STOCK TRANSFER
+@router.post("/transfers", status_code=201)
+def transfer_stock(data: StockTransferCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    try:
+        from ..unit_converter import convert_to_base_unit
+
+        if data.from_location_id == data.to_location_id:
+            raise HTTPException(status_code=400, detail="Source and destination locations must be different")
+
+        # Validate locations exist
+        from_loc = db.get(Location, data.from_location_id)
+        to_loc = db.get(Location, data.to_location_id)
+        if not from_loc or not to_loc:
+            raise HTTPException(status_code=404, detail="Location not found")
+
+        # Get product and validate unit
+        prod = db.get(Product, data.product_id)
+        if not prod:
+            raise HTTPException(status_code=404, detail="Product not found")
+
+        # Get source inventory with locking
+        source_inv = db.scalars(
+            select(Inventory).where(
+                and_(Inventory.product_id == data.product_id, Inventory.location_id == data.from_location_id)
+            ).with_for_update()
+        ).first()
+
+        if not source_inv:
+            raise HTTPException(status_code=400, detail=f"Product has no stock at source location")
+
+        # Convert quantity to base unit
+        transfer_qty_base = convert_to_base_unit(data.quantity, data.unit or prod.default_unit, prod.default_unit)
+        available = source_inv.physical_stock - source_inv.reserved_stock
+
+        if available < transfer_qty_base:
+            raise HTTPException(status_code=400, detail=f"Insufficient stock. Available: {available} {prod.default_unit}")
+
+        # Deduct from source
+        source_inv.physical_stock -= transfer_qty_base
+
+        # Get or create destination inventory
+        dest_inv = db.scalars(
+            select(Inventory).where(
+                and_(Inventory.product_id == data.product_id, Inventory.location_id == data.to_location_id)
+            )
+        ).first()
+
+        if not dest_inv:
+            dest_inv = Inventory(
+                product_id=data.product_id,
+                location_id=data.to_location_id,
+                physical_stock=0,
+                reserved_stock=0,
+                updated_by_user_id=user.id
+            )
+            db.add(dest_inv)
+            db.flush()
+
+        # Add to destination
+        dest_inv.physical_stock += transfer_qty_base
+
+        # Create audit movements
+        move_out = StockMovement(
+            product_id=data.product_id,
+            from_location_id=data.from_location_id,
+            to_location_id=data.to_location_id,
+            movement_type=StockMovementType.transfer,
+            quantity=transfer_qty_base,
+            unit=prod.default_unit,
+            notes=f"Transfer to {to_loc.name}" + (f": {data.notes}" if data.notes else ""),
+            created_by_user_id=user.id
+        )
+        db.add(move_out)
+
+        db.commit()
+        log.info(f"Stock transfer: {transfer_qty_base} {prod.default_unit} from {from_loc.name} to {to_loc.name}")
+        return {"status": "success", "quantity_transferred": transfer_qty_base, "unit": prod.default_unit}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Transfer error: {e}", exc_info=True)
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Transfer failed: {str(e)}")
 
 # ================================================================ ADVANCED REPORTS
 @router.get("/reports/inventory", response_model=InventoryReport)

@@ -37,7 +37,7 @@ export function BeviStoqCombos() {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    items: [{ product_id: 0, quantity: '' }],
+    items: [{ product_id: 0, quantity: '', unit: '' }],
   })
   const [editingId, setEditingId] = useState<number | null>(null)
 
@@ -75,10 +75,11 @@ export function BeviStoqCombos() {
           items: formData.items.map((item) => ({
             product_id: item.product_id,
             quantity: parseFloat(item.quantity),
+            unit: item.unit || null,
           })),
         })
       }
-      setFormData({ name: '', description: '', items: [{ product_id: 0, quantity: '' }] })
+      setFormData({ name: '', description: '', items: [{ product_id: 0, quantity: '', unit: '' }] })
       setEditingId(null)
       setShowForm(false)
       await fetchData()
@@ -101,7 +102,7 @@ export function BeviStoqCombos() {
     setFormData({
       name: combo.name,
       description: combo.description || '',
-      items: combo.items.length > 0 ? combo.items.map((i) => ({ product_id: i.product_id, quantity: i.quantity.toString() })) : [{ product_id: 0, quantity: '' }],
+      items: combo.items.length > 0 ? combo.items.map((i) => ({ product_id: i.product_id, quantity: i.quantity.toString(), unit: i.unit || '' })) : [{ product_id: 0, quantity: '', unit: '' }],
     })
     setEditingId(combo.id)
     setShowForm(true)
@@ -122,7 +123,7 @@ export function BeviStoqCombos() {
         </div>
         <button
           onClick={() => {
-            setFormData({ name: '', description: '', items: [{ product_id: 0, quantity: '' }] })
+            setFormData({ name: '', description: '', items: [{ product_id: 0, quantity: '', unit: '' }] })
             setEditingId(null)
             setShowForm(!showForm)
           }}
@@ -188,11 +189,30 @@ export function BeviStoqCombos() {
                         newItems[idx].quantity = e.target.value
                         setFormData({ ...formData, items: newItems })
                       }}
-                      className="w-24 rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
+                      className="w-20 rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
                       placeholder="Qty"
                       step="0.01"
                       required
                     />
+                    <select
+                      value={item.unit}
+                      onChange={(e) => {
+                        const newItems = [...formData.items]
+                        newItems[idx].unit = e.target.value
+                        setFormData({ ...formData, items: newItems })
+                      }}
+                      className="w-20 rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
+                    >
+                      <option value="">Unit</option>
+                      <option value="g">g</option>
+                      <option value="kg">kg</option>
+                      <option value="tonne">tonne</option>
+                      <option value="ml">ml</option>
+                      <option value="litre">litre</option>
+                      <option value="pcs">pcs</option>
+                      <option value="box">box</option>
+                      <option value="bag">bag</option>
+                    </select>
                     <button
                       type="button"
                       onClick={() => {
@@ -208,7 +228,7 @@ export function BeviStoqCombos() {
               </div>
               <button
                 type="button"
-                onClick={() => setFormData({ ...formData, items: [...formData.items, { product_id: 0, quantity: '' }] })}
+                onClick={() => setFormData({ ...formData, items: [...formData.items, { product_id: 0, quantity: '', unit: '' }] })}
                 className="mt-2 text-xs text-gold hover:text-gold/80"
               >
                 + Add item

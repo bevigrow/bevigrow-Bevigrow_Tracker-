@@ -32,6 +32,8 @@ class ProductCreate(BaseModel):
     category_id: int | None = None
     default_unit: str = Field(..., min_length=1, max_length=50)
     alert_quantity: float | None = Field(None, ge=0)
+    low_stock_threshold: float | None = Field(None, ge=0)
+    packaging_status: str = Field(default="unpacked")  # "packed" or "unpacked"
     notes: str | None = None
 
 
@@ -41,6 +43,8 @@ class ProductUpdate(BaseModel):
     default_unit: str | None = Field(None, min_length=1, max_length=50)
     quantity: float | None = Field(None, ge=0)  # Current stock quantity (triggers ADJUSTMENT movement)
     alert_quantity: float | None = Field(None, ge=0)
+    low_stock_threshold: float | None = Field(None, ge=0)
+    packaging_status: str | None = None  # "packed" or "unpacked"
     notes: str | None = None
     active: bool | None = None
 
@@ -51,6 +55,8 @@ class ProductOut(BaseModel):
     category_id: int | None
     default_unit: str
     alert_quantity: float | None
+    low_stock_threshold: float | None
+    packaging_status: str
     notes: str | None
     active: bool
     created_at: datetime
@@ -294,6 +300,7 @@ class ProductStatus(BaseModel):
 class DashboardSummary(BaseModel):
     total_products: int
     out_of_stock_count: int
+    low_stock_count: int
     total_locations: int
     total_categories: int
 
@@ -301,4 +308,77 @@ class DashboardSummary(BaseModel):
 class DashboardOut(BaseModel):
     summary: DashboardSummary
     out_of_stock_products: list[ProductStatus]
+    low_stock_products: list[ProductStatus]
     recent_movements: list[StockMovementOut]
+
+
+# ================================================================ STOCK TRANSFER
+class StockTransferCreate(BaseModel):
+    from_location_id: int
+    to_location_id: int
+    product_id: int
+    quantity: float = Field(..., gt=0)
+    unit: str | None = None
+    notes: str | None = None
+
+
+class StockTransferOut(BaseModel):
+    id: int
+    from_location_id: int
+    to_location_id: int
+    product_id: int
+    quantity: float
+    unit: str | None
+    notes: str | None
+    created_at: datetime
+    created_by_user_id: int
+
+    model_config = {"from_attributes": True}
+
+
+# ================================================================ MULTI-LINE PURCHASE
+class PurchaseLineItem(BaseModel):
+    product_id: int | None = None
+    combo_id: int | None = None
+    quantity: float = Field(..., gt=0)
+    unit: str | None = None
+    amount: float | None = Field(None, ge=0)
+
+
+class MultiLinePurchaseCreate(BaseModel):
+    customer_name: str = Field(..., min_length=1, max_length=200)
+    contact_id: int | None = None
+    items: list[PurchaseLineItem]
+    purchase_date: datetime
+    payment_status: str = Field(default='pending')
+    payment_method: str | None = None
+    total_amount: float | None = Field(None, ge=0)
+    notes: str | None = None
+
+
+class MultiLinePurchaseItemOut(BaseModel):
+    id: int
+    product_id: int | None
+    combo_id: int | None
+    quantity: float
+    unit: str | None
+    amount: float | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class MultiLinePurchaseOut(BaseModel):
+    id: int
+    contact_id: int | None
+    customer_name: str
+    items: list[MultiLinePurchaseItemOut]
+    purchase_date: datetime
+    payment_status: str
+    payment_method: str | None
+    total_amount: float | None
+    notes: str | None
+    created_at: datetime
+    created_by_user_id: int
+
+    model_config = {"from_attributes": True}

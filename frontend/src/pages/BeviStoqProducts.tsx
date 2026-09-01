@@ -11,6 +11,8 @@ interface Product {
   category_id: number | null
   default_unit: string
   alert_quantity: number | null
+  low_stock_threshold: number | null
+  packaging_status: string
   notes: string | null
   active: boolean
   created_at: string
@@ -35,7 +37,7 @@ interface Category {
   name: string
 }
 
-const UNITS = ['g', 'kg', 'pcs']
+const UNITS = ['g', 'kg', 'tonne', 'ml', 'litre', 'pcs', 'box', 'bag']
 
 interface ProductWithStock extends Product {
   total_stock: number
@@ -56,21 +58,30 @@ export function BeviStoqProducts() {
     stock_quantity: '',
     location_id: 0,
     category_id: 0,
+    packaging_status: 'unpacked',
+    low_stock_threshold: '',
     notes: '',
     current_quantity: '', // For edit mode - existing stock
   })
   const [editingId, setEditingId] = useState<number | null>(null)
   const [inventory, setInventory] = useState<any[]>([])
+  const [filterPackagingStatus, setFilterPackagingStatus] = useState<string | null>(null)
+  const [filterCategoryId, setFilterCategoryId] = useState<number | null>(null)
 
   useEffect(() => {
     fetchData()
-  }, [])
+  }, [filterPackagingStatus, filterCategoryId])
 
   const fetchData = async () => {
     try {
       console.log('[fetchData] Starting data fetch...')
+      const params = new URLSearchParams()
+      if (filterPackagingStatus) params.append('packaging_status', filterPackagingStatus)
+      if (filterCategoryId) params.append('category_id', filterCategoryId.toString())
+      const productsUrl = `/api/bevi-stoq/products${params.size > 0 ? '?' + params.toString() : ''}`
+
       const [productsRes, locationsRes, categoriesRes, inventoryRes] = await Promise.all([
-        api.get<Product[]>('/api/bevi-stoq/products'),
+        api.get<Product[]>(productsUrl),
         api.get<Location[]>('/api/bevi-stoq/locations'),
         api.get<Category[]>('/api/bevi-stoq/categories'),
         api.get<InventoryItem[]>('/api/bevi-stoq/inventory'),
@@ -167,6 +178,8 @@ export function BeviStoqProducts() {
         name: formData.name.trim(),
         category_id: formData.category_id || null,
         default_unit: formData.default_unit,
+        packaging_status: formData.packaging_status || 'unpacked',
+        low_stock_threshold: formData.low_stock_threshold ? parseFloat(formData.low_stock_threshold) : null,
         alert_quantity: null,
         notes: formData.notes || null,
       }
@@ -196,7 +209,7 @@ export function BeviStoqProducts() {
           const updatedProductInList = products.find(p => p.id === editingId)
           if (updatedProductInList && updatedProductInList.name === payload.name) {
             console.log('[UPDATE] ✓ Database persistence confirmed - values match')
-            setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, category_id: 0, notes: '', current_quantity: '' })
+            setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, category_id: 0, packaging_status: 'unpacked', low_stock_threshold: '', notes: '', current_quantity: '' })
             setEditingId(null)
             setShowForm(false)
             toast.success('Product updated successfully')
@@ -239,7 +252,7 @@ export function BeviStoqProducts() {
           console.log('Stock quantity or location not provided, skipping stock movement')
         }
 
-        setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, category_id: 0, notes: '', current_quantity: '' })
+        setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, category_id: 0, packaging_status: 'unpacked', low_stock_threshold: '', notes: '', current_quantity: '' })
         setEditingId(null)
         setShowForm(false)
         toast.success('Product created successfully with stock')
@@ -279,6 +292,8 @@ export function BeviStoqProducts() {
       stock_quantity: '',
       location_id: 0,
       category_id: product.category_id || 0,
+      packaging_status: product.packaging_status || 'unpacked',
+      low_stock_threshold: product.low_stock_threshold ? product.low_stock_threshold.toString() : '',
       notes: product.notes || '',
       current_quantity: totalStock.toString(),
     })
@@ -298,7 +313,7 @@ export function BeviStoqProducts() {
         </div>
         <button
           onClick={() => {
-            setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, category_id: 0, notes: '', current_quantity: '' })
+            setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, category_id: 0, packaging_status: 'unpacked', low_stock_threshold: '', notes: '', current_quantity: '' })
             setEditingId(null)
             setShowForm(!showForm)
           }}
@@ -307,6 +322,37 @@ export function BeviStoqProducts() {
           <Plus size={16} />
           Add Product
         </button>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap gap-3 rounded-lg border border-caramel/15 bg-espresso/40 p-4">
+        <div>
+          <label className="block text-xs font-medium text-latte/60 mb-1">Packaging Status</label>
+          <select
+            value={filterPackagingStatus || ''}
+            onChange={(e) => setFilterPackagingStatus(e.target.value || null)}
+            className="rounded bg-bean/50 px-3 py-2 text-sm text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
+          >
+            <option value="">All Products</option>
+            <option value="packed">Packed</option>
+            <option value="unpacked">Unpacked</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-latte/60 mb-1">Category</label>
+          <select
+            value={filterCategoryId || ''}
+            onChange={(e) => setFilterCategoryId(e.target.value ? parseInt(e.target.value) : null)}
+            className="rounded bg-bean/50 px-3 py-2 text-sm text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
+          >
+            <option value="">All Categories</option>
+            {categories.map((cat) => (
+              <option key={cat.id} value={cat.id}>
+                {cat.name}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {showForm && (
@@ -431,6 +477,34 @@ export function BeviStoqProducts() {
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-latte">
+                Packaging Status <span className="text-latte/60">(optional)</span>
+              </label>
+              <select
+                value={formData.packaging_status}
+                onChange={(e) => setFormData({ ...formData, packaging_status: e.target.value })}
+                className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
+              >
+                <option value="unpacked">Unpacked</option>
+                <option value="packed">Packed</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-latte">
+                Low Stock Threshold <span className="text-latte/60">(optional)</span>
+              </label>
+              <input
+                type="number"
+                value={formData.low_stock_threshold}
+                onChange={(e) => setFormData({ ...formData, low_stock_threshold: e.target.value })}
+                className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte placeholder-latte/40 focus:outline-none focus:ring-2 focus:ring-gold/50"
+                placeholder="e.g., 50 (alert when stock ≤ this value)"
+                step="0.01"
+              />
             </div>
 
             <div>

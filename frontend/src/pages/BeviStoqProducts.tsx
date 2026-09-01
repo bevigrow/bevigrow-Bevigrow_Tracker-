@@ -97,6 +97,7 @@ export function BeviStoqProducts() {
       setProducts(productsWithStock)
       setLocations(locationsRes)
       setCategories(categoriesRes)
+      setInventory(inventoryRes)
       console.log('[fetchData] State updated successfully')
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : 'Failed to load data'
@@ -187,7 +188,7 @@ export function BeviStoqProducts() {
           const updatedProductInList = products.find(p => p.id === editingId)
           if (updatedProductInList && updatedProductInList.name === payload.name) {
             console.log('[UPDATE] ✓ Database persistence confirmed - values match')
-            setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, category_id: 0, notes: '' })
+            setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, category_id: 0, notes: '', current_quantity: '' })
             setEditingId(null)
             setShowForm(false)
             toast.success('Product updated successfully')
@@ -230,7 +231,7 @@ export function BeviStoqProducts() {
           console.log('Stock quantity or location not provided, skipping stock movement')
         }
 
-        setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, category_id: 0, notes: '' })
+        setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, category_id: 0, notes: '', current_quantity: '' })
         setEditingId(null)
         setShowForm(false)
         toast.success('Product created successfully with stock')
@@ -289,7 +290,7 @@ export function BeviStoqProducts() {
         </div>
         <button
           onClick={() => {
-            setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, category_id: 0, notes: '' })
+            setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, category_id: 0, notes: '', current_quantity: '' })
             setEditingId(null)
             setShowForm(!showForm)
           }}

@@ -35,6 +35,7 @@ export function BeviStoqMovements() {
   const [error, setError] = useState<string | null>(null)
   const [filterType, setFilterType] = useState('')
   const [filterProduct, setFilterProduct] = useState('')
+  const [filterLocation, setFilterLocation] = useState('')
 
   useEffect(() => {
     fetchData()
@@ -64,6 +65,10 @@ export function BeviStoqMovements() {
   let filtered = movements
   if (filterType) filtered = filtered.filter((m) => m.movement_type === filterType)
   if (filterProduct) filtered = filtered.filter((m) => m.product_id === parseInt(filterProduct))
+  if (filterLocation) {
+    const locationId = parseInt(filterLocation)
+    filtered = filtered.filter((m) => m.from_location_id === locationId || m.to_location_id === locationId)
+  }
 
   const getMovementColor = (type: string) => {
     switch (type) {
@@ -116,6 +121,19 @@ export function BeviStoqMovements() {
           {products.map((product) => (
             <option key={product.id} value={product.id}>
               {product.name}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={filterLocation}
+          onChange={(e) => setFilterLocation(e.target.value)}
+          className="rounded bg-bean/50 px-3 py-2 text-sm text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
+        >
+          <option value="">All Locations</option>
+          {locations.map((location) => (
+            <option key={location.id} value={location.id}>
+              {location.name}
             </option>
           ))}
         </select>

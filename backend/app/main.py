@@ -90,10 +90,11 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origin_list,
-    allow_credentials=settings.cors_origin_list != ["*"],
+    allow_origins=settings.cors_origin_list if settings.cors_origin_list != ["*"] else ["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_origin_regex=".*",  # Allow any origin (for Render subdomains)
 )
 
 @app.middleware("http")

@@ -1,4 +1,4 @@
-import { Plus, Edit2, Trash2, X } from 'lucide-react'
+import { Plus, Edit2, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { api } from '../lib/api'
@@ -89,16 +89,6 @@ export function BeviStoqPurchases() {
     }, 0)
   }
 
-  const getPaidAmount = (): number => {
-    const total = getTotalAmount()
-    return formData.payment_status === 'paid' ? total : 0
-  }
-
-  const getPendingAmount = (): number => {
-    const total = getTotalAmount()
-    return formData.payment_status === 'pending' ? total : 0
-  }
-
   const getProductUnit = (productId: number): string => {
     return products.find((p) => p.id === productId)?.default_unit || ''
   }
@@ -123,17 +113,18 @@ export function BeviStoqPurchases() {
 
   const handleLineChange = (idx: number, field: keyof PurchaseLine, value: any) => {
     const newLines = [...formData.lines]
-    newLines[idx] = { ...newLines[idx], [field]: value }
+    const updatedLine = { ...newLines[idx], [field]: value } as PurchaseLine
 
     if (field === 'product_id' && value) {
-      newLines[idx].unit = getProductUnit(parseInt(value))
-      newLines[idx].combo_id = null
+      updatedLine.unit = getProductUnit(parseInt(value))
+      updatedLine.combo_id = null
     }
 
     if (field === 'combo_id' && value) {
-      newLines[idx].product_id = null
+      updatedLine.product_id = null
     }
 
+    newLines[idx] = updatedLine
     setFormData({ ...formData, lines: newLines })
   }
 

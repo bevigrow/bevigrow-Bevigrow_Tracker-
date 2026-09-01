@@ -8,10 +8,18 @@ interface DashboardData {
   summary: {
     total_products: number
     out_of_stock_count: number
+    low_stock_count: number
     total_locations: number
     total_categories: number
   }
   out_of_stock_products: Array<{
+    product_id: number
+    product_name: string
+    status: string
+    current_stock: number
+    threshold: number | null
+  }>
+  low_stock_products: Array<{
     product_id: number
     product_name: string
     status: string
@@ -33,6 +41,11 @@ interface Category {
   name: string
 }
 
+interface Location {
+  id: number
+  name: string
+}
+
 interface Product {
   id: number
   name: string
@@ -44,6 +57,7 @@ interface Product {
 interface InventoryItem {
   id: number
   product_id: number
+  location_id: number
   physical_stock: number
   reserved_stock: number
 }
@@ -51,11 +65,14 @@ interface InventoryItem {
 export function BeviStoqDashboard() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [categories, setCategories] = useState<Category[]>([])
+  const [locations, setLocations] = useState<Location[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [inventory, setInventory] = useState<InventoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expandedMovement, setExpandedMovement] = useState(false)
+  const [view, setView] = useState<'location' | 'category'>('location')
+  const [selectedLocation, setSelectedLocation] = useState<number | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null)
   const [selectedProduct, setSelectedProduct] = useState<number | null>(null)
 
@@ -71,6 +88,10 @@ export function BeviStoqDashboard() {
       const dashboardRes = await api.get<DashboardData>('/api/bevi-stoq/dashboard')
       console.log('Dashboard data loaded:', dashboardRes)
       setData(dashboardRes)
+
+      const locationsRes = await api.get<Location[]>('/api/bevi-stoq/locations').catch(() => [])
+      console.log('Locations loaded:', locationsRes)
+      setLocations(locationsRes || [])
 
       const categoriesRes = await api.get<Category[]>('/api/bevi-stoq/categories').catch(() => [])
       console.log('Categories loaded:', categoriesRes)
@@ -96,6 +117,25 @@ export function BeviStoqDashboard() {
     return inventory
       .filter((inv) => inv.product_id === productId)
       .reduce((sum, inv) => sum + (inv.physical_stock - inv.reserved_stock), 0)
+  }
+
+  const getStockAtLocation = (productId: number, locationId: number): number => {
+    const inv = inventory.find((i) => i.product_id === productId && i.location_id === locationId)
+    return inv ? inv.physical_stock - inv.reserved_stock : 0
+  }
+
+  const getProductCountAtLocation = (locationId: number): number => {
+    const productIds = new Set(inventory.filter((i) => i.location_id === locationId).map((i) => i.product_id))
+    return productIds.size
+  }
+
+  const getProductsAtLocation = (locationId: number): Product[] => {
+    const productIds = new Set(inventory.filter((i) => i.location_id === locationId && i.physical_stock - i.reserved_stock > 0).map((i) => i.product_id))
+    return products.filter((p) => productIds.has(p.id) && p.active)
+  }
+
+  const getLocationName = (locationId: number): string => {
+    return locations.find((l) => l.id === locationId)?.name || 'Unknown'
   }
 
   const getProductsForCategory = (categoryId: number): Product[] => {
@@ -169,36 +209,144 @@ export function BeviStoqDashboard() {
         />
       </div>
 
+      {/* View Toggle */}
+      {!selectedProduct && (
+        <div className="flex gap-2">
+          <button
+            onClick={() => {
+              setView('location')
+              setSelectedCategory(null)
+              setSelectedLocation(null)
+            }}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+              view === 'location'
+                ? 'bg-gold/20 text-gold border border-gold/30'
+                : 'bg-bean/50 text-latte/60 hover:text-latte border border-caramel/15'
+            }`}
+          >
+            📍 By Location
+          </button>
+          <button
+            onClick={() => {
+              setView('category')
+              setSelectedLocation(null)
+              setSelectedCategory(null)
+            }}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+              view === 'category'
+                ? 'bg-gold/20 text-gold border border-gold/30'
+                : 'bg-bean/50 text-latte/60 hover:text-latte border border-caramel/15'
+            }`}
+          >
+            🏷️ By Category
+          </button>
+        </div>
+      )}
+
       {/* Main Content Grid */}
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Category Chart */}
+        {/* Main Chart Area */}
         <div className="lg:col-span-2">
-          {!selectedCategoryData && !selectedProductData ? (
-            <div className="rounded-lg border border-caramel/15 bg-espresso/40 p-6">
-              <h2 className="mb-4 font-semibold text-latte">Products by Category</h2>
-              {categoryProductCounts.length === 0 ? (
-                <p className="text-sm text-latte/60">No categories with products</p>
-              ) : (
-                <div className="space-y-3">
-                  {categoryProductCounts.map((cat) => (
-                    <button
-                      key={cat.id}
-                      onClick={() => setSelectedCategory(cat.id)}
-                      className="group w-full cursor-pointer text-left"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="min-w-24 truncate text-sm text-latte group-hover:text-gold">
-                          {cat.name}
-                        </span>
-                        <div className="flex-1">
-                          <div className="h-6 rounded bg-espresso/50 overflow-hidden">
-                            <div
-                              className="h-full bg-gradient-to-r from-gold/40 to-gold/20 transition-all group-hover:from-gold/60 group-hover:to-gold/40"
-                              style={{ width: `${(cat.count / maxCount) * 100}%` }}
-                            />
+          {!selectedLocation && !selectedCategory && !selectedProductData ? (
+            view === 'location' ? (
+              <div className="rounded-lg border border-caramel/15 bg-espresso/40 p-6">
+                <h2 className="mb-4 font-semibold text-latte">Stock by Location</h2>
+                {locations.length === 0 ? (
+                  <p className="text-sm text-latte/60">No locations configured</p>
+                ) : (
+                  <div className="space-y-3">
+                    {locations.map((loc) => {
+                      const productCount = getProductCountAtLocation(loc.id)
+                      const maxLocCount = Math.max(...locations.map((l) => getProductCountAtLocation(l.id)), 1)
+                      return (
+                        <button
+                          key={loc.id}
+                          onClick={() => setSelectedLocation(loc.id)}
+                          className="group w-full cursor-pointer text-left"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="min-w-24 truncate text-sm text-latte group-hover:text-gold">
+                              {loc.name}
+                            </span>
+                            <div className="flex-1">
+                              <div className="h-6 rounded bg-espresso/50 overflow-hidden">
+                                <div
+                                  className="h-full bg-gradient-to-r from-purple-500/40 to-purple-500/20 transition-all group-hover:from-purple-500/60 group-hover:to-purple-500/40"
+                                  style={{ width: `${(productCount / maxLocCount) * 100}%` }}
+                                />
+                              </div>
+                            </div>
+                            <span className="min-w-8 text-right text-sm font-medium text-purple-400">{productCount}</span>
                           </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="rounded-lg border border-caramel/15 bg-espresso/40 p-6">
+                <h2 className="mb-4 font-semibold text-latte">Products by Category</h2>
+                {categoryProductCounts.length === 0 ? (
+                  <p className="text-sm text-latte/60">No categories with products</p>
+                ) : (
+                  <div className="space-y-3">
+                    {categoryProductCounts.map((cat) => (
+                      <button
+                        key={cat.id}
+                        onClick={() => setSelectedCategory(cat.id)}
+                        className="group w-full cursor-pointer text-left"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="min-w-24 truncate text-sm text-latte group-hover:text-gold">
+                            {cat.name}
+                          </span>
+                          <div className="flex-1">
+                            <div className="h-6 rounded bg-espresso/50 overflow-hidden">
+                              <div
+                                className="h-full bg-gradient-to-r from-gold/40 to-gold/20 transition-all group-hover:from-gold/60 group-hover:to-gold/40"
+                                style={{ width: `${(cat.count / maxCount) * 100}%` }}
+                              />
+                            </div>
+                          </div>
+                          <span className="min-w-8 text-right text-sm font-medium text-gold">{cat.count}</span>
                         </div>
-                        <span className="min-w-8 text-right text-sm font-medium text-gold">{cat.count}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          ) : selectedLocation && !selectedProductData ? (
+            <div className="rounded-lg border border-caramel/15 bg-espresso/40 p-6">
+              <div className="mb-4 flex items-center gap-2">
+                <button
+                  onClick={() => setSelectedLocation(null)}
+                  className="rounded hover:bg-caramel/20 p-1 text-latte/60 hover:text-gold"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <h2 className="font-semibold text-latte">{getLocationName(selectedLocation)}</h2>
+                <span className="text-sm text-latte/60">({getProductsAtLocation(selectedLocation).length})</span>
+              </div>
+              {getProductsAtLocation(selectedLocation).length === 0 ? (
+                <p className="text-sm text-latte/60">No products at this location</p>
+              ) : (
+                <div className="space-y-2">
+                  {getProductsAtLocation(selectedLocation).map((prod) => (
+                    <button
+                      key={prod.id}
+                      onClick={() => setSelectedProduct(prod.id)}
+                      className="w-full cursor-pointer rounded bg-bean/50 p-3 text-left hover:bg-bean/70 transition text-sm"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <p className="font-medium text-latte">{prod.name}</p>
+                          <p className="text-xs text-latte/60 mt-1">
+                            {getStockAtLocation(prod.id, selectedLocation).toFixed(2)} {prod.default_unit}
+                          </p>
+                        </div>
+                        <span className="text-xs text-latte/60">→</span>
                       </div>
                     </button>
                   ))}
@@ -300,6 +448,30 @@ export function BeviStoqDashboard() {
                 ))}
                 {data.out_of_stock_products.length > 5 && (
                   <p className="text-xs text-latte/60 mt-2">+{data.out_of_stock_products.length - 5} more</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Low Stock Panel */}
+          <div className="rounded-lg border border-caramel/15 bg-espresso/40 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-lg">⚠️</span>
+              <h3 className="font-semibold text-yellow-400 text-sm">Low Stock</h3>
+              <span className="text-xs text-latte/60">({data.low_stock_products?.length || 0})</span>
+            </div>
+            {!data.low_stock_products || data.low_stock_products.length === 0 ? (
+              <p className="text-xs text-latte/60">No low stock alerts</p>
+            ) : (
+              <div className="space-y-1">
+                {data.low_stock_products.slice(0, 5).map((product) => (
+                  <div key={product.product_id} className="text-xs text-latte/70 truncate">
+                    <span className="text-yellow-400">•</span> {product.product_name}
+                    <span className="text-latte/50 ml-1">({product.current_stock.toFixed(2)})</span>
+                  </div>
+                ))}
+                {data.low_stock_products.length > 5 && (
+                  <p className="text-xs text-latte/60 mt-2">+{data.low_stock_products.length - 5} more</p>
                 )}
               </div>
             )}

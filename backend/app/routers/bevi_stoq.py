@@ -717,13 +717,25 @@ def list_purchases(db: Session = Depends(get_db), _: User = Depends(get_current_
 
 @router.put("/customer-purchases/{id}", response_model=CustomerPurchaseOut)
 def update_purchase(id: int, data: CustomerPurchaseUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Update purchase with UNIT-AWARE inventory reversal and reapplication.
+
+    CRITICAL: When quantity changes, reverse OLD effect first, then apply NEW effect.
+    Example: 250g→500g: restore 0.25kg, then deduct 0.5kg (final: +0.25kg)
+    """
+    log = logging.getLogger("bevigrow.bevi_stoq")
+
     try:
         purchase = db.get(CustomerPurchase, id)
-        if not purchase: raise HTTPException(status_code=404, detail="Purchase not found")
+        if not purchase:
+            raise HTTPException(status_code=404, detail="Purchase not found")
 
         old_quantity = purchase.quantity
+        old_unit = purchase.unit
         old_product_id = purchase.product_id
 
+        log.info(f"UPDATE PURCHASE: id={id}, old_qty={old_quantity} {old_unit}, old_product={old_product_id}")
+
+        # Update simple fields
         if data.customer_name is not None: purchase.customer_name = data.customer_name
         if data.contact_id is not None: purchase.contact_id = data.contact_id
         if data.product_id is not None: purchase.product_id = data.product_id
@@ -739,51 +751,83 @@ def update_purchase(id: int, data: CustomerPurchaseUpdate, db: Session = Depends
         if data.amount is not None: purchase.amount = data.amount
         if data.notes is not None: purchase.notes = data.notes
 
-        # Handle inventory adjustment if quantity changed
-        if data.quantity is not None and data.quantity != old_quantity:
-            qty_diff = data.quantity - old_quantity
+        # Handle inventory adjustment if quantity OR unit changed
+        quantity_changed = data.quantity is not None and data.quantity != old_quantity
+        unit_changed = data.unit is not None and data.unit != old_unit
 
-            if qty_diff > 0:
-                # Quantity increased: deduct more stock
-                inventories = db.scalars(select(Inventory).where(Inventory.product_id == purchase.product_id).with_for_update()).all()
-                total_available = sum(inv.physical_stock for inv in inventories)
-                if total_available < qty_diff:
-                    db.rollback()
-                    raise HTTPException(status_code=400, detail=f"Insufficient stock. Need: {qty_diff}, Available: {total_available}")
+        if quantity_changed or unit_changed:
+            product = db.get(Product, purchase.product_id)
+            if not product:
+                raise HTTPException(status_code=404, detail=f"Product {purchase.product_id} not found")
 
-                inventories = db.scalars(select(Inventory).where(Inventory.product_id == purchase.product_id).order_by(Inventory.location_id).with_for_update()).all()
-                remaining = qty_diff
-                for inv in inventories:
-                    if remaining <= 0: break
-                    if inv.physical_stock > 0:
-                        deduct = min(inv.physical_stock, remaining)
-                        inv.physical_stock -= deduct
-                        remaining -= deduct
-                        movement = StockMovement(product_id=purchase.product_id, from_location_id=inv.location_id, movement_type=StockMovementType.stock_removed, quantity=deduct, unit=purchase.unit, reference_id=purchase.id, notes=f"Purchase update: quantity +{qty_diff}", created_by_user_id=user.id)
-                        db.add(movement)
-            else:
-                # Quantity decreased: restore stock
-                abs_diff = abs(qty_diff)
-                inventories = db.scalars(select(Inventory).where(Inventory.product_id == purchase.product_id).order_by(Inventory.location_id).with_for_update()).all()
-                remaining = abs_diff
-                for inv in inventories:
-                    if remaining <= 0: break
-                    restore = min(remaining, abs_diff)
-                    inv.physical_stock += restore
-                    remaining -= restore
-                    movement = StockMovement(product_id=purchase.product_id, from_location_id=inv.location_id, movement_type=StockMovementType.stock_added, quantity=restore, unit=purchase.unit, reference_id=purchase.id, notes=f"Purchase update: quantity {qty_diff}", created_by_user_id=user.id)
+            if not are_units_compatible(old_unit, product.default_unit):
+                raise HTTPException(status_code=400, detail=f"Old unit {old_unit} incompatible with product base unit {product.default_unit}")
+            if not are_units_compatible(purchase.unit, product.default_unit):
+                raise HTTPException(status_code=400, detail=f"New unit {purchase.unit} incompatible with product base unit {product.default_unit}")
+
+            # Convert quantities to base unit
+            old_qty_base = convert_to_base_unit(old_quantity, old_unit, product.default_unit)
+            new_qty_base = convert_to_base_unit(purchase.quantity, purchase.unit, product.default_unit)
+
+            log.info(f"UPDATE PURCHASE: old={old_quantity} {old_unit}→{old_qty_base} {product.default_unit}, new={purchase.quantity} {purchase.unit}→{new_qty_base} {product.default_unit}")
+
+            # STEP 1: Reverse old purchase (restore old quantity)
+            inventories = db.scalars(select(Inventory).where(Inventory.product_id == old_product_id).order_by(Inventory.location_id).with_for_update()).all()
+            remaining_restore = old_qty_base
+            for inv in inventories:
+                if remaining_restore <= 0: break
+                restore_qty = min(remaining_restore, old_qty_base)
+                inv.physical_stock += restore_qty
+                remaining_restore -= restore_qty
+                movement = StockMovement(
+                    product_id=old_product_id, from_location_id=inv.location_id,
+                    movement_type=StockMovementType.stock_added,
+                    quantity=restore_qty, unit=product.default_unit,
+                    reference_id=purchase.id,
+                    notes=f"Purchase update: reverse {old_quantity} {old_unit}",
+                    created_by_user_id=user.id
+                )
+                db.add(movement)
+            log.info(f"UPDATE PURCHASE: reversed {old_qty_base} {product.default_unit}")
+
+            # STEP 2: Apply new purchase (deduct new quantity)
+            inventories = db.scalars(select(Inventory).where(Inventory.product_id == purchase.product_id).with_for_update()).all()
+            total_available = sum(inv.physical_stock - inv.reserved_stock for inv in inventories)
+            if total_available < new_qty_base:
+                shortage = new_qty_base - total_available
+                raise HTTPException(status_code=400, detail=f"Insufficient stock for new purchase. Required: {new_qty_base} {product.default_unit}, Available: {total_available} {product.default_unit}, Shortage: {shortage} {product.default_unit}")
+
+            inventories = db.scalars(select(Inventory).where(Inventory.product_id == purchase.product_id).order_by(Inventory.location_id).with_for_update()).all()
+            remaining_deduct = new_qty_base
+            for inv in inventories:
+                if remaining_deduct <= 0: break
+                available = inv.physical_stock - inv.reserved_stock
+                if available > 0:
+                    deduct_qty = min(available, remaining_deduct)
+                    inv.physical_stock -= deduct_qty
+                    remaining_deduct -= deduct_qty
+                    movement = StockMovement(
+                        product_id=purchase.product_id, from_location_id=inv.location_id,
+                        movement_type=StockMovementType.stock_removed,
+                        quantity=deduct_qty, unit=product.default_unit,
+                        reference_id=purchase.id,
+                        notes=f"Purchase update: {purchase.quantity} {purchase.unit}",
+                        created_by_user_id=user.id
+                    )
                     db.add(movement)
+            log.info(f"UPDATE PURCHASE: applied {new_qty_base} {product.default_unit}")
 
         purchase.updated_by_user_id = user.id
         db.commit()
         db.refresh(purchase)
+        log.info(f"UPDATE PURCHASE: purchase {id} updated successfully")
         return purchase
+
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
-        log = logging.getLogger("bevigrow.bevi_stoq")
-        log.error(f"Error updating purchase {id}: {e}")
+        log.error(f"UPDATE PURCHASE: FAILED - {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to update purchase: {str(e)}")
 
 @router.delete("/customer-purchases/{id}", status_code=204)

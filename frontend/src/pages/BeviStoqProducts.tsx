@@ -57,8 +57,10 @@ export function BeviStoqProducts() {
     location_id: 0,
     category_id: 0,
     notes: '',
+    current_quantity: '', // For edit mode - existing stock
   })
   const [editingId, setEditingId] = useState<number | null>(null)
+  const [inventory, setInventory] = useState<any[]>([])
 
   useEffect(() => {
     fetchData()
@@ -257,6 +259,11 @@ export function BeviStoqProducts() {
   }
 
   const handleEdit = (product: Product) => {
+    // Calculate current total stock from inventory
+    const totalStock = inventory
+      .filter((inv) => inv.product_id === product.id)
+      .reduce((sum, inv) => sum + (inv.physical_stock - inv.reserved_stock), 0)
+
     setFormData({
       name: product.name,
       default_unit: product.default_unit,
@@ -264,6 +271,7 @@ export function BeviStoqProducts() {
       location_id: 0,
       category_id: product.category_id || 0,
       notes: product.notes || '',
+      current_quantity: totalStock.toString(),
     })
     setEditingId(product.id)
     setShowForm(true)
@@ -323,6 +331,23 @@ export function BeviStoqProducts() {
                 required
               />
             </div>
+
+            {editingId && (
+              <div>
+                <label className="block text-sm font-medium text-latte">
+                  Quantity <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={formData.current_quantity}
+                  onChange={(e) => setFormData({ ...formData, current_quantity: e.target.value })}
+                  className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte placeholder-latte/40 focus:outline-none focus:ring-2 focus:ring-gold/50"
+                  placeholder="e.g., 250"
+                  required
+                />
+              </div>
+            )}
 
             {!editingId && (
               <div>

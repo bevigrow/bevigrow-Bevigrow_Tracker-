@@ -63,21 +63,19 @@ export function BeviStoqCombos() {
   const handleSubmit = async (e: any) => {
     e.preventDefault()
     try {
+      const payload = {
+        name: formData.name,
+        description: formData.description,
+        items: formData.items.map((item) => ({
+          product_id: item.product_id,
+          quantity: parseFloat(item.quantity),
+          unit: item.unit || null,
+        })),
+      }
       if (editingId) {
-        await api.put(`/api/bevi-stoq/combos/${editingId}`, {
-          name: formData.name,
-          description: formData.description,
-        })
+        await api.put(`/api/bevi-stoq/combos/${editingId}`, payload)
       } else {
-        await api.post('/api/bevi-stoq/combos', {
-          name: formData.name,
-          description: formData.description,
-          items: formData.items.map((item) => ({
-            product_id: item.product_id,
-            quantity: parseFloat(item.quantity),
-            unit: item.unit || null,
-          })),
-        })
+        await api.post('/api/bevi-stoq/combos', payload)
       }
       setFormData({ name: '', description: '', items: [{ product_id: 0, quantity: '', unit: '' }] })
       setEditingId(null)

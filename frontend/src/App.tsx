@@ -51,6 +51,7 @@ const BeviStoqRequirements = lazy(() => import('./pages/BeviStoqRequirements').t
 const BeviStoqPurchases = lazy(() => import('./pages/BeviStoqPurchases').then((m) => ({ default: m.BeviStoqPurchases })))
 const BeviStoqReports = lazy(() => import('./pages/BeviStoqReports').then((m) => ({ default: m.BeviStoqReports })))
 const BeviStoqRestocks = lazy(() => import('./pages/BeviStoqRestocks').then((m) => ({ default: m.BeviStoqRestocks })))
+const BeviStoqTransfers = lazy(() => import('./pages/BeviStoqTransfers').then((m) => ({ default: m.BeviStoqTransfers })))
 
 
 function RequireAuth({ children, roles }: { children: ReactNode; roles?: Role[] }) {
@@ -147,6 +148,7 @@ export default function App() {
                 <Route path="bevi-stoq/purchases" element={<BeviStoqPurchases />} />
                 <Route path="bevi-stoq/reports" element={<BeviStoqReports />} />
                 <Route path="bevi-stoq/restocks" element={<BeviStoqRestocks />} />
+                <Route path="bevi-stoq/transfers" element={<BeviStoqTransfers />} />
 
                 {/* the old flat URLs, kept so existing links and bookmarks work */}
                 <Route path="contacts" element={<Navigate to="/app/trade/quotes" replace />} />

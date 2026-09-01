@@ -306,6 +306,53 @@ def update_product(id: int, data: ProductUpdate, db: Session = Depends(get_db), 
             log.info(f"UPDATE PRODUCT: Updating active from {prod.active} to {data.active}")
             prod.active = data.active
 
+        # Handle quantity adjustment if provided
+        if data.quantity is not None:
+            current_total = sum(
+                (inv.physical_stock - inv.reserved_stock)
+                for inv in db.scalars(select(Inventory).where(Inventory.product_id == id)).all()
+            )
+            qty_diff = data.quantity - current_total
+            log.info(f"UPDATE PRODUCT: Quantity adjustment: current={current_total}, new={data.quantity}, diff={qty_diff} {prod.default_unit}")
+
+            if qty_diff != 0:
+                inventories = db.scalars(select(Inventory).where(Inventory.product_id == id).order_by(Inventory.location_id).with_for_update()).all()
+
+                if qty_diff > 0:
+                    # Add stock
+                    remaining = qty_diff
+                    for inv in inventories:
+                        if remaining <= 0: break
+                        add_qty = min(remaining, qty_diff)
+                        inv.physical_stock += add_qty
+                        remaining -= add_qty
+                        movement = StockMovement(
+                            product_id=id, from_location_id=inv.location_id,
+                            movement_type=StockMovementType.stock_added,
+                            quantity=add_qty, unit=prod.default_unit,
+                            notes=f"Product adjustment: {data.quantity} {prod.default_unit}",
+                            created_by_user_id=user.id
+                        )
+                        db.add(movement)
+                else:
+                    # Remove stock
+                    remaining = abs(qty_diff)
+                    for inv in inventories:
+                        if remaining <= 0: break
+                        available = inv.physical_stock - inv.reserved_stock
+                        if available > 0:
+                            remove_qty = min(available, remaining)
+                            inv.physical_stock -= remove_qty
+                            remaining -= remove_qty
+                            movement = StockMovement(
+                                product_id=id, from_location_id=inv.location_id,
+                                movement_type=StockMovementType.stock_removed,
+                                quantity=remove_qty, unit=prod.default_unit,
+                                notes=f"Product adjustment: {data.quantity} {prod.default_unit}",
+                                created_by_user_id=user.id
+                            )
+                            db.add(movement)
+
         prod.updated_by_user_id = user.id
         prod.updated_at = datetime.now(timezone.utc)
 

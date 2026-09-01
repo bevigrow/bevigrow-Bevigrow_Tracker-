@@ -39,6 +39,7 @@ class ProductUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=200)
     category_id: int | None = None
     default_unit: str | None = Field(None, min_length=1, max_length=50)
+    quantity: float | None = Field(None, ge=0)  # Current stock quantity (triggers ADJUSTMENT movement)
     alert_quantity: float | None = Field(None, ge=0)
     notes: str | None = None
     active: bool | None = None

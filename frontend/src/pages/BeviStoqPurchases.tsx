@@ -51,7 +51,15 @@ export function BeviStoqPurchases() {
   const [filterStatus, setFilterStatus] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    customer_name: string
+    contact_id: string
+    purchase_date: string
+    payment_status: string
+    payment_method: string
+    notes: string
+    lines: PurchaseLine[]
+  }>({
     customer_name: '',
     contact_id: '',
     purchase_date: new Date().toISOString().split('T')[0],
@@ -220,6 +228,15 @@ export function BeviStoqPurchases() {
   }
 
   const handleEdit = (purchase: CustomerPurchase) => {
+    const lines: PurchaseLine[] = [
+      {
+        product_id: purchase.product_id,
+        combo_id: null,
+        quantity: purchase.quantity.toString(),
+        unit: purchase.unit || '',
+        amount: purchase.amount?.toString() || '',
+      },
+    ]
     setFormData({
       customer_name: purchase.customer_name,
       contact_id: purchase.contact_id?.toString() || '',
@@ -227,15 +244,7 @@ export function BeviStoqPurchases() {
       payment_status: purchase.payment_status,
       payment_method: purchase.payment_method || '',
       notes: purchase.notes || '',
-      lines: [
-        {
-          product_id: purchase.product_id,
-          combo_id: null,
-          quantity: purchase.quantity.toString(),
-          unit: purchase.unit || '',
-          amount: purchase.amount?.toString() || '',
-        },
-      ],
+      lines,
     })
     setEditingId(purchase.id)
     setShowForm(true)

@@ -826,17 +826,35 @@ def create_purchase(data: CustomerPurchaseCreate, db: Session = Depends(get_db),
                 update_sql = text(update_sql_str)
 
                 log.info(f"CREATE PURCHASE:   Executing raw SQL UPDATE...")
-                result = db.execute(update_sql, {"deduct_amount": deduct_qty, "inv_id": inv.id})
-                log.info(f"CREATE PURCHASE:   Raw SQL UPDATE result: {result.rowcount} rows affected")
+                log.info(f"CREATE PURCHASE:   SQL: {update_sql_str}")
+                log.info(f"CREATE PURCHASE:   Params: deduct_amount={deduct_qty}, inv_id={inv.id}")
 
-                # Verify the update worked
+                result = db.execute(update_sql, {"deduct_amount": deduct_qty, "inv_id": inv.id})
+                log.info(f"CREATE PURCHASE:   Raw SQL UPDATE result: rowcount={result.rowcount}")
+
+                # CRITICAL: Verify the update worked IMMEDIATELY
+                log.info(f"CREATE PURCHASE:   Verifying update...")
                 verify_after_stmt = text(verify_sql)
                 verify_after = db.execute(verify_after_stmt, {"inv_id": inv.id}).first()
                 log.info(f"CREATE PURCHASE:   Database verify AFTER: {verify_after}")
 
+                # Check if update actually happened
                 if result.rowcount != 1:
-                    log.error(f"CREATE PURCHASE:   CRITICAL - UPDATE failed! rowcount={result.rowcount}, not 1")
-                    raise HTTPException(status_code=500, detail=f"Failed to update inventory - rowcount was {result.rowcount}")
+                    log.error(f"CREATE PURCHASE:   ⚠️ UPDATE FAILED - rowcount was {result.rowcount}, expected 1")
+                    log.error(f"CREATE PURCHASE:   This means UPDATE statement did not match any rows")
+                    log.error(f"CREATE PURCHASE:   Either inventory ID {inv.id} doesn't exist, or there's a constraint issue")
+                    raise HTTPException(status_code=500, detail=f"Inventory update failed - no rows updated (rowcount={result.rowcount})")
+
+                # Also check if value actually changed
+                if verify_after and len(verify_after) >= 2:
+                    new_physical = verify_after[1]
+                    expected_new_physical = inv.physical_stock - deduct_qty
+                    log.info(f"CREATE PURCHASE:   Value check - database has {new_physical}, expected {expected_new_physical}")
+
+                    if abs(new_physical - expected_new_physical) > 0.000001:
+                        log.error(f"CREATE PURCHASE:   ⚠️ VALUE MISMATCH - database value did not change as expected!")
+                        log.error(f"CREATE PURCHASE:   Database: {new_physical}, Expected: {expected_new_physical}")
+                        raise HTTPException(status_code=500, detail=f"Update executed but value didn't change - database may be read-only or have constraints")
 
                 log.info(f"CREATE PURCHASE:   ✓ Inventory updated successfully in database")
 

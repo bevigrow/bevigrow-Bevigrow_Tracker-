@@ -1,10 +1,9 @@
-import { Plus, DollarSign, Edit2, Trash2, X } from 'lucide-react'
+import { Plus, Edit2, Trash2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { api } from '../lib/api'
 import { EmptyState, Spinner } from '../components/ui'
 import { useToast } from '../lib/toast'
-import { UnitSelect } from '../lib/units'
 
 interface CustomerPurchase {
   id: number
@@ -27,10 +26,25 @@ interface Product {
   default_unit: string
 }
 
+interface Combo {
+  id: number
+  name: string
+  description: string | null
+}
+
+interface PurchaseLine {
+  product_id: number | null
+  combo_id: number | null
+  quantity: string
+  unit: string
+  amount: string
+}
+
 export function BeviStoqPurchases() {
   const toast = useToast()
   const [purchases, setPurchases] = useState<CustomerPurchase[]>([])
   const [products, setProducts] = useState<Product[]>([])
+  const [combos, setCombos] = useState<Combo[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
@@ -40,14 +54,11 @@ export function BeviStoqPurchases() {
   const [formData, setFormData] = useState({
     customer_name: '',
     contact_id: '',
-    product_id: 0,
-    quantity: '',
-    unit: '',
     purchase_date: new Date().toISOString().split('T')[0],
     payment_status: 'pending',
     payment_method: '',
-    amount: '',
     notes: '',
+    lines: [{ product_id: null, combo_id: null, quantity: '', unit: '', amount: '' }],
   })
 
   useEffect(() => {
@@ -56,12 +67,14 @@ export function BeviStoqPurchases() {
 
   const fetchData = async () => {
     try {
-      const [purRes, prodRes] = await Promise.all([
+      const [purRes, prodRes, comboRes] = await Promise.all([
         api.get<CustomerPurchase[]>('/api/bevi-stoq/customer-purchases'),
         api.get<Product[]>('/api/bevi-stoq/products'),
+        api.get<Combo[]>('/api/bevi-stoq/combos'),
       ])
       setPurchases(purRes || [])
       setProducts(prodRes || [])
+      setCombos(comboRes || [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load purchases')
     } finally {
@@ -69,104 +82,141 @@ export function BeviStoqPurchases() {
     }
   }
 
+  const getTotalAmount = (): number => {
+    return formData.lines.reduce((sum, line) => {
+      const amount = line.amount ? parseFloat(line.amount) : 0
+      return sum + (isNaN(amount) ? 0 : amount)
+    }, 0)
+  }
+
+  const getPaidAmount = (): number => {
+    const total = getTotalAmount()
+    return formData.payment_status === 'paid' ? total : 0
+  }
+
+  const getPendingAmount = (): number => {
+    const total = getTotalAmount()
+    return formData.payment_status === 'pending' ? total : 0
+  }
+
+  const getProductUnit = (productId: number): string => {
+    return products.find((p) => p.id === productId)?.default_unit || ''
+  }
+
+  const handleAddLine = () => {
+    setFormData({
+      ...formData,
+      lines: [...formData.lines, { product_id: null, combo_id: null, quantity: '', unit: '', amount: '' }],
+    })
+  }
+
+  const handleRemoveLine = (idx: number) => {
+    if (formData.lines.length === 1) {
+      toast.error('At least one product is required')
+      return
+    }
+    setFormData({
+      ...formData,
+      lines: formData.lines.filter((_, i) => i !== idx),
+    })
+  }
+
+  const handleLineChange = (idx: number, field: keyof PurchaseLine, value: any) => {
+    const newLines = [...formData.lines]
+    newLines[idx] = { ...newLines[idx], [field]: value }
+
+    if (field === 'product_id' && value) {
+      newLines[idx].unit = getProductUnit(parseInt(value))
+      newLines[idx].combo_id = null
+    }
+
+    if (field === 'combo_id' && value) {
+      newLines[idx].product_id = null
+    }
+
+    setFormData({ ...formData, lines: newLines })
+  }
+
   const handleSubmit = async (e: any) => {
     e.preventDefault()
     if (submitting) return
     setSubmitting(true)
-
-    // Validation
-    if (!formData.customer_name.trim()) {
-      setError('Customer Name is required')
-      setSubmitting(false)
-      return
-    }
-    if (!formData.product_id) {
-      setError('Product is required')
-      setSubmitting(false)
-      return
-    }
-    if (!formData.quantity || parseFloat(formData.quantity) <= 0) {
-      setError('Quantity must be a positive number')
-      setSubmitting(false)
-      return
-    }
-    if (!formData.unit) {
-      setError('Unit is required')
-      setSubmitting(false)
-      return
-    }
-    if (!formData.purchase_date) {
-      setError('Date is required')
-      setSubmitting(false)
-      return
-    }
-    if (formData.amount && isNaN(parseFloat(formData.amount))) {
-      setError('Amount must be a valid number')
-      setSubmitting(false)
-      return
-    }
+    setError(null)
 
     try {
-      const quantity = parseFloat(formData.quantity)
-      const amountStr = formData.amount.trim()
-      const amount = amountStr ? parseFloat(amountStr) : null
-
-      if (isNaN(quantity) || quantity <= 0) {
-        setError('Quantity must be a valid positive number')
-        setSubmitting(false)
-        return
-      }
-      if (amount !== null && isNaN(amount)) {
-        setError('Amount must be a valid number')
-        setSubmitting(false)
-        return
-      }
-      if (amount !== null && amount < 0) {
-        setError('Amount cannot be negative')
+      // Validation
+      if (!formData.customer_name.trim()) {
+        setError('Customer Name is required')
         setSubmitting(false)
         return
       }
 
-      const payload = {
-        customer_name: formData.customer_name.trim(),
-        contact_id: formData.contact_id ? parseInt(formData.contact_id) : null,
-        product_id: parseInt(formData.product_id as any),
-        quantity: quantity,
-        unit: formData.unit || null,
-        purchase_date: formData.purchase_date,
-        payment_status: formData.payment_status || 'pending',
-        payment_method: formData.payment_method || null,
-        amount: amount,
-        notes: formData.notes || null,
+      const validLines = formData.lines.filter((l) => l.product_id || l.combo_id)
+      if (validLines.length === 0) {
+        setError('At least one product or combo is required')
+        setSubmitting(false)
+        return
       }
 
-      if (editingId) {
-        console.log(`Updating purchase ${editingId}:`, payload)
-        const response = await api.put(`/api/bevi-stoq/customer-purchases/${editingId}`, payload)
-        console.log('Purchase updated:', response)
-        toast.success('Purchase updated successfully')
-      } else {
-        console.log('Creating new purchase:', payload)
-        const response = await api.post('/api/bevi-stoq/customer-purchases', payload)
-        console.log('Purchase created:', response)
-        toast.success('Purchase recorded successfully')
+      for (const line of validLines) {
+        if (!line.quantity || parseFloat(line.quantity) <= 0) {
+          setError('All quantities must be positive numbers')
+          setSubmitting(false)
+          return
+        }
+        if (line.product_id && !line.unit) {
+          setError('Unit is required for all products')
+          setSubmitting(false)
+          return
+        }
       }
+
+      if (!formData.purchase_date) {
+        setError('Date is required')
+        setSubmitting(false)
+        return
+      }
+
+      // Create a purchase for each line
+      for (const line of validLines) {
+        const quantity = parseFloat(line.quantity)
+        const amount = line.amount ? parseFloat(line.amount) : null
+
+        if (line.product_id) {
+          const payload = {
+            customer_name: formData.customer_name.trim(),
+            contact_id: formData.contact_id ? parseInt(formData.contact_id) : null,
+            product_id: line.product_id,
+            quantity: quantity,
+            unit: line.unit || null,
+            purchase_date: formData.purchase_date,
+            payment_status: formData.payment_status || 'pending',
+            payment_method: formData.payment_method || null,
+            amount: amount,
+            notes: formData.notes || null,
+          }
+
+          if (editingId && validLines.length === 1) {
+            await api.put(`/api/bevi-stoq/customer-purchases/${editingId}`, payload)
+          } else {
+            await api.post('/api/bevi-stoq/customer-purchases', payload)
+          }
+        }
+      }
+
+      toast.success('Purchase recorded successfully')
 
       setFormData({
         customer_name: '',
         contact_id: '',
-        product_id: 0,
-        quantity: '',
-        unit: '',
         purchase_date: new Date().toISOString().split('T')[0],
         payment_status: 'pending',
         payment_method: '',
-        amount: '',
         notes: '',
+        lines: [{ product_id: null, combo_id: null, quantity: '', unit: '', amount: '' }],
       })
       setEditingId(null)
       setShowForm(false)
-      setError(null)
       await fetchData()
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to record purchase'
@@ -178,43 +228,34 @@ export function BeviStoqPurchases() {
     }
   }
 
-  const handleUpdateStatus = async (id: number, status: string) => {
-    try {
-      await api.put(`/api/bevi-stoq/customer-purchases/${id}`, {
-        payment_status: status,
-      })
-      await fetchData()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update purchase')
-    }
-  }
-
   const handleEdit = (purchase: CustomerPurchase) => {
     setFormData({
       customer_name: purchase.customer_name,
       contact_id: purchase.contact_id?.toString() || '',
-      product_id: purchase.product_id,
-      quantity: purchase.quantity.toString(),
-      unit: purchase.unit || '',
       purchase_date: purchase.purchase_date.split('T')[0],
       payment_status: purchase.payment_status,
       payment_method: purchase.payment_method || '',
-      amount: purchase.amount ? purchase.amount.toString() : '',
       notes: purchase.notes || '',
+      lines: [
+        {
+          product_id: purchase.product_id,
+          combo_id: null,
+          quantity: purchase.quantity.toString(),
+          unit: purchase.unit || '',
+          amount: purchase.amount?.toString() || '',
+        },
+      ],
     })
     setEditingId(purchase.id)
     setShowForm(true)
   }
 
   const handleDelete = async (id: number) => {
-    const purchase = purchases.find((p) => p.id === id)
-    const confirmMsg = `⚠️ Delete this purchase?\n\nThis will:\n• Remove the purchase record\n• Restore ${purchase?.quantity} ${purchase?.unit} of ${getProductName(purchase?.product_id || 0)} back to inventory\n\nThis action cannot be undone.`
-
-    if (!confirm(confirmMsg)) return
+    if (!confirm('Delete this purchase?')) return
     try {
       await api.delete(`/api/bevi-stoq/customer-purchases/${id}`)
-      toast.success('Purchase deleted and inventory restored')
       await fetchData()
+      toast.success('Purchase deleted')
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to delete purchase'
       setError(message)
@@ -222,30 +263,13 @@ export function BeviStoqPurchases() {
     }
   }
 
-  const getProductName = (id: number) => products.find((p) => p.id === id)?.name || 'Unknown'
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'paid':
-        return 'bg-green-500/20 text-green-400'
-      case 'pending':
-        return 'bg-yellow-500/20 text-yellow-400'
-      case 'overdue':
-        return 'bg-red-500/20 text-red-400'
-      default:
-        return 'bg-latte/10 text-latte'
-    }
-  }
-
-  let filtered = purchases
-  if (filterStatus) filtered = filtered.filter((p) => p.payment_status === filterStatus)
+  const filteredPurchases = purchases.filter((p) => !filterStatus || p.payment_status === filterStatus)
+  const totalSales = filteredPurchases.reduce((sum, p) => sum + (p.amount || 0), 0)
+  const paidSales = filteredPurchases.filter((p) => p.payment_status === 'paid').reduce((sum, p) => sum + (p.amount || 0), 0)
+  const pendingSales = filteredPurchases.filter((p) => p.payment_status === 'pending').reduce((sum, p) => sum + (p.amount || 0), 0)
 
   if (loading) return <Spinner label="Loading purchases…" />
-  if (error) return <EmptyState emoji="⚠️" title="Error" hint={error} />
-
-  const totalAmount = purchases.reduce((sum, p) => sum + (p.amount ?? 0), 0)
-  const paidAmount = purchases.filter((p) => p.payment_status === 'paid').reduce((sum, p) => sum + (p.amount ?? 0), 0)
-  const pendingAmount = purchases.filter((p) => p.payment_status === 'pending').reduce((sum, p) => sum + (p.amount ?? 0), 0)
+  if (error && !showForm) return <EmptyState emoji="⚠️" title="Error" hint={error} />
 
   return (
     <div className="space-y-6">
@@ -256,20 +280,17 @@ export function BeviStoqPurchases() {
         </div>
         <button
           onClick={() => {
+            setShowForm(!showForm)
+            setEditingId(null)
             setFormData({
               customer_name: '',
               contact_id: '',
-              product_id: 0,
-              quantity: '',
-              unit: '',
               purchase_date: new Date().toISOString().split('T')[0],
               payment_status: 'pending',
               payment_method: '',
-              amount: '',
               notes: '',
+              lines: [{ product_id: null, combo_id: null, quantity: '', unit: '', amount: '' }],
             })
-            setEditingId(null)
-            setShowForm(!showForm)
           }}
           className="flex items-center gap-2 rounded-lg bg-gold/20 px-4 py-2 text-sm font-medium text-gold hover:bg-gold/30"
         >
@@ -279,160 +300,219 @@ export function BeviStoqPurchases() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-lg border border-caramel/15 bg-espresso/40 p-4">
           <p className="text-xs uppercase tracking-wide text-latte/60">Total Sales</p>
-          <p className="mt-1 text-2xl font-bold text-gold">₹{totalAmount.toFixed(2)}</p>
+          <p className="mt-2 text-2xl font-bold text-latte">₹{totalSales.toFixed(2)}</p>
         </div>
         <div className="rounded-lg border border-caramel/15 bg-espresso/40 p-4">
           <p className="text-xs uppercase tracking-wide text-green-400">Paid</p>
-          <p className="mt-1 text-2xl font-bold text-green-400">₹{paidAmount.toFixed(2)}</p>
+          <p className="mt-2 text-2xl font-bold text-green-400">₹{paidSales.toFixed(2)}</p>
         </div>
         <div className="rounded-lg border border-caramel/15 bg-espresso/40 p-4">
           <p className="text-xs uppercase tracking-wide text-yellow-400">Pending</p>
-          <p className="mt-1 text-2xl font-bold text-yellow-400">₹{pendingAmount.toFixed(2)}</p>
+          <p className="mt-2 text-2xl font-bold text-yellow-400">₹{pendingSales.toFixed(2)}</p>
         </div>
       </div>
 
+      {/* New Purchase Form */}
       {showForm && (
-        <form onSubmit={handleSubmit} className="rounded-lg border border-caramel/15 bg-espresso/40 p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-latte">
-              {editingId ? 'Edit Purchase' : 'New Purchase'}
-            </h2>
-            <button
-              type="button"
-              onClick={() => {
-                setShowForm(false)
-                setEditingId(null)
-              }}
-              className="text-latte/60 hover:text-latte"
-            >
-              <X size={20} />
-            </button>
+        <form onSubmit={handleSubmit} className="rounded-lg border border-caramel/15 bg-espresso/40 p-6 space-y-4">
+          <div className="mb-4 pb-4 border-b border-caramel/15">
+            <h2 className="text-lg font-semibold text-latte">New Purchase</h2>
+            {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
           </div>
-          {error && (
-            <div className="mb-4 rounded-lg bg-red-500/20 p-4 text-red-400">
-              <p className="text-sm font-medium">Error: {error}</p>
-            </div>
-          )}
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-latte">Customer Name *</label>
-                <input
-                  type="text"
-                  value={formData.customer_name}
-                  onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
-                  className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte placeholder-latte/40 focus:outline-none focus:ring-2 focus:ring-gold/50"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-latte">Contact ID</label>
-                <input
-                  type="number"
-                  value={formData.contact_id}
-                  onChange={(e) => setFormData({ ...formData, contact_id: e.target.value })}
-                  className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-latte">Product *</label>
-                <select
-                  value={formData.product_id}
-                  onChange={(e) => {
-                    const prodId = parseInt(e.target.value)
-                    const prod = products.find((p) => p.id === prodId)
-                    setFormData({
-                      ...formData,
-                      product_id: prodId,
-                      unit: prod?.default_unit || formData.unit,
-                    })
-                  }}
-                  className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
-                  required
-                >
-                  <option value={0}>Select product</option>
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-latte">Quantity *</label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={formData.quantity}
-                  onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
-                  className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
-                  placeholder="e.g., 1.61"
-                  required
-                />
-              </div>
-              <UnitSelect
-                value={formData.unit}
-                onChange={(unit) => setFormData({ ...formData, unit })}
-                label="Unit"
-                required={true}
+
+          {/* Customer Info */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="block text-sm font-medium text-latte mb-1">Customer Name *</label>
+              <input
+                type="text"
+                value={formData.customer_name}
+                onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
+                className="w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
+                placeholder="Enter customer name"
+                required
               />
             </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-latte">Date *</label>
-                <input
-                  type="date"
-                  value={formData.purchase_date}
-                  onChange={(e) => setFormData({ ...formData, purchase_date: e.target.value })}
-                  className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-latte">Amount (₹) <span className="text-latte/60">(optional)</span></label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={formData.amount}
-                  onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                  className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
-                  placeholder="e.g., 500.50"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-latte">Status</label>
-                <select
-                  value={formData.payment_status}
-                  onChange={(e) => setFormData({ ...formData, payment_status: e.target.value })}
-                  className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
-                >
-                  <option value="pending">Pending</option>
-                  <option value="paid">Paid</option>
-                  <option value="overdue">Overdue</option>
-                </select>
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-latte mb-1">Contact ID (optional)</label>
+              <input
+                type="number"
+                value={formData.contact_id}
+                onChange={(e) => setFormData({ ...formData, contact_id: e.target.value })}
+                className="w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
+                placeholder="Enter contact ID"
+              />
             </div>
+          </div>
+
+          {/* Date and Payment */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div>
+              <label className="block text-sm font-medium text-latte mb-1">Date *</label>
+              <input
+                type="date"
+                value={formData.purchase_date}
+                onChange={(e) => setFormData({ ...formData, purchase_date: e.target.value })}
+                className="w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-latte mb-1">Status</label>
+              <select
+                value={formData.payment_status}
+                onChange={(e) => setFormData({ ...formData, payment_status: e.target.value })}
+                className="w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
+              >
+                <option value="pending">Pending</option>
+                <option value="paid">Paid</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-latte mb-1">Payment Method (optional)</label>
+              <input
+                type="text"
+                value={formData.payment_method}
+                onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
+                className="w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
+                placeholder="e.g., Cash, Card, UPI"
+              />
+            </div>
+          </div>
+
+          {/* Purchase Lines */}
+          <div className="border-t border-caramel/15 pt-4">
+            <h3 className="font-semibold text-latte mb-3">Products & Combos</h3>
+            <div className="space-y-3">
+              {formData.lines.map((line, idx) => (
+                <div key={idx} className="rounded-lg border border-caramel/15 bg-bean/20 p-4">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                    <div>
+                      <label className="block text-xs font-medium text-latte/60 mb-1">Product *</label>
+                      <select
+                        value={line.product_id || ''}
+                        onChange={(e) => handleLineChange(idx, 'product_id', e.target.value ? parseInt(e.target.value) : null)}
+                        className="w-full rounded bg-bean/50 px-3 py-2 text-sm text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
+                      >
+                        <option value="">Select product</option>
+                        {products.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-latte/60 mb-1">or Combo</label>
+                      <select
+                        value={line.combo_id || ''}
+                        onChange={(e) => handleLineChange(idx, 'combo_id', e.target.value ? parseInt(e.target.value) : null)}
+                        className="w-full rounded bg-bean/50 px-3 py-2 text-sm text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
+                      >
+                        <option value="">Select combo</option>
+                        {combos.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-latte/60 mb-1">Qty *</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={line.quantity}
+                        onChange={(e) => handleLineChange(idx, 'quantity', e.target.value)}
+                        className="w-full rounded bg-bean/50 px-3 py-2 text-sm text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
+                        placeholder="1.61"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-latte/60 mb-1">Unit *</label>
+                      <input
+                        type="text"
+                        value={line.unit}
+                        readOnly={!!line.product_id}
+                        className="w-full rounded bg-bean/50 px-3 py-2 text-sm text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
+                        placeholder="Auto-filled"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-latte/60 mb-1">Amount (₹)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={line.amount}
+                        onChange={(e) => handleLineChange(idx, 'amount', e.target.value)}
+                        className="w-full rounded bg-bean/50 px-3 py-2 text-sm text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
+                        placeholder="500.50"
+                      />
+                    </div>
+                  </div>
+
+                  {formData.lines.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveLine(idx)}
+                      className="mt-2 text-xs text-red-400 hover:text-red-300"
+                    >
+                      Remove line
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={handleAddLine}
+              className="mt-3 text-sm text-gold hover:text-gold/80 font-medium"
+            >
+              + Add Product
+            </button>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className="block text-sm font-medium text-latte mb-1">Notes (optional)</label>
+            <textarea
+              value={formData.notes}
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              className="w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
+              placeholder="Add any notes..."
+              rows={3}
+            />
+          </div>
+
+          {/* Total */}
+          <div className="border-t border-caramel/15 pt-4">
+            <div className="flex justify-between items-center mb-4">
+              <span className="text-sm font-medium text-latte">Total Amount:</span>
+              <span className="text-2xl font-bold text-gold">₹{getTotalAmount().toFixed(2)}</span>
+            </div>
+
             <div className="flex gap-3">
               <button
                 type="submit"
                 disabled={submitting}
-                className="rounded bg-gold/20 px-4 py-2 text-sm font-medium text-gold hover:bg-gold/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 rounded bg-gold/20 px-4 py-2 text-sm font-medium text-gold hover:bg-gold/30 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {submitting ? 'Saving...' : editingId ? 'Update Purchase' : 'Record Purchase'}
+                {submitting ? 'Recording...' : 'Record Purchase'}
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setShowForm(false)
-                  setEditingId(null)
-                }}
+                onClick={() => setShowForm(false)}
                 disabled={submitting}
-                className="rounded border border-caramel/30 px-4 py-2 text-sm font-medium text-latte/60 hover:bg-caramel/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 rounded border border-caramel/30 px-4 py-2 text-sm font-medium text-latte/60 hover:bg-caramel/10 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>
@@ -442,70 +522,99 @@ export function BeviStoqPurchases() {
       )}
 
       {/* Filter */}
-      <select
-        value={filterStatus}
-        onChange={(e) => setFilterStatus(e.target.value)}
-        className="rounded bg-bean/50 px-3 py-2 text-sm text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
-      >
-        <option value="">All Statuses</option>
-        <option value="paid">Paid</option>
-        <option value="pending">Pending</option>
-        <option value="overdue">Overdue</option>
-      </select>
+      <div className="flex gap-2">
+        <button
+          onClick={() => setFilterStatus('')}
+          className={`px-3 py-1 rounded text-sm font-medium transition ${
+            filterStatus === '' ? 'bg-gold/20 text-gold border border-gold/30' : 'text-latte/60 hover:text-latte'
+          }`}
+        >
+          All
+        </button>
+        <button
+          onClick={() => setFilterStatus('paid')}
+          className={`px-3 py-1 rounded text-sm font-medium transition ${
+            filterStatus === 'paid' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'text-latte/60 hover:text-latte'
+          }`}
+        >
+          Paid
+        </button>
+        <button
+          onClick={() => setFilterStatus('pending')}
+          className={`px-3 py-1 rounded text-sm font-medium transition ${
+            filterStatus === 'pending' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' : 'text-latte/60 hover:text-latte'
+          }`}
+        >
+          Pending
+        </button>
+      </div>
 
-      {filtered.length === 0 ? (
-        <EmptyState emoji="🛒" title="No purchases" hint="Record your first customer purchase" />
+      {/* Purchases List */}
+      {filteredPurchases.length === 0 ? (
+        <EmptyState emoji="📋" title="No purchases" hint="Record your first purchase to get started" />
       ) : (
-        <div className="space-y-3">
-          {filtered.map((purchase) => (
-            <div key={purchase.id} className="rounded-lg border border-caramel/15 bg-espresso/40 p-4">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-start gap-3">
-                  <DollarSign size={20} className="mt-1 text-gold/60" />
-                  <div className="space-y-1">
-                    <p className="font-semibold text-latte">{purchase.customer_name}</p>
-                    <p className="text-sm text-latte/70">{getProductName(purchase.product_id)}</p>
-                    <p className="text-xs text-latte/50">{new Date(purchase.purchase_date).toLocaleDateString()}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="flex items-center justify-end gap-2 mb-2">
-                    <button
-                      onClick={() => handleEdit(purchase)}
-                      className="rounded p-1 hover:bg-caramel/20 text-latte/60 hover:text-gold"
-                      title="Edit purchase"
-                    >
-                      <Edit2 size={16} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(purchase.id)}
-                      className="rounded p-1 hover:bg-caramel/20 text-latte/60 hover:text-red-400"
-                      title="Delete purchase"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                  <p className="text-lg font-bold text-gold">
-                    {purchase.amount !== null ? `₹${purchase.amount.toFixed(2)}` : '—'}
-                  </p>
-                  <p className="text-xs text-latte/50">{purchase.quantity} {purchase.unit}</p>
-                  <div className="mt-2">
-                    <span className={`inline-block rounded px-2 py-1 text-xs font-medium ${getStatusColor(purchase.payment_status)}`}>
-                      {purchase.payment_status.toUpperCase()}
-                    </span>
-                  </div>
-                  {purchase.payment_status !== 'paid' && (
-                    <button
-                      onClick={() => handleUpdateStatus(purchase.id, 'paid')}
-                      className="mt-2 block text-xs text-green-400 hover:text-green-300"
-                    >
-                      Mark Paid
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
+        <div className="rounded-lg border border-caramel/15 bg-espresso/40 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-caramel/15">
+                  <th className="px-4 py-3 text-left text-latte/60">Customer</th>
+                  <th className="px-4 py-3 text-left text-latte/60">Product</th>
+                  <th className="px-4 py-3 text-left text-latte/60">Qty</th>
+                  <th className="px-4 py-3 text-left text-latte/60">Amount</th>
+                  <th className="px-4 py-3 text-left text-latte/60">Status</th>
+                  <th className="px-4 py-3 text-left text-latte/60">Date</th>
+                  <th className="px-4 py-3 text-right text-latte/60">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-caramel/15">
+                {filteredPurchases.map((purchase) => (
+                  <tr key={purchase.id} className="hover:bg-bean/30 transition">
+                    <td className="px-4 py-3 text-latte">{purchase.customer_name}</td>
+                    <td className="px-4 py-3 text-latte/70">{products.find((p) => p.id === purchase.product_id)?.name || 'Unknown'}</td>
+                    <td className="px-4 py-3 text-latte/70">
+                      {purchase.quantity} {purchase.unit}
+                    </td>
+                    <td className="px-4 py-3 text-latte font-medium">₹{(purchase.amount || 0).toFixed(2)}</td>
+                    <td className="px-4 py-3">
+                      <select
+                        value={purchase.payment_status}
+                        onChange={(e) =>
+                          api
+                            .put(`/api/bevi-stoq/customer-purchases/${purchase.id}`, { payment_status: e.target.value })
+                            .then(() => fetchData())
+                            .catch((err) => toast.error(err.message))
+                        }
+                        className={`rounded px-2 py-1 text-xs font-medium border-0 focus:outline-none focus:ring-2 focus:ring-gold/50 ${
+                          purchase.payment_status === 'paid'
+                            ? 'bg-green-500/20 text-green-400'
+                            : 'bg-yellow-500/20 text-yellow-400'
+                        }`}
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="paid">Paid</option>
+                      </select>
+                    </td>
+                    <td className="px-4 py-3 text-latte/70 text-xs">{new Date(purchase.purchase_date).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 text-right space-x-2">
+                      <button
+                        onClick={() => handleEdit(purchase)}
+                        className="text-blue-400 hover:text-blue-300 inline-block"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(purchase.id)}
+                        className="text-red-400 hover:text-red-300 inline-block"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

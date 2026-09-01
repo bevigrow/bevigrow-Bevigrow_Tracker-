@@ -697,41 +697,58 @@ def cancel_requirement(id: int, db: Session = Depends(get_db), user: User = Depe
 def create_purchase(data: CustomerPurchaseCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """Create customer purchase with UNIT-AWARE automatic inventory deduction.
 
+    CRITICAL: This endpoint MUST subtract the purchased quantity from inventory.
     Uses row-level locking (SELECT FOR UPDATE) to prevent concurrent purchase race conditions.
     Validates sufficient stock CONSIDERING UNITS before creating purchase.
     All calculations use unit conversion to ensure accuracy.
     """
+    from ..unit_converter import convert_to_base_unit, are_units_compatible
     log = logging.getLogger("bevigrow.bevi_stoq")
 
     try:
-        # Get product to access base unit
+        log.info(f"CREATE PURCHASE: START - product_id={data.product_id}, qty={data.quantity}, unit={data.unit}")
+
+        # Step 1: Get product to access base unit
         product = db.get(Product, data.product_id)
         if not product:
+            log.error(f"CREATE PURCHASE: Product {data.product_id} not found")
             raise HTTPException(status_code=404, detail=f"Product {data.product_id} not found")
 
-        log.info(f"CREATE PURCHASE: product={product.name}, base_unit={product.default_unit}, purchase_qty={data.quantity}, purchase_unit={data.unit}")
+        log.info(f"CREATE PURCHASE: Found product - name={product.name}, base_unit={product.default_unit}")
 
-        # Validate units are compatible
-        if not are_units_compatible(data.unit, product.default_unit):
-            raise HTTPException(status_code=400, detail=f"Cannot purchase {data.unit} for product '{product.name}' which uses {product.default_unit}")
+        # Step 2: Validate quantity is positive
+        if data.quantity <= 0:
+            raise HTTPException(status_code=400, detail="Purchase quantity must be greater than 0")
 
-        # Convert purchase quantity to product's base unit for calculation
-        purchase_qty_in_base_unit = convert_to_base_unit(data.quantity, data.unit, product.default_unit)
-        log.info(f"CREATE PURCHASE: converted {data.quantity} {data.unit} → {purchase_qty_in_base_unit} {product.default_unit}")
+        # Step 3: Validate units are compatible
+        try:
+            if not are_units_compatible(data.unit, product.default_unit):
+                raise HTTPException(status_code=400, detail=f"Cannot purchase {data.unit} for product '{product.name}' which uses {product.default_unit}")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid unit: {str(e)}")
 
-        # Check available stock (with unit conversion)
+        # Step 4: Convert purchase quantity to product's base unit
+        try:
+            purchase_qty_in_base_unit = convert_to_base_unit(data.quantity, data.unit, product.default_unit)
+            log.info(f"CREATE PURCHASE: Converted {data.quantity} {data.unit} → {purchase_qty_in_base_unit} {product.default_unit}")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Unit conversion failed: {str(e)}")
+
+        # Step 5: Check available stock with unit conversion
         inventories = db.scalars(select(Inventory).where(Inventory.product_id == data.product_id).with_for_update()).all()
         total_available = sum(inv.physical_stock - inv.reserved_stock for inv in inventories)
+        log.info(f"CREATE PURCHASE: Total available stock = {total_available} {product.default_unit} across {len(inventories)} locations")
 
         if total_available < purchase_qty_in_base_unit:
             shortage = purchase_qty_in_base_unit - total_available
+            log.error(f"CREATE PURCHASE: INSUFFICIENT STOCK - required={purchase_qty_in_base_unit}, available={total_available}, shortage={shortage}")
             raise HTTPException(
                 status_code=400,
                 detail=f"Insufficient stock. Required: {purchase_qty_in_base_unit} {product.default_unit}, "
                        f"Available: {total_available} {product.default_unit}, Shortage: {shortage} {product.default_unit}"
             )
 
-        # Create purchase record
+        # Step 6: Create purchase record (before deducting, so we have a reference for stock movements)
         purchase = CustomerPurchase(
             customer_name=data.customer_name, contact_id=data.contact_id, product_id=data.product_id,
             quantity=data.quantity, unit=data.unit,
@@ -741,42 +758,76 @@ def create_purchase(data: CustomerPurchaseCreate, db: Session = Depends(get_db),
         )
         db.add(purchase)
         db.flush()
-        log.info(f"CREATE PURCHASE: created purchase record id={purchase.id}")
+        log.info(f"CREATE PURCHASE: Created purchase record - id={purchase.id}")
 
-        # Deduct from inventory (convert purchase qty to base unit for deduction)
-        inventories = db.scalars(select(Inventory).where(Inventory.product_id == data.product_id).order_by(Inventory.location_id).with_for_update()).all()
+        # Step 7: CRITICAL - Deduct from inventory across locations
+        inventories_for_deduction = db.scalars(select(Inventory).where(Inventory.product_id == data.product_id).order_by(Inventory.location_id).with_for_update()).all()
         remaining_to_deduct = purchase_qty_in_base_unit
+        total_deducted = 0
+        deduction_count = 0
 
-        for inv in inventories:
-            if remaining_to_deduct <= 0:
+        log.info(f"CREATE PURCHASE: Starting deduction - need to deduct {purchase_qty_in_base_unit} {product.default_unit} from {len(inventories_for_deduction)} location(s)")
+
+        for inv in inventories_for_deduction:
+            if remaining_to_deduct <= 0.000001:  # Use epsilon for float comparison
+                log.info(f"CREATE PURCHASE: Deduction complete - remaining={remaining_to_deduct}")
                 break
+
             available = inv.physical_stock - inv.reserved_stock
-            if available > 0:
+            if available > 0.000001:
                 deduct_qty = min(available, remaining_to_deduct)
                 inv.physical_stock -= deduct_qty
                 remaining_to_deduct -= deduct_qty
-                log.info(f"CREATE PURCHASE: deducted {deduct_qty} {product.default_unit} from location {inv.location_id}")
+                total_deducted += deduct_qty
+                deduction_count += 1
 
+                log.info(f"CREATE PURCHASE: Deducted {deduct_qty} {product.default_unit} from location {inv.location_id} (available was {available}, now {inv.physical_stock})")
+
+                # Create stock movement record
                 movement = StockMovement(
                     product_id=data.product_id, from_location_id=inv.location_id,
                     movement_type=StockMovementType.stock_removed,
-                    quantity=deduct_qty, unit=product.default_unit,  # Store in base unit
+                    quantity=deduct_qty, unit=product.default_unit,
                     reference_id=purchase.id,
                     notes=f"Purchase: {data.quantity} {data.unit} to {data.customer_name}",
                     created_by_user_id=user.id
                 )
                 db.add(movement)
 
+        log.info(f"CREATE PURCHASE: Deduction complete - total_deducted={total_deducted}, from {deduction_count} location(s)")
+
+        if abs(total_deducted - purchase_qty_in_base_unit) > 0.000001:
+            log.error(f"CREATE PURCHASE: CRITICAL - Deduction mismatch! Expected {purchase_qty_in_base_unit}, actually deducted {total_deducted}")
+            db.rollback()
+            raise HTTPException(status_code=500, detail="Purchase deduction failed - inventory mismatch")
+
+        # Step 8: Commit transaction (THIS MUST HAPPEN FOR STOCK CHANGES TO PERSIST)
+        log.info(f"CREATE PURCHASE: Flushing changes...")
+        db.flush()
+        log.info(f"CREATE PURCHASE: Committing transaction...")
         db.commit()
+        log.info(f"CREATE PURCHASE: Commit successful")
+
+        # Step 9: Refresh to get final state from database
         db.refresh(purchase)
-        log.info(f"CREATE PURCHASE: purchase {purchase.id} created and stock deducted successfully")
+
+        # Step 10: Verify deduction was persisted
+        inventories_verify = db.scalars(select(Inventory).where(Inventory.product_id == data.product_id)).all()
+        new_total = sum(inv.physical_stock - inv.reserved_stock for inv in inventories_verify)
+        log.info(f"CREATE PURCHASE: Database verification - old_stock={total_available}, new_stock={new_total}, deducted={total_available - new_total}")
+
+        if abs((total_available - new_total) - purchase_qty_in_base_unit) > 0.000001:
+            log.error(f"CREATE PURCHASE: WARNING - Database deduction doesn't match! Expected reduction of {purchase_qty_in_base_unit}, got {total_available - new_total}")
+
+        log.info(f"CREATE PURCHASE: SUCCESS - purchase {purchase.id} created and stock deducted")
         return purchase
 
     except HTTPException:
+        log.error(f"CREATE PURCHASE: HTTPException raised")
         raise
     except Exception as e:
-        db.rollback()
         log.error(f"CREATE PURCHASE: FAILED - {type(e).__name__}: {str(e)}", exc_info=True)
+        db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to create purchase: {str(e)}")
 
 @router.get("/customer-purchases", response_model=list[CustomerPurchaseOut])
@@ -902,10 +953,14 @@ def update_purchase(id: int, data: CustomerPurchaseUpdate, db: Session = Depends
 
 @router.delete("/customer-purchases/{id}", status_code=204)
 def delete_purchase(id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    """Delete a customer purchase and restore inventory."""
+    """Delete a customer purchase and restore inventory with unit-aware calculation.
+
+    CRITICAL: Must reverse the original deduction (add back the stock).
+    """
+    from ..unit_converter import convert_to_base_unit
     log = logging.getLogger("bevigrow.bevi_stoq")
     try:
-        log.info(f"DELETE PURCHASE: id={id}, user={user.id}")
+        log.info(f"DELETE PURCHASE: START - id={id}")
 
         # Get the purchase with row-level locking
         purchase = db.scalars(select(CustomerPurchase).where(CustomerPurchase.id == id).with_for_update()).first()
@@ -913,41 +968,69 @@ def delete_purchase(id: int, db: Session = Depends(get_db), user: User = Depends
             log.error(f"DELETE PURCHASE: Purchase {id} not found")
             raise HTTPException(status_code=404, detail="Purchase not found")
 
-        log.info(f"DELETE PURCHASE: Found purchase - product_id={purchase.product_id}, quantity={purchase.quantity}, unit={purchase.unit}")
+        log.info(f"DELETE PURCHASE: Found purchase - product_id={purchase.product_id}, qty={purchase.quantity}, unit={purchase.unit}")
 
-        # Restore inventory by adding stock movement
-        if purchase.quantity > 0:
+        # Get product to verify and get base unit
+        product = db.get(Product, purchase.product_id)
+        if not product:
+            log.error(f"DELETE PURCHASE: Product {purchase.product_id} not found")
+            raise HTTPException(status_code=404, detail=f"Product {purchase.product_id} not found")
+
+        # Convert purchase quantity to base unit
+        try:
+            purchase_qty_in_base = convert_to_base_unit(purchase.quantity, purchase.unit, product.default_unit)
+            log.info(f"DELETE PURCHASE: Converted {purchase.quantity} {purchase.unit} → {purchase_qty_in_base} {product.default_unit}")
+        except ValueError as e:
+            log.error(f"DELETE PURCHASE: Unit conversion failed - {str(e)}")
+            raise HTTPException(status_code=400, detail=f"Unit conversion failed: {str(e)}")
+
+        # Restore inventory (reverse the deduction that happened when purchase was created)
+        if purchase_qty_in_base > 0:
             inventories = db.scalars(select(Inventory).where(Inventory.product_id == purchase.product_id).order_by(Inventory.location_id).with_for_update()).all()
-            remaining = purchase.quantity
+            remaining_to_restore = purchase_qty_in_base
+            total_restored = 0
+
+            log.info(f"DELETE PURCHASE: Restoring {purchase_qty_in_base} {product.default_unit} across {len(inventories)} locations")
+
             for inv in inventories:
-                if remaining <= 0: break
-                restore = min(remaining, purchase.quantity)
-                inv.physical_stock += restore
-                remaining -= restore
-                log.info(f"DELETE PURCHASE: Restoring {restore} {purchase.unit} to location {inv.location_id}")
+                if remaining_to_restore <= 0.000001:
+                    log.info(f"DELETE PURCHASE: Restoration complete")
+                    break
+
+                # Restore proportionally to where it was deducted (but we don't track that, so just restore from first location with capacity)
+                restore_qty = min(remaining_to_restore, remaining_to_restore)  # Restore as much as remaining
+                inv.physical_stock += restore_qty
+                remaining_to_restore -= restore_qty
+                total_restored += restore_qty
+
+                log.info(f"DELETE PURCHASE: Restored {restore_qty} {product.default_unit} to location {inv.location_id} (new stock: {inv.physical_stock})")
+
+                # Create stock movement record (to_location because adding stock)
                 movement = StockMovement(
                     product_id=purchase.product_id,
-                    from_location_id=inv.location_id,
+                    to_location_id=inv.location_id,
                     movement_type=StockMovementType.stock_added,
-                    quantity=restore,
-                    unit=purchase.unit,
+                    quantity=restore_qty,
+                    unit=product.default_unit,
                     reference_id=purchase.id,
                     notes=f"Purchase deleted: {purchase.customer_name}",
                     created_by_user_id=user.id
                 )
                 db.add(movement)
+                break  # Restore all to first location (since we don't track which location it was deducted from)
 
         # Delete the purchase record
         log.info(f"DELETE PURCHASE: Deleting purchase record {id}")
         db.delete(purchase)
+        log.info(f"DELETE PURCHASE: Committing transaction")
         db.commit()
-        log.info(f"DELETE PURCHASE: Successfully deleted purchase {id} and restored inventory")
+        log.info(f"DELETE PURCHASE: SUCCESS - purchase {id} deleted and inventory restored")
 
     except HTTPException:
         raise
     except Exception as e:
+        log.error(f"DELETE PURCHASE: FAILED - {type(e).__name__}: {str(e)}", exc_info=True)
         db.rollback()
-        log.error(f"DELETE PURCHASE: Failed - Error: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to delete purchase: {str(e)}")
 
 # ================================================================ COMBOS

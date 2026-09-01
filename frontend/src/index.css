@@ -56,6 +56,16 @@
     filter: invert(0.8) sepia(0.6) saturate(3) hue-rotate(340deg);
     cursor: pointer;
   }
+
+  /* Remove spinner controls from number inputs globally */
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
 }
 
 @layer components {

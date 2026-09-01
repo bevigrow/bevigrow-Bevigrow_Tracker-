@@ -730,6 +730,56 @@ def update_purchase(id: int, data: CustomerPurchaseUpdate, db: Session = Depends
         log.error(f"Error updating purchase {id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to update purchase: {str(e)}")
 
+@router.delete("/customer-purchases/{id}", status_code=204)
+def delete_purchase(id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Delete a customer purchase and restore inventory."""
+    try:
+        log.info(f"DELETE PURCHASE: id={id}, user={user.id}")
+
+        # Get the purchase with row-level locking
+        purchase = db.scalars(select(CustomerPurchase).where(CustomerPurchase.id == id).with_for_update()).first()
+        if not purchase:
+            log.error(f"DELETE PURCHASE: Purchase {id} not found")
+            raise HTTPException(status_code=404, detail="Purchase not found")
+
+        log.info(f"DELETE PURCHASE: Found purchase - product_id={purchase.product_id}, quantity={purchase.quantity}, unit={purchase.unit}")
+
+        # Restore inventory by adding stock movement
+        if purchase.quantity > 0:
+            inventories = db.scalars(select(Inventory).where(Inventory.product_id == purchase.product_id).order_by(Inventory.location_id).with_for_update()).all()
+            remaining = purchase.quantity
+            for inv in inventories:
+                if remaining <= 0: break
+                restore = min(remaining, purchase.quantity)
+                inv.physical_stock += restore
+                remaining -= restore
+                log.info(f"DELETE PURCHASE: Restoring {restore} {purchase.unit} to location {inv.location_id}")
+                movement = StockMovement(
+                    product_id=purchase.product_id,
+                    from_location_id=inv.location_id,
+                    movement_type=StockMovementType.stock_added,
+                    quantity=restore,
+                    unit=purchase.unit,
+                    reference_id=purchase.id,
+                    notes=f"Purchase deleted: {purchase.customer_name}",
+                    created_by_user_id=user.id
+                )
+                db.add(movement)
+
+        # Delete the purchase record
+        log.info(f"DELETE PURCHASE: Deleting purchase record {id}")
+        db.delete(purchase)
+        db.commit()
+        log.info(f"DELETE PURCHASE: Successfully deleted purchase {id} and restored inventory")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        log = logging.getLogger("bevigrow.bevi_stoq")
+        log.error(f"DELETE PURCHASE: Failed - Error: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to delete purchase: {str(e)}")
+
 # ================================================================ COMBOS
 @router.post("/combos", response_model=ComboOut, status_code=201)
 def create_combo(data: ComboCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):

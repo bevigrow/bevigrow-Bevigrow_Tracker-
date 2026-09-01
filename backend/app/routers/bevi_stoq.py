@@ -733,6 +733,7 @@ def update_purchase(id: int, data: CustomerPurchaseUpdate, db: Session = Depends
 @router.delete("/customer-purchases/{id}", status_code=204)
 def delete_purchase(id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """Delete a customer purchase and restore inventory."""
+    log = logging.getLogger("bevigrow.bevi_stoq")
     try:
         log.info(f"DELETE PURCHASE: id={id}, user={user.id}")
 
@@ -776,7 +777,6 @@ def delete_purchase(id: int, db: Session = Depends(get_db), user: User = Depends
         raise
     except Exception as e:
         db.rollback()
-        log = logging.getLogger("bevigrow.bevi_stoq")
         log.error(f"DELETE PURCHASE: Failed - Error: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to delete purchase: {str(e)}")
 

@@ -137,9 +137,10 @@ export default function ResendCampaign() {
     setStep('preview');
     setLoading(true);
     try {
-      const sampleRecipient = review.recipients.find(r => r.is_in_history);
+      // Use ANY recipient as sample - prefer one in history, but if none, use first available
+      const sampleRecipient = review.recipients.find(r => r.is_in_history) || review.recipients[0];
       if (!sampleRecipient) {
-        throw new Error('No sample recipient found');
+        throw new Error('No recipients available for preview');
       }
 
       const formData = new FormData();

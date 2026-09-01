@@ -1,4 +1,4 @@
-import { Plus, Trash2, ArrowRightLeft } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { api } from '../lib/api'
@@ -139,9 +139,6 @@ export function BeviStoqTransfers() {
     newLines[idx] = { ...newLines[idx], ...updates }
     setTransferLines(newLines)
   }
-
-  const getLocationName = (id: number) => locations.find(l => l.id === id)?.name || 'Unknown'
-  const getProductName = (id: number) => products.find(p => p.id === id)?.name || 'Unknown'
 
   if (loading) return <Spinner label="Loading transfers…" />
   if (error && !showForm) return <EmptyState emoji="⚠️" title="Error" hint={error} />

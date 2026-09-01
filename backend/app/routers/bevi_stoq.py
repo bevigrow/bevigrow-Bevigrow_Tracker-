@@ -6,6 +6,7 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from ..utils_bevi_stoq import are_units_compatible, validate_unit
+from ..unit_converter import convert_to_base_unit, get_unit_dimension
 
 log = logging.getLogger(__name__)
 
@@ -624,34 +625,89 @@ def cancel_requirement(id: int, db: Session = Depends(get_db), user: User = Depe
 # ================================================================ CUSTOMER PURCHASES
 @router.post("/customer-purchases", response_model=CustomerPurchaseOut, status_code=201)
 def create_purchase(data: CustomerPurchaseCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    """Create customer purchase with automatic inventory deduction.
+    """Create customer purchase with UNIT-AWARE automatic inventory deduction.
 
     Uses row-level locking (SELECT FOR UPDATE) to prevent concurrent purchase race conditions.
-    Validates sufficient stock before creating purchase to prevent partial fulfillment.
+    Validates sufficient stock CONSIDERING UNITS before creating purchase.
+    All calculations use unit conversion to ensure accuracy.
     """
-    inventories = db.scalars(select(Inventory).where(Inventory.product_id == data.product_id).with_for_update()).all()
-    total_available = sum(inv.physical_stock for inv in inventories)
-    if total_available < data.quantity:
-        raise HTTPException(status_code=400, detail=f"Insufficient stock. Required: {data.quantity}, Available: {total_available}, Shortage: {data.quantity - total_available}")
+    log = logging.getLogger("bevigrow.bevi_stoq")
 
-    purchase = CustomerPurchase(customer_name=data.customer_name, contact_id=data.contact_id, product_id=data.product_id, quantity=data.quantity, unit=data.unit, purchase_date=data.purchase_date, payment_status=PaymentStatus(data.payment_status), payment_method=data.payment_method, amount=data.amount, notes=data.notes, created_by_user_id=user.id)
-    db.add(purchase)
-    db.flush()
+    try:
+        # Get product to access base unit
+        product = db.get(Product, data.product_id)
+        if not product:
+            raise HTTPException(status_code=404, detail=f"Product {data.product_id} not found")
 
-    inventories = db.scalars(select(Inventory).where(Inventory.product_id == data.product_id).order_by(Inventory.location_id).with_for_update()).all()
-    remaining = data.quantity
-    for inv in inventories:
-        if remaining <= 0: break
-        if inv.physical_stock > 0:
-            deduct_qty = min(inv.physical_stock, remaining)
-            inv.physical_stock -= deduct_qty
-            remaining -= deduct_qty
-            movement = StockMovement(product_id=data.product_id, from_location_id=inv.location_id, movement_type=StockMovementType.stock_removed, quantity=deduct_qty, unit=data.unit, reference_id=purchase.id, notes=f"Sale to {data.customer_name}", created_by_user_id=user.id)
-            db.add(movement)
+        log.info(f"CREATE PURCHASE: product={product.name}, base_unit={product.default_unit}, purchase_qty={data.quantity}, purchase_unit={data.unit}")
 
-    db.commit()
-    db.refresh(purchase)
-    return purchase
+        # Validate units are compatible
+        if not are_units_compatible(data.unit, product.default_unit):
+            raise HTTPException(status_code=400, detail=f"Cannot purchase {data.unit} for product '{product.name}' which uses {product.default_unit}")
+
+        # Convert purchase quantity to product's base unit for calculation
+        purchase_qty_in_base_unit = convert_to_base_unit(data.quantity, data.unit, product.default_unit)
+        log.info(f"CREATE PURCHASE: converted {data.quantity} {data.unit} → {purchase_qty_in_base_unit} {product.default_unit}")
+
+        # Check available stock (with unit conversion)
+        inventories = db.scalars(select(Inventory).where(Inventory.product_id == data.product_id).with_for_update()).all()
+        total_available = sum(inv.physical_stock - inv.reserved_stock for inv in inventories)
+
+        if total_available < purchase_qty_in_base_unit:
+            shortage = purchase_qty_in_base_unit - total_available
+            raise HTTPException(
+                status_code=400,
+                detail=f"Insufficient stock. Required: {purchase_qty_in_base_unit} {product.default_unit}, "
+                       f"Available: {total_available} {product.default_unit}, Shortage: {shortage} {product.default_unit}"
+            )
+
+        # Create purchase record
+        purchase = CustomerPurchase(
+            customer_name=data.customer_name, contact_id=data.contact_id, product_id=data.product_id,
+            quantity=data.quantity, unit=data.unit,
+            purchase_date=data.purchase_date, payment_status=PaymentStatus(data.payment_status),
+            payment_method=data.payment_method, amount=data.amount, notes=data.notes,
+            created_by_user_id=user.id
+        )
+        db.add(purchase)
+        db.flush()
+        log.info(f"CREATE PURCHASE: created purchase record id={purchase.id}")
+
+        # Deduct from inventory (convert purchase qty to base unit for deduction)
+        inventories = db.scalars(select(Inventory).where(Inventory.product_id == data.product_id).order_by(Inventory.location_id).with_for_update()).all()
+        remaining_to_deduct = purchase_qty_in_base_unit
+
+        for inv in inventories:
+            if remaining_to_deduct <= 0:
+                break
+            available = inv.physical_stock - inv.reserved_stock
+            if available > 0:
+                deduct_qty = min(available, remaining_to_deduct)
+                inv.physical_stock -= deduct_qty
+                remaining_to_deduct -= deduct_qty
+                log.info(f"CREATE PURCHASE: deducted {deduct_qty} {product.default_unit} from location {inv.location_id}")
+
+                movement = StockMovement(
+                    product_id=data.product_id, from_location_id=inv.location_id,
+                    movement_type=StockMovementType.stock_removed,
+                    quantity=deduct_qty, unit=product.default_unit,  # Store in base unit
+                    reference_id=purchase.id,
+                    notes=f"Purchase: {data.quantity} {data.unit} to {data.customer_name}",
+                    created_by_user_id=user.id
+                )
+                db.add(movement)
+
+        db.commit()
+        db.refresh(purchase)
+        log.info(f"CREATE PURCHASE: purchase {purchase.id} created and stock deducted successfully")
+        return purchase
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        log.error(f"CREATE PURCHASE: FAILED - {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to create purchase: {str(e)}")
 
 @router.get("/customer-purchases", response_model=list[CustomerPurchaseOut])
 def list_purchases(db: Session = Depends(get_db), _: User = Depends(get_current_user), payment_status: str | None = None, limit: int = Query(100, le=1000)):

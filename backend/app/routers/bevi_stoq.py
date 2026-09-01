@@ -2,7 +2,7 @@
 import logging
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, select, update
 from sqlalchemy.orm import Session
 
 from ..utils_bevi_stoq import are_units_compatible, validate_unit
@@ -772,27 +772,45 @@ def create_purchase(data: CustomerPurchaseCreate, db: Session = Depends(get_db),
         log.info(f"CREATE PURCHASE: Created purchase record - id={purchase.id}")
 
         # Step 7: CRITICAL - Deduct from inventory across locations
+        log.info(f"CREATE PURCHASE: STEP 7 - Performing inventory deduction")
         inventories_for_deduction = db.scalars(select(Inventory).where(Inventory.product_id == data.product_id).order_by(Inventory.location_id).with_for_update()).all()
         remaining_to_deduct = purchase_qty_in_base_unit
         total_deducted = 0
         deduction_count = 0
 
-        log.info(f"CREATE PURCHASE: Starting deduction - need to deduct {purchase_qty_in_base_unit} {product.default_unit} from {len(inventories_for_deduction)} location(s)")
+        log.info(f"CREATE PURCHASE: Found {len(inventories_for_deduction)} inventory locations to deduct from")
+        log.info(f"CREATE PURCHASE: Need to deduct total: {purchase_qty_in_base_unit} {product.default_unit}")
 
-        for inv in inventories_for_deduction:
-            if remaining_to_deduct <= 0.000001:  # Use epsilon for float comparison
-                log.info(f"CREATE PURCHASE: Deduction complete - remaining={remaining_to_deduct}")
+        for idx, inv in enumerate(inventories_for_deduction):
+            log.info(f"CREATE PURCHASE:   Location {idx+1} of {len(inventories_for_deduction)}: id={inv.id}, product_id={inv.product_id}, location_id={inv.location_id}")
+
+            if remaining_to_deduct <= 0.000001:
+                log.info(f"CREATE PURCHASE:   Nothing left to deduct, breaking loop")
                 break
 
             available = inv.physical_stock - inv.reserved_stock
+            log.info(f"CREATE PURCHASE:   Before: physical_stock={inv.physical_stock}, reserved_stock={inv.reserved_stock}, available={available}")
+
             if available > 0.000001:
                 deduct_qty = min(available, remaining_to_deduct)
-                inv.physical_stock -= deduct_qty
+                log.info(f"CREATE PURCHASE:   Will deduct: {deduct_qty}")
+
+                # Use explicit UPDATE instead of ORM object modification
+                # This is more reliable for ensuring changes persist
+                stmt = (
+                    update(Inventory)
+                    .where(Inventory.id == inv.id)
+                    .values(physical_stock=Inventory.physical_stock - deduct_qty)
+                )
+                result = db.execute(stmt)
+                log.info(f"CREATE PURCHASE:   UPDATE result: {result.rowcount} rows affected")
+
                 remaining_to_deduct -= deduct_qty
                 total_deducted += deduct_qty
                 deduction_count += 1
 
-                log.info(f"CREATE PURCHASE: Deducted {deduct_qty} {product.default_unit} from location {inv.location_id} (available was {available}, now {inv.physical_stock})")
+                log.info(f"CREATE PURCHASE:   After deduction: physical_stock should now be {inv.physical_stock - deduct_qty}")
+                log.info(f"CREATE PURCHASE:   Remaining to deduct: {remaining_to_deduct}")
 
                 # Create stock movement record
                 movement = StockMovement(
@@ -804,8 +822,11 @@ def create_purchase(data: CustomerPurchaseCreate, db: Session = Depends(get_db),
                     created_by_user_id=user.id
                 )
                 db.add(movement)
+                log.info(f"CREATE PURCHASE:   Added stock movement record")
+            else:
+                log.info(f"CREATE PURCHASE:   No available stock at this location, skipping")
 
-        log.info(f"CREATE PURCHASE: Deduction complete - total_deducted={total_deducted}, from {deduction_count} location(s)")
+        log.info(f"CREATE PURCHASE: Deduction loop complete - total_deducted={total_deducted}, locations={deduction_count}, remaining={remaining_to_deduct}")
 
         if abs(total_deducted - purchase_qty_in_base_unit) > 0.000001:
             log.error(f"CREATE PURCHASE: CRITICAL - Deduction mismatch! Expected {purchase_qty_in_base_unit}, actually deducted {total_deducted}")

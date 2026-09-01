@@ -57,14 +57,15 @@
     cursor: pointer;
   }
 
-  /* Remove spinner controls from number inputs globally */
+  /* Remove spinner controls from number inputs globally - with !important for override */
   input[type='number']::-webkit-outer-spin-button,
   input[type='number']::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
+    -webkit-appearance: none !important;
+    margin: 0 !important;
+    display: none !important;
   }
   input[type='number'] {
-    -moz-appearance: textfield;
+    -moz-appearance: textfield !important;
   }
 }
 

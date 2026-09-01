@@ -736,6 +736,17 @@ def create_purchase(data: CustomerPurchaseCreate, db: Session = Depends(get_db),
 
         # Step 5: Check available stock with unit conversion
         inventories = db.scalars(select(Inventory).where(Inventory.product_id == data.product_id).with_for_update()).all()
+        log.info(f"CREATE PURCHASE: Found {len(inventories)} inventory records for product {data.product_id}")
+
+        if len(inventories) == 0:
+            log.error(f"CREATE PURCHASE: CRITICAL - NO INVENTORY RECORDS EXIST for product {data.product_id}")
+            log.error(f"CREATE PURCHASE: Product has no locations configured for stock tracking")
+            log.error(f"CREATE PURCHASE: User must first create initial stock via BeviStoqStockAddition or product form")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Product '{product.name}' has no inventory configured. Add initial stock first via Stock Addition or Product form."
+            )
+
         total_available = sum(inv.physical_stock - inv.reserved_stock for inv in inventories)
         log.info(f"CREATE PURCHASE: Total available stock = {total_available} {product.default_unit} across {len(inventories)} locations")
 

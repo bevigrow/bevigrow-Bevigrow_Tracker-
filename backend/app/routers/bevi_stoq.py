@@ -795,15 +795,41 @@ def create_purchase(data: CustomerPurchaseCreate, db: Session = Depends(get_db),
                 deduct_qty = min(available, remaining_to_deduct)
                 log.info(f"CREATE PURCHASE:   Will deduct: {deduct_qty}")
 
-                # Use explicit UPDATE instead of ORM object modification
-                # This is more reliable for ensuring changes persist
-                stmt = (
-                    update(Inventory)
-                    .where(Inventory.id == inv.id)
-                    .values(physical_stock=Inventory.physical_stock - deduct_qty)
-                )
-                result = db.execute(stmt)
-                log.info(f"CREATE PURCHASE:   UPDATE result: {result.rowcount} rows affected")
+                # CRITICAL: Use raw SQL to directly update the database
+                # This bypasses any SQLAlchemy session/ORM issues
+                from sqlalchemy import text
+
+                log.info(f"CREATE PURCHASE:   Inventory ID={inv.id}, current_physical={inv.physical_stock}, will deduct={deduct_qty}")
+
+                # Verify the inventory exists first
+                verify_stmt = text("SELECT id, physical_stock FROM bevigrow.bs_inventory WHERE id = :inv_id")
+                verify_result = db.execute(verify_stmt, {"inv_id": inv.id}).first()
+                log.info(f"CREATE PURCHASE:   Database verify BEFORE: {verify_result}")
+
+                if not verify_result:
+                    log.error(f"CREATE PURCHASE:   CRITICAL - Inventory ID {inv.id} not found in database!")
+                    raise HTTPException(status_code=500, detail=f"Inventory record {inv.id} not found in database")
+
+                # Use raw SQL UPDATE - most direct approach
+                update_sql = text("""
+                    UPDATE bevigrow.bs_inventory
+                    SET physical_stock = physical_stock - :deduct_amount
+                    WHERE id = :inv_id
+                """)
+
+                log.info(f"CREATE PURCHASE:   Executing raw SQL UPDATE...")
+                result = db.execute(update_sql, {"deduct_amount": deduct_qty, "inv_id": inv.id})
+                log.info(f"CREATE PURCHASE:   Raw SQL UPDATE result: {result.rowcount} rows affected")
+
+                # Verify the update worked
+                verify_after = db.execute(verify_stmt, {"inv_id": inv.id}).first()
+                log.info(f"CREATE PURCHASE:   Database verify AFTER: {verify_after}")
+
+                if result.rowcount != 1:
+                    log.error(f"CREATE PURCHASE:   CRITICAL - UPDATE failed! rowcount={result.rowcount}, not 1")
+                    raise HTTPException(status_code=500, detail=f"Failed to update inventory - rowcount was {result.rowcount}")
+
+                log.info(f"CREATE PURCHASE:   ✓ Inventory updated successfully in database")
 
                 remaining_to_deduct -= deduct_qty
                 total_deducted += deduct_qty

@@ -199,22 +199,29 @@ export function BeviStoqPurchases() {
         const amount = line.amount ? parseFloat(line.amount) : 0
 
         if (line.product_id || line.combo_id) {
-          const productId = typeof line.product_id === 'number' ? line.product_id : null
-          const comboId = typeof line.combo_id === 'number' ? line.combo_id : null
-
-          const payload = {
+          // Build payload conditionally: PRODUCT XOR COMBO, never both
+          const basePayload = {
             customer_name: formData.customer_name.trim(),
             contact_id: formData.contact_id ? parseInt(formData.contact_id) : null,
-            product_id: productId,
-            combo_id: comboId,
             quantity: quantity,
-            unit: line.unit || null,
             purchase_date: formData.purchase_date,
             payment_status: formData.payment_status || 'pending',
             payment_method: formData.payment_method || null,
             amount: amount,
             notes: formData.notes || null,
           }
+
+          const payload = line.product_id
+            ? {
+                ...basePayload,
+                product_id: line.product_id,
+                unit: line.unit || null,
+              }
+            : {
+                ...basePayload,
+                combo_id: line.combo_id,
+                unit: 'box',
+              }
 
           try {
             if (editingId && validLines.length === 1) {

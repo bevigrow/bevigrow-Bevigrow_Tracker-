@@ -720,24 +720,34 @@ def cancel_requirement(id: int, db: Session = Depends(get_db), user: User = Depe
 # ================================================================ CUSTOMER PURCHASES
 @router.post("/customer-purchases", response_model=CustomerPurchaseOut, status_code=201)
 def create_purchase(data: CustomerPurchaseCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    """Create customer purchase with UNIT-AWARE automatic inventory deduction.
+    """Create customer purchase for PRODUCT or COMBO.
 
-    CRITICAL: This endpoint MUST subtract the purchased quantity from inventory.
-    Uses row-level locking (SELECT FOR UPDATE) to prevent concurrent purchase race conditions.
-    Validates sufficient stock CONSIDERING UNITS before creating purchase.
-    All calculations use unit conversion to ensure accuracy.
+    SUPPORTS:
+    - Product purchase: product_id + unit + quantity → deduct from inventory
+    - Combo purchase: combo_id + quantity → use combo stock deduction logic
+    - NOT BOTH: Each line must be EITHER product OR combo, never both
     """
     from ..unit_converter import convert_to_base_unit, are_units_compatible
     log = logging.getLogger("bevigrow.bevi_stoq")
 
     try:
-        log.info(f"CREATE PURCHASE: START - product_id={data.product_id}, qty={data.quantity}, unit={data.unit}")
+        # Validate: must have exactly one of product_id or combo_id
+        if not data.product_id and not data.combo_id:
+            raise HTTPException(status_code=400, detail="Either product_id or combo_id must be provided")
+        if data.product_id and data.combo_id:
+            raise HTTPException(status_code=400, detail="Cannot specify both product_id and combo_id")
 
-        # Step 1: Get product to access base unit
-        product = db.get(Product, data.product_id)
-        if not product:
-            log.error(f"CREATE PURCHASE: Product {data.product_id} not found")
-            raise HTTPException(status_code=404, detail=f"Product {data.product_id} not found")
+        log.info(f"CREATE PURCHASE: START - product_id={data.product_id}, combo_id={data.combo_id}, qty={data.quantity}")
+
+        # CASE 1: PRODUCT PURCHASE
+        if data.product_id:
+            log.info(f"CREATE PURCHASE: PRODUCT path - product_id={data.product_id}")
+
+            # Get product to access base unit
+            product = db.get(Product, data.product_id)
+            if not product:
+                log.error(f"CREATE PURCHASE: Product {data.product_id} not found")
+                raise HTTPException(status_code=404, detail=f"Product {data.product_id} not found")
 
         log.info(f"CREATE PURCHASE: Found product - name={product.name}, base_unit={product.default_unit}")
 

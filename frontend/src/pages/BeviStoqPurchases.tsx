@@ -9,7 +9,8 @@ interface CustomerPurchase {
   id: number
   contact_id: number | null
   customer_name: string
-  product_id: number
+  product_id: number | null
+  combo_id: number | null
   quantity: number
   unit: string | null
   purchase_date: string
@@ -622,7 +623,13 @@ export function BeviStoqPurchases() {
                 {filteredPurchases.map((purchase) => (
                   <tr key={purchase.id} className="hover:bg-bean/30 transition">
                     <td className="px-4 py-3 text-latte">{purchase.customer_name}</td>
-                    <td className="px-4 py-3 text-latte/70">{products.find((p) => p.id === purchase.product_id)?.name || 'Unknown'}</td>
+                    <td className="px-4 py-3 text-latte/70">
+                      {purchase.product_id
+                        ? products.find((p) => p.id === purchase.product_id)?.name
+                        : purchase.combo_id
+                        ? combos.find((c) => c.id === purchase.combo_id)?.name
+                        : 'Unknown'}
+                    </td>
                     <td className="px-4 py-3 text-latte/70">
                       {purchase.quantity} {purchase.unit}
                     </td>

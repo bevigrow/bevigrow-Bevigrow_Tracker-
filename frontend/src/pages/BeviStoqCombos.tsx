@@ -22,6 +22,21 @@ interface Combo {
   created_at: string
 }
 
+interface ComboAvailability {
+  combo_id: number
+  combo_name: string
+  available_quantity: number
+  status: string
+  components: Array<{
+    product_id: number
+    product_name: string
+    required_per_combo: number
+    total_available: number
+    unit: string
+    combos_possible: number
+  }>
+}
+
 interface Product {
   id: number
   name: string
@@ -40,6 +55,9 @@ export function BeviStoqCombos() {
     items: [{ product_id: 0, quantity: '', unit: '' }],
   })
   const [editingId, setEditingId] = useState<number | null>(null)
+  const [selectedComboId, setSelectedComboId] = useState<number | null>(null)
+  const [availability, setAvailability] = useState<ComboAvailability | null>(null)
+  const [loadingAvailability, setLoadingAvailability] = useState(false)
 
   useEffect(() => {
     fetchData()
@@ -108,6 +126,23 @@ export function BeviStoqCombos() {
 
   const getProductName = (id: number) => products.find((p) => p.id === id)?.name || 'Unknown'
   const getProductUnit = (id: number) => products.find((p) => p.id === id)?.default_unit || ''
+
+  const fetchAvailability = async (comboId: number) => {
+    setLoadingAvailability(true)
+    try {
+      const res = await api.get<ComboAvailability>(`/api/bevi-stoq/combos/${comboId}/availability`)
+      setAvailability(res)
+    } catch (err) {
+      console.error('Failed to fetch combo availability:', err)
+    } finally {
+      setLoadingAvailability(false)
+    }
+  }
+
+  const handleViewDetails = (comboId: number) => {
+    setSelectedComboId(comboId)
+    fetchAvailability(comboId)
+  }
 
   if (loading) return <Spinner label="Loading combos…" />
   if (error) return <EmptyState emoji="⚠️" title="Error" hint={error} />
@@ -252,15 +287,77 @@ export function BeviStoqCombos() {
         </form>
       )}
 
-      {combos.length === 0 ? (
-        <EmptyState emoji="📦" title="No combos" hint="Create your first product combo bundle" />
+      {selectedComboId && availability ? (
+        <div className="rounded-lg border border-caramel/15 bg-espresso/40 p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-latte">{availability.combo_name}</h2>
+            <button
+              onClick={() => {
+                setSelectedComboId(null)
+                setAvailability(null)
+              }}
+              className="text-latte/60 hover:text-latte"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="mb-4 p-4 rounded-lg bg-bean/20 border border-caramel/15">
+            <p className="text-sm text-latte/60 mb-1">Available Quantity</p>
+            <div className="flex items-baseline gap-2">
+              <span className="text-4xl font-bold text-gold">{availability.available_quantity}</span>
+              <span className={`text-sm font-medium ${availability.status === 'AVAILABLE' ? 'text-green-400' : 'text-red-400'}`}>
+                {availability.status === 'AVAILABLE' ? '✓ AVAILABLE' : '✗ OUT OF STOCK'}
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="font-semibold text-latte mb-3">Component Stock Status</h3>
+            <div className="space-y-2">
+              {availability.components.map((comp) => (
+                <div key={comp.product_id} className="rounded-lg border border-caramel/15 bg-bean/20 p-3">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <p className="font-medium text-latte">{comp.product_name}</p>
+                      <p className="text-xs text-latte/60 mt-0.5">Required per combo: {comp.required_per_combo} {comp.unit}</p>
+                    </div>
+                    <span className={`text-sm font-medium ${comp.combos_possible > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {comp.combos_possible} possible
+                    </span>
+                  </div>
+                  <div className="w-full bg-espresso/50 rounded h-2 overflow-hidden">
+                    <div
+                      className={`h-full transition-all ${comp.combos_possible > 0 ? 'bg-green-500/60' : 'bg-red-500/60'}`}
+                      style={{ width: `${Math.min(100, (comp.combos_possible / Math.max(1, availability.available_quantity + 2)) * 100)}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between mt-2 text-xs text-latte/60">
+                    <span>Available: {comp.total_available} {comp.unit}</span>
+                    <span>Used per combo: {comp.required_per_combo} {comp.unit}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {combos.map((combo) => (
+        <>
+          {combos.length === 0 ? (
+            <EmptyState emoji="📦" title="No combos" hint="Create your first product combo bundle" />
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {combos.map((combo) => (
             <div key={combo.id} className="rounded-lg border border-caramel/15 bg-espresso/40 p-4">
               <div className="mb-3 flex items-start justify-between">
                 <h3 className="font-semibold text-latte">{combo.name}</h3>
                 <div className="flex gap-2">
+                  <button
+                    onClick={() => handleViewDetails(combo.id)}
+                    className="rounded p-1 hover:bg-caramel/20 text-latte/60 hover:text-purple-400 text-xs"
+                  >
+                    📊
+                  </button>
                   <button
                     onClick={() => handleEdit(combo)}
                     className="rounded p-1 hover:bg-caramel/20 text-latte/60 hover:text-gold"
@@ -285,8 +382,10 @@ export function BeviStoqCombos() {
                 ))}
               </div>
             </div>
-          ))}
-        </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   )

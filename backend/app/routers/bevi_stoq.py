@@ -1244,6 +1244,146 @@ def validate_combo_stock(id: int, quantity: float = Query(..., gt=0), db: Sessio
         log.error(f"Combo validation error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Validation error: {str(e)}")
 
+@router.get("/combos/{id}/availability")
+def get_combo_availability(id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Get combo availability based on component stock levels"""
+    try:
+        combo = db.get(Combo, id)
+        if not combo:
+            raise HTTPException(status_code=404, detail="Combo not found")
+
+        from ..unit_converter import convert_to_base_unit
+
+        components = []
+        min_available = float('inf')
+
+        for item in combo.items:
+            prod = db.get(Product, item.product_id)
+            if not prod:
+                raise HTTPException(status_code=400, detail=f"Component product {item.product_id} not found")
+
+            # Get available stock for this component
+            total_available = db.scalar(
+                select(func.coalesce(func.sum(Inventory.physical_stock - Inventory.reserved_stock), 0))
+                .where(Inventory.product_id == item.product_id)
+            ) or 0
+
+            # Convert component quantity to base unit
+            required_per_combo = convert_to_base_unit(item.quantity, item.unit or prod.default_unit, prod.default_unit)
+
+            # How many combos can this component support?
+            combos_available_from_component = int(total_available / required_per_combo) if required_per_combo > 0 else 0
+            min_available = min(min_available, combos_available_from_component)
+
+            components.append({
+                "product_id": prod.id,
+                "product_name": prod.name,
+                "required_per_combo": required_per_combo,
+                "total_available": total_available,
+                "unit": prod.default_unit,
+                "combos_possible": combos_available_from_component
+            })
+
+        available_quantity = max(0, min_available) if min_available != float('inf') else 0
+
+        return {
+            "combo_id": combo.id,
+            "combo_name": combo.name,
+            "available_quantity": available_quantity,
+            "status": "AVAILABLE" if available_quantity > 0 else "OUT_OF_STOCK",
+            "components": components
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Combo availability error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Availability check failed: {str(e)}")
+
+@router.post("/combos/{id}/purchase", status_code=201)
+def purchase_combo(id: int, quantity: float = Query(..., gt=0), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Purchase a combo - deducts component stock atomically"""
+    try:
+        from ..unit_converter import convert_to_base_unit
+
+        combo = db.get(Combo, id)
+        if not combo:
+            raise HTTPException(status_code=404, detail="Combo not found")
+
+        # Validate stock availability first
+        components_check = []
+        for item in combo.items:
+            prod = db.get(Product, item.product_id)
+            if not prod:
+                raise HTTPException(status_code=400, detail=f"Component product {item.product_id} not found")
+
+            required_qty_base = convert_to_base_unit(item.quantity * quantity, item.unit or prod.default_unit, prod.default_unit)
+            available = db.scalar(
+                select(func.coalesce(func.sum(Inventory.physical_stock - Inventory.reserved_stock), 0))
+                .where(Inventory.product_id == item.product_id)
+            ) or 0
+
+            if available < required_qty_base:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Insufficient stock for {prod.name}. Required: {required_qty_base} {prod.default_unit}, Available: {available} {prod.default_unit}"
+                )
+
+            components_check.append((item.product_id, prod, required_qty_base, item.unit or prod.default_unit))
+
+        # Deduct from each component (atomic transaction)
+        movements = []
+        for product_id, prod, required_qty, unit in components_check:
+            # Lock and deduct
+            inventories = db.scalars(
+                select(Inventory)
+                .where(Inventory.product_id == product_id)
+                .order_by(Inventory.location_id)
+                .with_for_update()
+            ).all()
+
+            remaining = required_qty
+            for inv in inventories:
+                if remaining <= 0:
+                    break
+
+                available = inv.physical_stock - inv.reserved_stock
+                if available > 0:
+                    deduct = min(available, remaining)
+                    inv.physical_stock -= deduct
+                    remaining -= deduct
+
+                    # Create stock movement
+                    movement = StockMovement(
+                        product_id=product_id,
+                        from_location_id=inv.location_id,
+                        movement_type=StockMovementType.stock_removed,
+                        quantity=deduct,
+                        unit=prod.default_unit,
+                        notes=f"Combo Sale: {combo.name} × {quantity}",
+                        created_by_user_id=user.id
+                    )
+                    db.add(movement)
+                    movements.append(movement)
+
+        db.commit()
+        log.info(f"Combo {combo.name} × {quantity} sold - {len(movements)} component movements recorded")
+
+        return {
+            "status": "success",
+            "combo_id": combo.id,
+            "combo_name": combo.name,
+            "quantity_sold": quantity,
+            "components_deducted": len(components_check),
+            "movements_created": len(movements)
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Combo purchase error: {e}", exc_info=True)
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Combo purchase failed: {str(e)}")
+
 # ================================================================ DASHBOARD
 @router.get("/dashboard", response_model=DashboardOut)
 def get_dashboard(db: Session = Depends(get_db), _: User = Depends(get_current_user)):

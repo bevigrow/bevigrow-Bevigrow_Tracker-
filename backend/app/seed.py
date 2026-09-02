@@ -122,7 +122,7 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("bs_requirement_items", "quantity_reserved", "FLOAT DEFAULT 0 NOT NULL"),
     ("bs_requirement_items", "quantity_fulfilled", "FLOAT DEFAULT 0 NOT NULL"),
 
-    # Customer purchases: payment + audit
+    # Customer purchases: payment + audit + combo support
     ("bs_customer_purchases", "contact_id", "INTEGER"),
     ("bs_customer_purchases", "payment_status", "VARCHAR(50) DEFAULT 'pending'"),
     ("bs_customer_purchases", "payment_method", "VARCHAR(100)"),
@@ -130,6 +130,7 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("bs_customer_purchases", "notes", "TEXT"),
     ("bs_customer_purchases", "updated_at", "TIMESTAMP WITH TIME ZONE DEFAULT NOW()"),
     ("bs_customer_purchases", "updated_by_user_id", "INTEGER"),
+    ("bs_customer_purchases", "combo_id", "INTEGER"),
 
     # Combos: audit timestamps
     ("bs_combos", "updated_at", "TIMESTAMP WITH TIME ZONE DEFAULT NOW()"),
@@ -276,6 +277,41 @@ def migrate_columns() -> None:
                 log.info("Made bs_customer_purchases.amount nullable")
             except Exception as e:
                 log.warning(f"Could not make amount nullable (may already be nullable): {e}")
+
+        # Make bs_customer_purchases.product_id nullable (combo purchases don't have product_id)
+        if not settings.is_sqlite:
+            try:
+                conn.execute(
+                    text(f"ALTER TABLE {prefix}bs_customer_purchases ALTER COLUMN product_id DROP NOT NULL")
+                )
+                log.info("Made bs_customer_purchases.product_id nullable")
+            except Exception as e:
+                log.warning(f"Could not make product_id nullable (may already be nullable): {e}")
+
+            # Add foreign key for combo_id if it doesn't exist
+            try:
+                # Check if the constraint already exists
+                constraint_exists = conn.execute(
+                    text(
+                        f"SELECT constraint_name FROM information_schema.table_constraints "
+                        f"WHERE table_schema = '{settings.schema}' "
+                        f"AND table_name = 'bs_customer_purchases' "
+                        f"AND constraint_name = 'bs_customer_purchases_combo_id_fkey'"
+                    )
+                ).first()
+
+                if not constraint_exists:
+                    conn.execute(
+                        text(
+                            f"ALTER TABLE {prefix}bs_customer_purchases "
+                            f"ADD CONSTRAINT bs_customer_purchases_combo_id_fkey "
+                            f"FOREIGN KEY (combo_id) REFERENCES {prefix}bs_combos (id) "
+                            f"ON DELETE SET NULL"
+                        )
+                    )
+                    log.info("Added foreign key bs_customer_purchases.combo_id -> bs_combos.id")
+            except Exception as e:
+                log.warning(f"Could not add combo_id foreign key (may already exist): {e}")
 
         # Final schema validation - ensure all critical columns exist and have correct types
         if not settings.is_sqlite:

@@ -437,13 +437,22 @@ export function BeviStoqPurchases() {
 
                     <div>
                       <label className="block text-xs font-medium text-latte/60 mb-1">Unit *</label>
-                      <input
-                        type="text"
+                      <select
                         value={line.unit}
-                        readOnly={!!line.product_id}
+                        onChange={(e) => handleLineChange(idx, 'unit', e.target.value)}
                         className="w-full rounded bg-bean/50 px-3 py-2 text-sm text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
-                        placeholder="Auto-filled"
-                      />
+                        required
+                      >
+                        <option value="">Select unit</option>
+                        <option value="g">g</option>
+                        <option value="kg">kg</option>
+                        <option value="tonne">tonne</option>
+                        <option value="ml">ml</option>
+                        <option value="litre">litre</option>
+                        <option value="pcs">pcs</option>
+                        <option value="box">box</option>
+                        <option value="bag">bag</option>
+                      </select>
                     </div>
 
                     <div>

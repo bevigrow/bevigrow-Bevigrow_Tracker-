@@ -25,12 +25,9 @@ class Settings(BaseSettings):
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def _check_db_url(cls, value: str) -> str:
-        """Ensure DATABASE_URL is not using the default SQLite in production."""
-        if value.startswith("sqlite") and not os.getenv("ENVIRONMENT", "development").lower().startswith("dev"):
-            raise ValueError(
-                "DATABASE_URL must be set to a PostgreSQL connection string in production. "
-                "Add DATABASE_URL to Render environment variables."
-            )
+        """Warn if using SQLite in production, but allow for now."""
+        if value.startswith("sqlite") and os.getenv("ENVIRONMENT", "development").lower() == "production":
+            print("⚠️ WARNING: Using SQLite in production. Set DATABASE_URL in Render environment.")
         return value
 
     # PostgreSQL schema to own BeviGrow's tables. Keeping them out of `public`

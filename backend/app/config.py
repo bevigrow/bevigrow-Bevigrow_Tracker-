@@ -1,4 +1,5 @@
 """Application settings, loaded from environment variables."""
+import os
 from functools import lru_cache
 from pathlib import Path
 
@@ -17,7 +18,20 @@ class Settings(BaseSettings):
 
     # Neon PostgreSQL. Example:
     # postgresql+psycopg://USER:PASS@ep-xxx.aws.neon.tech/bevigrow?sslmode=require
+    # In production (Render), this MUST be set via environment variable.
+    # Pydantic-settings prioritizes environment variables, but only if they are set.
     DATABASE_URL: str = f"sqlite:///{BASE_DIR / 'bevigrow_dev.db'}"
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def _check_db_url(cls, value: str) -> str:
+        """Ensure DATABASE_URL is not using the default SQLite in production."""
+        if value.startswith("sqlite") and not os.getenv("ENVIRONMENT", "development").lower().startswith("dev"):
+            raise ValueError(
+                "DATABASE_URL must be set to a PostgreSQL connection string in production. "
+                "Add DATABASE_URL to Render environment variables."
+            )
+        return value
 
     # PostgreSQL schema to own BeviGrow's tables. Keeping them out of `public`
     # means the app can share a Neon database with anything else already there

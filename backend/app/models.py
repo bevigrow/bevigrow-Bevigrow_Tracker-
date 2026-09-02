@@ -188,6 +188,7 @@ class EmailTemplate(Base):
     """
 
     __tablename__ = "email_templates"
+    __table_args__ = {"schema": "bevigrow"}
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
@@ -215,6 +216,7 @@ class Campaign(Base):
     """One import of companies, worked through at a controlled pace."""
 
     __tablename__ = "campaigns"
+    __table_args__ = {"schema": "bevigrow"}
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
@@ -372,6 +374,7 @@ class SendAttempt(Base):
     """
 
     __tablename__ = "send_attempts"
+    __table_args__ = {"schema": "bevigrow"}
 
     id: Mapped[int] = mapped_column(primary_key=True)
     campaign_id: Mapped[int] = mapped_column(
@@ -723,6 +726,7 @@ class Contact(Base):
     """A coffee customer (export) or supplier (import)."""
 
     __tablename__ = "contacts"
+    __table_args__ = {"schema": "bevigrow"}
 
     id: Mapped[int] = mapped_column(primary_key=True)
     # Only the company name is required, and even that is filled with a

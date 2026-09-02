@@ -39,18 +39,30 @@ async def lifespan(app: FastAPI):
     log.info("Database: %s", "PostgreSQL (Neon)" if not settings.is_sqlite else "SQLite (local dev)")
     log.info("AI model: %s", settings.AI_MODEL)
 
-    # Non-blocking startup: all heavy operations run in background threads
-    # This lets the API become responsive ASAP.
     import threading
+    import time
 
+    # Database initialization MUST complete before scheduler starts.
+    # The scheduler queries campaigns, send_attempts, and other tables.
+    # If those tables don't exist, the scheduler fails and pollutes the logs.
+    db_init_event = threading.Event()
+    db_init_error = None
 
-    def _init_async():
+    def _init_sync():
+        """Synchronous database initialization — MUST complete before scheduler."""
+        nonlocal db_init_error
         try:
+            log.info("Initializing database schema and seed data...")
             seed.run()
+            log.info("Database initialization complete")
         except Exception as exc:
-            log.error('Seed failed: %s', exc)
+            db_init_error = exc
+            log.error('Database initialization failed: %s', exc, exc_info=True)
+        finally:
+            db_init_event.set()
 
     def _recover_async():
+        """Send recovery — only after DB is initialized."""
         try:
             from .database import SessionLocal
             from .services.engine import recover_stuck
@@ -61,20 +73,40 @@ async def lifespan(app: FastAPI):
         except Exception as exc:
             log.error('Send recovery failed: %s', exc)
 
-    # Start seed in background (creates tables, admin account, demo data)
-    threading.Thread(target=_init_async, daemon=True).start()
+    # Initialize database FIRST (blocking on initialization complete)
+    init_thread = threading.Thread(target=_init_sync, daemon=False)
+    init_thread.start()
 
-    # Start send recovery in background (marks stuck attempts as unverified)
-    # This is safe to run async since it only marks records, doesn't send.
+    # Wait for database initialization to complete (timeout 30s)
+    db_initialized = db_init_event.wait(timeout=30)
+    if not db_initialized:
+        log.error('Database initialization timed out after 30 seconds')
+        engine.dispose()
+        raise RuntimeError('Database initialization timeout')
+
+    if db_init_error:
+        log.error('Database initialization failed, scheduler will not start')
+        engine.dispose()
+        raise RuntimeError(f'Database initialization failed: {db_init_error}')
+
+    # Only after DB is ready: recover stuck sends
     threading.Thread(target=_recover_async, daemon=True).start()
 
-    # The sender runs in here, so a campaign continues after the browser
-    # that started it has gone. State lives in the database, so the thread
-    # can stop at any moment without losing its place.
+    # Now start the scheduler (safe: all tables exist)
     from .services import scheduler
-    scheduler.start()
+    try:
+        scheduler.start()
+        log.info("Outreach scheduler started")
+    except Exception as exc:
+        log.error("Failed to start scheduler: %s", exc, exc_info=True)
+
     yield
-    scheduler.stop()
+
+    try:
+        scheduler.stop()
+    except Exception:
+        pass
+
     engine.dispose()
 
 

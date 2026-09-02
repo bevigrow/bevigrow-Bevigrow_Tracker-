@@ -186,8 +186,8 @@ export function BeviStoqPurchases() {
           const payload = {
             customer_name: formData.customer_name.trim(),
             contact_id: formData.contact_id ? parseInt(formData.contact_id) : null,
-            product_id: line.product_id || null,
-            combo_id: line.combo_id || null,
+            product_id: line.product_id ? parseInt(line.product_id.toString()) : null,
+            combo_id: line.combo_id ? parseInt(line.combo_id.toString()) : null,
             quantity: quantity,
             unit: line.unit || null,
             purchase_date: formData.purchase_date,

@@ -210,6 +210,7 @@ export function Outreach() {
   const [dueOnly, setDueOnly] = useState(false)
   const [period, setPeriod] = useState('')
   const [countries, setCountries] = useState<CountryOption[]>([])
+  const [visibleCount, setVisibleCount] = useState(10)
 
   // The full record, fetched on open. The list rows do not carry the message
   // we sent or the notes — that is the point of the list being small.
@@ -265,6 +266,8 @@ export function Outreach() {
 
   useEffect(() => {
     const id = window.setTimeout(() => void load(), 300)
+    // Reset visible count when filters change, so new results start at top
+    setVisibleCount(10)
     return () => window.clearTimeout(id)
   }, [load])
 
@@ -524,140 +527,165 @@ export function Outreach() {
           }
         />
       ) : (
-        <div className="space-y-3">
-          {rows.map((r) => {
-            const overdue =
-              r.next_follow_up &&
-              new Date(r.next_follow_up) <= new Date(new Date().toDateString()) &&
-              r.status !== 'no_response' &&
-              r.status !== 'not_interested'
-            return (
-              <Card key={r.id} className="!p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <button
-                    onClick={() => void openRecord(r)}
-                    className="min-w-0 flex-1 text-left"
-                    aria-label={`Open ${r.company_name}`}
-                    aria-busy={opening === r.id}
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium text-latte">{r.company_name}</span>
-                      {r.contact_person && (
-                        <span className="text-[11px] text-latte/45">· {r.contact_person}</span>
-                      )}
-                      {r.country && <span className="text-[11px] text-latte/35">{r.country}</span>}
-                    </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <StatusPill status={r.status} />
-                      {/* The address, not the word "Email".
-                          One company with three mailboxes is three rows here,
-                          on purpose — each is written to and answers (or does
-                          not) separately. Labelling every row "Email" made
-                          those three look like the same row entered thrice. */}
-                      <span className="chip max-w-full border-caramel/25 bg-bean/40 text-latte/55">
-                        {METHOD_META[r.contact_method].icon}{' '}
-                        <span className="truncate">
-                          {r.contact_point || r.email || METHOD_META[r.contact_method].label}
-                        </span>
-                      </span>
-                      {r.follow_ups_sent > 0 && (
-                        <span className="text-[11px] text-latte/40">
-                          {r.follow_ups_sent} follow-up{r.follow_ups_sent === 1 ? '' : 's'}
-                        </span>
-                      )}
-                    </div>
-                    {r.their_reply && (
-                      <p className="mt-2 line-clamp-2 rounded-lg border border-emerald-400/20 bg-emerald-400/[0.06] px-3 py-2 text-[12px] leading-relaxed text-latte/75">
-                        {r.their_reply}
-                      </p>
-                    )}
-                    {r.next_action && (
-                      <p className="mt-2 text-[12px] text-gold/85">→ {r.next_action}</p>
-                    )}
-                    <p className="mt-2 text-[11px] text-latte/35">
-                      {r.contacted_on ? `Contacted ${formatDate(r.contacted_on)}` : 'Not yet sent'}
-                      {r.next_follow_up && (
-                        <>
-                          {' · '}
-                          <span className={overdue ? 'text-gold' : ''}>
-                            next {relativeDays(r.next_follow_up)}
+        <div className="space-y-4">
+          <div className="space-y-3">
+            {rows.slice(0, visibleCount).map((r) => {
+              const overdue =
+                r.next_follow_up &&
+                new Date(r.next_follow_up) <= new Date(new Date().toDateString()) &&
+                r.status !== 'no_response' &&
+                r.status !== 'not_interested'
+              return (
+                <Card key={r.id} className="!p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <button
+                      onClick={() => void openRecord(r)}
+                      className="min-w-0 flex-1 text-left"
+                      aria-label={`Open ${r.company_name}`}
+                      aria-busy={opening === r.id}
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium text-latte">{r.company_name}</span>
+                        {r.contact_person && (
+                          <span className="text-[11px] text-latte/45">· {r.contact_person}</span>
+                        )}
+                        {r.country && <span className="text-[11px] text-latte/35">{r.country}</span>}
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <StatusPill status={r.status} />
+                        {/* The address, not the word "Email".
+                            One company with three mailboxes is three rows here,
+                            on purpose — each is written to and answers (or does
+                            not) separately. Labelling every row "Email" made
+                            those three look like the same row entered thrice. */}
+                        <span className="chip max-w-full border-caramel/25 bg-bean/40 text-latte/55">
+                          {METHOD_META[r.contact_method].icon}{' '}
+                          <span className="truncate">
+                            {r.contact_point || r.email || METHOD_META[r.contact_method].label}
                           </span>
-                        </>
+                        </span>
+                        {r.follow_ups_sent > 0 && (
+                          <span className="text-[11px] text-latte/40">
+                            {r.follow_ups_sent} follow-up{r.follow_ups_sent === 1 ? '' : 's'}
+                          </span>
+                        )}
+                      </div>
+                      {r.their_reply && (
+                        <p className="mt-2 line-clamp-2 rounded-lg border border-emerald-400/20 bg-emerald-400/[0.06] px-3 py-2 text-[12px] leading-relaxed text-latte/75">
+                          {r.their_reply}
+                        </p>
                       )}
-                    </p>
-                  </button>
+                      {r.next_action && (
+                        <p className="mt-2 text-[12px] text-gold/85">→ {r.next_action}</p>
+                      )}
+                      <p className="mt-2 text-[11px] text-latte/35">
+                        {r.contacted_on ? `Contacted ${formatDate(r.contacted_on)}` : 'Not yet sent'}
+                        {r.next_follow_up && (
+                          <>
+                            {' · '}
+                            <span className={overdue ? 'text-gold' : ''}>
+                              next {relativeDays(r.next_follow_up)}
+                            </span>
+                          </>
+                        )}
+                      </p>
+                    </button>
 
-                  <div className="flex shrink-0 items-center gap-1">
-                    {r.website && (
-                      <a
-                        href={r.website.startsWith('http') ? r.website : `https://${r.website}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="rounded-lg p-2 text-latte/40 transition hover:bg-latte/10 hover:text-gold"
-                        aria-label={`Open ${r.company_name} website`}
-                      >
-                        <Globe size={15} />
-                      </a>
-                    )}
-                    {r.status !== 'replied' && (
+                    <div className="flex shrink-0 items-center gap-1">
+                      {r.website && (
+                        <a
+                          href={r.website.startsWith('http') ? r.website : `https://${r.website}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded-lg p-2 text-latte/40 transition hover:bg-latte/10 hover:text-gold"
+                          aria-label={`Open ${r.company_name} website`}
+                        >
+                          <Globe size={15} />
+                        </a>
+                      )}
+                      {r.status !== 'replied' && (
+                        <button
+                          onClick={() => markReplied(r)}
+                          className="rounded-lg p-2 text-latte/40 transition hover:bg-emerald-400/15 hover:text-emerald-300"
+                          aria-label={`Mark ${r.company_name} as replied`}
+                          title="They answered — stop chasing them"
+                        >
+                          <MailCheck size={15} />
+                        </button>
+                      )}
+                      {r.status !== 'not_interested' && r.status !== 'replied' && (
+                        <button
+                          onClick={() => markNotInterested(r)}
+                          className="rounded-lg p-2 text-latte/40 transition hover:bg-latte/10 hover:text-latte/70"
+                          aria-label={`Close ${r.company_name} as not interested`}
+                          title="Not interested — close it"
+                        >
+                          <CircleSlash size={15} />
+                        </button>
+                      )}
                       <button
-                        onClick={() => markReplied(r)}
-                        className="rounded-lg p-2 text-latte/40 transition hover:bg-emerald-400/15 hover:text-emerald-300"
-                        aria-label={`Mark ${r.company_name} as replied`}
-                        title="They answered — stop chasing them"
-                      >
-                        <MailCheck size={15} />
-                      </button>
-                    )}
-                    {r.status !== 'not_interested' && r.status !== 'replied' && (
-                      <button
-                        onClick={() => markNotInterested(r)}
-                        className="rounded-lg p-2 text-latte/40 transition hover:bg-latte/10 hover:text-latte/70"
-                        aria-label={`Close ${r.company_name} as not interested`}
-                        title="Not interested — close it"
-                      >
-                        <CircleSlash size={15} />
-                      </button>
-                    )}
-                    <button
-                      onClick={() => followUp(r)}
-                      className="rounded-lg p-2 text-latte/40 transition hover:bg-gold/15 hover:text-gold"
-                      aria-label={`Log a follow-up for ${r.company_name}`}
-                      title="I chased them again today"
-                    >
-                      <Clock size={15} />
-                    </button>
-                    {r.quote_id ? (
-                      <button
-                        onClick={() => navigate(`/app/trade/quotes/${r.quote_id}`)}
-                        className="rounded-lg p-2 text-gold/70 transition hover:bg-gold/15 hover:text-gold"
-                        aria-label={`Open the quote for ${r.company_name}`}
-                        title="Open its quote on the trade desk"
-                      >
-                        <FilePlus2 size={15} />
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => convert(r)}
+                        onClick={() => followUp(r)}
                         className="rounded-lg p-2 text-latte/40 transition hover:bg-gold/15 hover:text-gold"
-                        aria-label={`Turn ${r.company_name} into a quote`}
-                        title="Turn into a quote on the trade desk"
+                        aria-label={`Log a follow-up for ${r.company_name}`}
+                        title="I chased them again today"
                       >
-                        <FilePlus2 size={15} />
+                        <Clock size={15} />
                       </button>
-                    )}
-                    <button
-                      onClick={() => setDeleting(r)}
-                      className="rounded-lg p-2 text-latte/40 transition hover:bg-red-500/15 hover:text-red-300"
-                      aria-label={`Delete ${r.company_name}`}
-                    >
-                      <Trash2 size={15} />
-                    </button>
+                      {r.quote_id ? (
+                        <button
+                          onClick={() => navigate(`/app/trade/quotes/${r.quote_id}`)}
+                          className="rounded-lg p-2 text-gold/70 transition hover:bg-gold/15 hover:text-gold"
+                          aria-label={`Open the quote for ${r.company_name}`}
+                          title="Open its quote on the trade desk"
+                        >
+                          <FilePlus2 size={15} />
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => convert(r)}
+                          className="rounded-lg p-2 text-latte/40 transition hover:bg-gold/15 hover:text-gold"
+                          aria-label={`Turn ${r.company_name} into a quote`}
+                          title="Turn into a quote on the trade desk"
+                        >
+                          <FilePlus2 size={15} />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setDeleting(r)}
+                        className="rounded-lg p-2 text-latte/40 transition hover:bg-red-500/15 hover:text-red-300"
+                        aria-label={`Delete ${r.company_name}`}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              </Card>
-            )
-          })}
+                </Card>
+              )
+            })}
+          </div>
+
+          {/* Pagination controls */}
+          {rows.length > visibleCount && (
+            <div className="flex justify-center border-t border-caramel/15 pt-4">
+              <button
+                onClick={() => setVisibleCount((c) => c + 15)}
+                className="rounded-lg border border-gold/30 bg-gold/5 px-6 py-2.5 font-medium text-gold transition hover:bg-gold/10"
+              >
+                Show {Math.min(15, rows.length - visibleCount)} more
+              </button>
+            </div>
+          )}
+
+          {visibleCount > 10 && rows.length > 10 && (
+            <div className="flex justify-center pt-2">
+              <button
+                onClick={() => setVisibleCount(10)}
+                className="rounded-lg px-6 py-2.5 font-medium text-latte/60 transition hover:text-latte"
+              >
+                Show less
+              </button>
+            </div>
+          )}
         </div>
       )}
 

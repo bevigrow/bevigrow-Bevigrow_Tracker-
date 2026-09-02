@@ -719,231 +719,158 @@ def cancel_requirement(id: int, db: Session = Depends(get_db), user: User = Depe
 
 # ================================================================ CUSTOMER PURCHASES
 @router.post("/customer-purchases", response_model=CustomerPurchaseOut, status_code=201)
-def create_purchase(data: CustomerPurchaseCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+async def create_purchase(data: CustomerPurchaseCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """Create customer purchase for PRODUCT or COMBO.
 
-    SUPPORTS:
-    - Product purchase: product_id + unit + quantity → deduct from inventory
-    - Combo purchase: combo_id + quantity → use combo stock deduction logic
-    - NOT BOTH: Each line must be EITHER product OR combo, never both
+    - Product: product_id + unit + quantity → deduct inventory
+    - Combo: combo_id + quantity → simple record, no inventory ops
     """
     from ..unit_converter import convert_to_base_unit, are_units_compatible
+    from sqlalchemy import text
+    from ..config import settings
+
     log = logging.getLogger("bevigrow.bevi_stoq")
+    schema_prefix = f'"{settings.schema}".' if settings.schema else ""
 
     try:
-        # Validate: must have exactly one of product_id or combo_id
-        if not data.product_id and not data.combo_id:
-            raise HTTPException(status_code=400, detail="Either product_id or combo_id must be provided")
-        if data.product_id and data.combo_id:
-            raise HTTPException(status_code=400, detail="Cannot specify both product_id and combo_id")
+        log.info(f"CREATE PURCHASE: START - product_id={data.product_id}, combo_id={data.combo_id}")
 
-        log.info(f"CREATE PURCHASE: START - product_id={data.product_id}, combo_id={data.combo_id}, qty={data.quantity}")
-
+        # ============================================================
         # CASE 1: PRODUCT PURCHASE
+        # ============================================================
         if data.product_id:
-            log.info(f"CREATE PURCHASE: PRODUCT path - product_id={data.product_id}")
+            log.info(f"CREATE PURCHASE: PRODUCT path")
 
-            # Get product to access base unit
             product = db.get(Product, data.product_id)
             if not product:
-                log.error(f"CREATE PURCHASE: Product {data.product_id} not found")
-                raise HTTPException(status_code=404, detail=f"Product {data.product_id} not found")
+                raise HTTPException(status_code=404, detail=f"Product not found")
 
-        log.info(f"CREATE PURCHASE: Found product - name={product.name}, base_unit={product.default_unit}")
+            if data.quantity <= 0:
+                raise HTTPException(status_code=400, detail="Quantity must be > 0")
 
-        # Step 2: Validate quantity is positive
-        if data.quantity <= 0:
-            raise HTTPException(status_code=400, detail="Purchase quantity must be greater than 0")
+            # Validate unit compatibility
+            try:
+                if not are_units_compatible(data.unit, product.default_unit):
+                    raise HTTPException(status_code=400, detail=f"Unit {data.unit} incompatible with {product.default_unit}")
+                purchase_qty_base = convert_to_base_unit(data.quantity, data.unit, product.default_unit)
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
 
-        # Step 3: Validate units are compatible
-        try:
-            if not are_units_compatible(data.unit, product.default_unit):
-                raise HTTPException(status_code=400, detail=f"Cannot purchase {data.unit} for product '{product.name}' which uses {product.default_unit}")
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=f"Invalid unit: {str(e)}")
+            # Check inventory exists and has stock
+            inventories = db.scalars(select(Inventory).where(Inventory.product_id == data.product_id).with_for_update()).all()
+            if not inventories:
+                raise HTTPException(status_code=400, detail=f"No inventory configured for this product")
 
-        # Step 4: Convert purchase quantity to product's base unit
-        try:
-            purchase_qty_in_base_unit = convert_to_base_unit(data.quantity, data.unit, product.default_unit)
-            log.info(f"CREATE PURCHASE: Converted {data.quantity} {data.unit} → {purchase_qty_in_base_unit} {product.default_unit}")
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=f"Unit conversion failed: {str(e)}")
+            total_available = sum(inv.physical_stock - inv.reserved_stock for inv in inventories)
+            if total_available < purchase_qty_base:
+                raise HTTPException(status_code=400, detail=f"Insufficient stock. Need {purchase_qty_base}, have {total_available}")
 
-        # Step 5: Check available stock with unit conversion
-        inventories = db.scalars(select(Inventory).where(Inventory.product_id == data.product_id).with_for_update()).all()
-        log.info(f"CREATE PURCHASE: Found {len(inventories)} inventory records for product {data.product_id}")
-
-        if len(inventories) == 0:
-            log.error(f"CREATE PURCHASE: CRITICAL - NO INVENTORY RECORDS EXIST for product {data.product_id}")
-            log.error(f"CREATE PURCHASE: Product has no locations configured for stock tracking")
-            log.error(f"CREATE PURCHASE: User must first create initial stock via BeviStoqStockAddition or product form")
-            raise HTTPException(
-                status_code=400,
-                detail=f"Product '{product.name}' has no inventory configured. Add initial stock first via Stock Addition or Product form."
+            # Create purchase record
+            purchase = CustomerPurchase(
+                customer_name=data.customer_name,
+                contact_id=data.contact_id,
+                product_id=data.product_id,
+                quantity=data.quantity,
+                unit=data.unit,
+                purchase_date=data.purchase_date,
+                payment_status=PaymentStatus(data.payment_status),
+                payment_method=data.payment_method,
+                amount=data.amount,
+                notes=data.notes,
+                created_by_user_id=user.id
             )
+            db.add(purchase)
+            db.flush()
+            log.info(f"CREATE PURCHASE: Purchase record id={purchase.id}")
 
-        total_available = sum(inv.physical_stock - inv.reserved_stock for inv in inventories)
-        log.info(f"CREATE PURCHASE: Total available stock = {total_available} {product.default_unit} across {len(inventories)} locations")
+            # Deduct inventory across locations
+            inventories_deduct = db.scalars(
+                select(Inventory)
+                .where(Inventory.product_id == data.product_id)
+                .order_by(Inventory.location_id)
+                .with_for_update()
+            ).all()
 
-        if total_available < purchase_qty_in_base_unit:
-            shortage = purchase_qty_in_base_unit - total_available
-            log.error(f"CREATE PURCHASE: INSUFFICIENT STOCK - required={purchase_qty_in_base_unit}, available={total_available}, shortage={shortage}")
-            raise HTTPException(
-                status_code=400,
-                detail=f"Insufficient stock. Required: {purchase_qty_in_base_unit} {product.default_unit}, "
-                       f"Available: {total_available} {product.default_unit}, Shortage: {shortage} {product.default_unit}"
+            remaining = purchase_qty_base
+            for inv in inventories_deduct:
+                if remaining <= 0.000001:
+                    break
+
+                available = inv.physical_stock - inv.reserved_stock
+                if available > 0.000001:
+                    deduct = min(available, remaining)
+
+                    # Raw SQL UPDATE for direct database manipulation
+                    update_sql = text(f"""
+                        UPDATE {schema_prefix}bs_inventory
+                        SET physical_stock = physical_stock - :amt
+                        WHERE id = :id
+                    """)
+                    result = db.execute(update_sql, {"amt": deduct, "id": inv.id})
+
+                    if result.rowcount != 1:
+                        raise HTTPException(status_code=500, detail="Inventory update failed")
+
+                    # Record stock movement
+                    movement = StockMovement(
+                        product_id=data.product_id,
+                        from_location_id=inv.location_id,
+                        movement_type=StockMovementType.stock_removed,
+                        quantity=deduct,
+                        unit=product.default_unit,
+                        reference_id=purchase.id,
+                        notes=f"Purchase: {data.quantity} {data.unit} to {data.customer_name}",
+                        created_by_user_id=user.id
+                    )
+                    db.add(movement)
+
+                    remaining -= deduct
+                    log.info(f"CREATE PURCHASE: Deducted {deduct} from location {inv.location_id}")
+
+            db.commit()
+            db.refresh(purchase)
+            log.info(f"CREATE PURCHASE: SUCCESS - product purchase {purchase.id}")
+            return purchase
+
+        # ============================================================
+        # CASE 2: COMBO PURCHASE
+        # ============================================================
+        elif data.combo_id:
+            log.info(f"CREATE PURCHASE: COMBO path")
+
+            combo = db.get(Combo, data.combo_id)
+            if not combo:
+                raise HTTPException(status_code=404, detail="Combo not found")
+
+            if data.quantity <= 0:
+                raise HTTPException(status_code=400, detail="Quantity must be > 0")
+
+            # For combos, unit should be "box" - set it if not provided
+            unit = data.unit if data.unit else "box"
+
+            # Create purchase record (NO inventory deduction for combos)
+            purchase = CustomerPurchase(
+                customer_name=data.customer_name,
+                contact_id=data.contact_id,
+                combo_id=data.combo_id,
+                quantity=data.quantity,
+                unit=unit,
+                purchase_date=data.purchase_date,
+                payment_status=PaymentStatus(data.payment_status),
+                payment_method=data.payment_method,
+                amount=data.amount,
+                notes=data.notes,
+                created_by_user_id=user.id
             )
+            db.add(purchase)
+            db.commit()
+            db.refresh(purchase)
 
-        # Step 6: Create purchase record (before deducting, so we have a reference for stock movements)
-        purchase = CustomerPurchase(
-            customer_name=data.customer_name, contact_id=data.contact_id, product_id=data.product_id,
-            quantity=data.quantity, unit=data.unit,
-            purchase_date=data.purchase_date, payment_status=PaymentStatus(data.payment_status),
-            payment_method=data.payment_method, amount=data.amount, notes=data.notes,
-            created_by_user_id=user.id
-        )
-        db.add(purchase)
-        db.flush()
-        log.info(f"CREATE PURCHASE: Created purchase record - id={purchase.id}")
-
-        # Step 7: CRITICAL - Deduct from inventory across locations
-        log.info(f"CREATE PURCHASE: STEP 7 - Performing inventory deduction")
-        inventories_for_deduction = db.scalars(select(Inventory).where(Inventory.product_id == data.product_id).order_by(Inventory.location_id).with_for_update()).all()
-        remaining_to_deduct = purchase_qty_in_base_unit
-        total_deducted = 0
-        deduction_count = 0
-
-        log.info(f"CREATE PURCHASE: Found {len(inventories_for_deduction)} inventory locations to deduct from")
-        log.info(f"CREATE PURCHASE: Need to deduct total: {purchase_qty_in_base_unit} {product.default_unit}")
-
-        for idx, inv in enumerate(inventories_for_deduction):
-            log.info(f"CREATE PURCHASE:   Location {idx+1} of {len(inventories_for_deduction)}: id={inv.id}, product_id={inv.product_id}, location_id={inv.location_id}")
-
-            if remaining_to_deduct <= 0.000001:
-                log.info(f"CREATE PURCHASE:   Nothing left to deduct, breaking loop")
-                break
-
-            available = inv.physical_stock - inv.reserved_stock
-            log.info(f"CREATE PURCHASE:   Before: physical_stock={inv.physical_stock}, reserved_stock={inv.reserved_stock}, available={available}")
-
-            if available > 0.000001:
-                deduct_qty = min(available, remaining_to_deduct)
-                log.info(f"CREATE PURCHASE:   Will deduct: {deduct_qty}")
-
-                # CRITICAL: Use raw SQL to directly update the database
-                # This bypasses any SQLAlchemy session/ORM issues
-                from sqlalchemy import text
-
-                log.info(f"CREATE PURCHASE:   Inventory ID={inv.id}, current_physical={inv.physical_stock}, will deduct={deduct_qty}")
-
-                # Verify the inventory exists first
-                # Note: Use schema-qualified name to ensure we're updating the right table
-                from ..config import settings
-                schema_prefix = f'"{settings.schema}".' if settings.schema else ""
-
-                verify_sql = f"SELECT id, physical_stock FROM {schema_prefix}bs_inventory WHERE id = :inv_id"
-                verify_stmt = text(verify_sql)
-                verify_result = db.execute(verify_stmt, {"inv_id": inv.id}).first()
-                log.info(f"CREATE PURCHASE:   Database verify BEFORE: {verify_result}")
-
-                if not verify_result:
-                    log.error(f"CREATE PURCHASE:   CRITICAL - Inventory ID {inv.id} not found in database!")
-                    log.error(f"CREATE PURCHASE:   Query was: {verify_sql}")
-                    raise HTTPException(status_code=500, detail=f"Inventory record {inv.id} not found in database")
-
-                # Use raw SQL UPDATE - most direct approach
-                update_sql_str = f"""
-                    UPDATE {schema_prefix}bs_inventory
-                    SET physical_stock = physical_stock - :deduct_amount
-                    WHERE id = :inv_id
-                """
-                log.info(f"CREATE PURCHASE:   Executing: {update_sql_str.strip()}")
-                update_sql = text(update_sql_str)
-
-                log.info(f"CREATE PURCHASE:   Executing raw SQL UPDATE...")
-                log.info(f"CREATE PURCHASE:   SQL: {update_sql_str}")
-                log.info(f"CREATE PURCHASE:   Params: deduct_amount={deduct_qty}, inv_id={inv.id}")
-
-                result = db.execute(update_sql, {"deduct_amount": deduct_qty, "inv_id": inv.id})
-                log.info(f"CREATE PURCHASE:   Raw SQL UPDATE result: rowcount={result.rowcount}")
-
-                # CRITICAL: Verify the update worked IMMEDIATELY
-                log.info(f"CREATE PURCHASE:   Verifying update...")
-                verify_after_stmt = text(verify_sql)
-                verify_after = db.execute(verify_after_stmt, {"inv_id": inv.id}).first()
-                log.info(f"CREATE PURCHASE:   Database verify AFTER: {verify_after}")
-
-                # Check if update actually happened
-                if result.rowcount != 1:
-                    log.error(f"CREATE PURCHASE:   ⚠️ UPDATE FAILED - rowcount was {result.rowcount}, expected 1")
-                    log.error(f"CREATE PURCHASE:   This means UPDATE statement did not match any rows")
-                    log.error(f"CREATE PURCHASE:   Either inventory ID {inv.id} doesn't exist, or there's a constraint issue")
-                    raise HTTPException(status_code=500, detail=f"Inventory update failed - no rows updated (rowcount={result.rowcount})")
-
-                # Also check if value actually changed
-                if verify_after and len(verify_after) >= 2:
-                    new_physical = verify_after[1]
-                    expected_new_physical = inv.physical_stock - deduct_qty
-                    log.info(f"CREATE PURCHASE:   Value check - database has {new_physical}, expected {expected_new_physical}")
-
-                    if abs(new_physical - expected_new_physical) > 0.000001:
-                        log.error(f"CREATE PURCHASE:   ⚠️ VALUE MISMATCH - database value did not change as expected!")
-                        log.error(f"CREATE PURCHASE:   Database: {new_physical}, Expected: {expected_new_physical}")
-                        raise HTTPException(status_code=500, detail=f"Update executed but value didn't change - database may be read-only or have constraints")
-
-                log.info(f"CREATE PURCHASE:   ✓ Inventory updated successfully in database")
-
-                remaining_to_deduct -= deduct_qty
-                total_deducted += deduct_qty
-                deduction_count += 1
-
-                log.info(f"CREATE PURCHASE:   After deduction: physical_stock should now be {inv.physical_stock - deduct_qty}")
-                log.info(f"CREATE PURCHASE:   Remaining to deduct: {remaining_to_deduct}")
-
-                # Create stock movement record
-                movement = StockMovement(
-                    product_id=data.product_id, from_location_id=inv.location_id,
-                    movement_type=StockMovementType.stock_removed,
-                    quantity=deduct_qty, unit=product.default_unit,
-                    reference_id=purchase.id,
-                    notes=f"Purchase: {data.quantity} {data.unit} to {data.customer_name}",
-                    created_by_user_id=user.id
-                )
-                db.add(movement)
-                log.info(f"CREATE PURCHASE:   Added stock movement record")
-            else:
-                log.info(f"CREATE PURCHASE:   No available stock at this location, skipping")
-
-        log.info(f"CREATE PURCHASE: Deduction loop complete - total_deducted={total_deducted}, locations={deduction_count}, remaining={remaining_to_deduct}")
-
-        if abs(total_deducted - purchase_qty_in_base_unit) > 0.000001:
-            log.error(f"CREATE PURCHASE: CRITICAL - Deduction mismatch! Expected {purchase_qty_in_base_unit}, actually deducted {total_deducted}")
-            db.rollback()
-            raise HTTPException(status_code=500, detail="Purchase deduction failed - inventory mismatch")
-
-        # Step 8: Commit transaction (THIS MUST HAPPEN FOR STOCK CHANGES TO PERSIST)
-        log.info(f"CREATE PURCHASE: Flushing changes...")
-        db.flush()
-        log.info(f"CREATE PURCHASE: Committing transaction...")
-        db.commit()
-        log.info(f"CREATE PURCHASE: Commit successful")
-
-        # Step 9: Refresh to get final state from database
-        db.refresh(purchase)
-
-        # Step 10: Verify deduction was persisted
-        inventories_verify = db.scalars(select(Inventory).where(Inventory.product_id == data.product_id)).all()
-        new_total = sum(inv.physical_stock - inv.reserved_stock for inv in inventories_verify)
-        log.info(f"CREATE PURCHASE: Database verification - old_stock={total_available}, new_stock={new_total}, deducted={total_available - new_total}")
-
-        if abs((total_available - new_total) - purchase_qty_in_base_unit) > 0.000001:
-            log.error(f"CREATE PURCHASE: WARNING - Database deduction doesn't match! Expected reduction of {purchase_qty_in_base_unit}, got {total_available - new_total}")
-
-        log.info(f"CREATE PURCHASE: SUCCESS - purchase {purchase.id} created and stock deducted")
-        return purchase
+            log.info(f"CREATE PURCHASE: SUCCESS - combo purchase {purchase.id}")
+            return purchase
 
     except HTTPException:
-        log.error(f"CREATE PURCHASE: HTTPException raised")
+        db.rollback()
         raise
     except Exception as e:
         log.error(f"CREATE PURCHASE: FAILED - {type(e).__name__}: {str(e)}", exc_info=True)

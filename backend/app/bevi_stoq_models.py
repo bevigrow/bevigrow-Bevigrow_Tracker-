@@ -249,7 +249,7 @@ class RequirementItem(Base):
 
 
 class CustomerPurchase(Base):
-    """Record of customer purchase transactions."""
+    """Record of customer purchase transactions (product or combo)."""
     __tablename__ = "bs_customer_purchases"
     __table_args__ = {"schema": "bevigrow"}
 
@@ -257,8 +257,11 @@ class CustomerPurchase(Base):
     contact_id: Mapped[int | None] = mapped_column(ForeignKey("bevigrow.contacts.id"))
     customer_name: Mapped[str] = mapped_column(String(200), nullable=False)
 
-    product_id: Mapped[int] = mapped_column(ForeignKey("bevigrow.bs_products.id"), index=True)
-    product: Mapped["Product"] = relationship(back_populates="customer_purchases")
+    product_id: Mapped[int | None] = mapped_column(ForeignKey("bevigrow.bs_products.id"), index=True, nullable=True)
+    product: Mapped["Product | None"] = relationship(back_populates="customer_purchases")
+
+    combo_id: Mapped[int | None] = mapped_column(ForeignKey("bevigrow.bs_combos.id"), index=True, nullable=True)
+    combo: Mapped["Combo | None"] = relationship(back_populates="customer_purchases")
 
     quantity: Mapped[float] = mapped_column(Float, nullable=False)
     unit: Mapped[str | None] = mapped_column(String(50))
@@ -293,6 +296,7 @@ class Combo(Base):
     updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
 
     items: Mapped[list["ComboItem"]] = relationship(back_populates="combo", cascade="all, delete-orphan")
+    customer_purchases: Mapped[list["CustomerPurchase"]] = relationship(back_populates="combo")
 
 
 class ComboItem(Base):

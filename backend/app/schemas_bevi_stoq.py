@@ -248,7 +248,8 @@ class CustomerPurchaseOut(BaseModel):
     id: int
     contact_id: int | None
     customer_name: str
-    product_id: int
+    product_id: int | None
+    combo_id: int | None
     quantity: float
     unit: str | None
     purchase_date: datetime

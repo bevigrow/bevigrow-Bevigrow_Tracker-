@@ -137,7 +137,7 @@ export function BeviStoqPurchases() {
       if (value) {
         updatedLine.combo_id = parseInt(value)
         updatedLine.product_id = null
-        updatedLine.unit = ''
+        updatedLine.unit = 'box'
       } else {
         updatedLine.combo_id = null
       }
@@ -176,6 +176,11 @@ export function BeviStoqPurchases() {
         }
         if (line.product_id && !line.unit) {
           setError('Unit is required for products')
+          setSubmitting(false)
+          return
+        }
+        if (line.combo_id && line.unit !== 'box') {
+          setError('Combos must use box as unit')
           setSubmitting(false)
           return
         }
@@ -460,23 +465,29 @@ export function BeviStoqPurchases() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-medium text-latte/60 mb-1">Unit *</label>
-                      <select
-                        value={line.unit}
-                        onChange={(e) => handleLineChange(idx, 'unit', e.target.value)}
-                        className="w-full rounded bg-bean/50 px-3 py-2 text-sm text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
-                        required
-                      >
-                        <option value="">Select unit</option>
-                        <option value="g">g</option>
-                        <option value="kg">kg</option>
-                        <option value="tonne">tonne</option>
-                        <option value="ml">ml</option>
-                        <option value="litre">litre</option>
-                        <option value="pcs">pcs</option>
-                        <option value="box">box</option>
-                        <option value="bag">bag</option>
-                      </select>
+                      <label className="block text-xs font-medium text-latte/60 mb-1">Unit {line.combo_id ? '(box)' : '*'}</label>
+                      {line.combo_id ? (
+                        <div className="w-full rounded bg-bean/50 px-3 py-2 text-sm text-latte/60">
+                          box
+                        </div>
+                      ) : (
+                        <select
+                          value={line.unit}
+                          onChange={(e) => handleLineChange(idx, 'unit', e.target.value)}
+                          className="w-full rounded bg-bean/50 px-3 py-2 text-sm text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
+                          required
+                        >
+                          <option value="">Select unit</option>
+                          <option value="g">g</option>
+                          <option value="kg">kg</option>
+                          <option value="tonne">tonne</option>
+                          <option value="ml">ml</option>
+                          <option value="litre">litre</option>
+                          <option value="pcs">pcs</option>
+                          <option value="box">box</option>
+                          <option value="bag">bag</option>
+                        </select>
+                      )}
                     </div>
 
                     <div>

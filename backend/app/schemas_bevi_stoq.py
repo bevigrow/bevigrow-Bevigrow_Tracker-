@@ -1,6 +1,6 @@
 """Pydantic schemas for Bevi Stoq inventory management."""
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 # ================================================================ CATEGORIES
@@ -211,7 +211,8 @@ class RequirementOut(BaseModel):
 class CustomerPurchaseCreate(BaseModel):
     customer_name: str = Field(..., min_length=1, max_length=200)
     contact_id: int | None = None
-    product_id: int
+    product_id: int | None = None
+    combo_id: int | None = None
     quantity: float = Field(..., gt=0)
     unit: str | None = None
     purchase_date: datetime
@@ -219,6 +220,14 @@ class CustomerPurchaseCreate(BaseModel):
     payment_method: str | None = None
     amount: float | None = Field(None, ge=0)
     notes: str | None = None
+
+    @model_validator(mode='after')
+    def validate_product_xor_combo(self):
+        if not self.product_id and not self.combo_id:
+            raise ValueError('Either product_id or combo_id must be provided')
+        if self.product_id and self.combo_id:
+            raise ValueError('Cannot specify both product_id and combo_id')
+        return self
 
 
 class CustomerPurchaseUpdate(BaseModel):

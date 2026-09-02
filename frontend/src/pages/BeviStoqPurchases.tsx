@@ -123,13 +123,24 @@ export function BeviStoqPurchases() {
     const newLines = [...formData.lines]
     const updatedLine = { ...newLines[idx], [field]: value } as PurchaseLine
 
-    if (field === 'product_id' && value) {
-      updatedLine.unit = getProductUnit(parseInt(value))
-      updatedLine.combo_id = null
+    if (field === 'product_id') {
+      if (value) {
+        updatedLine.product_id = parseInt(value)
+        updatedLine.unit = getProductUnit(parseInt(value))
+        updatedLine.combo_id = null
+      } else {
+        updatedLine.product_id = null
+      }
     }
 
-    if (field === 'combo_id' && value) {
-      updatedLine.product_id = null
+    if (field === 'combo_id') {
+      if (value) {
+        updatedLine.combo_id = parseInt(value)
+        updatedLine.product_id = null
+        updatedLine.unit = ''
+      } else {
+        updatedLine.combo_id = null
+      }
     }
 
     newLines[idx] = updatedLine
@@ -180,17 +191,17 @@ export function BeviStoqPurchases() {
       let savedCount = 0
       for (const line of validLines) {
         const quantity = parseFloat(line.quantity)
-        const amount = line.amount ? parseFloat(line.amount) : null
+        const amount = line.amount ? parseFloat(line.amount) : 0
 
         if (line.product_id || line.combo_id) {
-          const productId = line.product_id ? parseInt(line.product_id.toString()) : null
-          const comboId = line.combo_id ? parseInt(line.combo_id.toString()) : null
+          const productId = typeof line.product_id === 'number' ? line.product_id : null
+          const comboId = typeof line.combo_id === 'number' ? line.combo_id : null
 
           const payload = {
             customer_name: formData.customer_name.trim(),
             contact_id: formData.contact_id ? parseInt(formData.contact_id) : null,
-            product_id: isNaN(productId!) ? null : productId,
-            combo_id: isNaN(comboId!) ? null : comboId,
+            product_id: productId,
+            combo_id: comboId,
             quantity: quantity,
             unit: line.unit || null,
             purchase_date: formData.purchase_date,

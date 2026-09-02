@@ -8,6 +8,7 @@ class UnitFamily(str, Enum):
     WEIGHT = "weight"
     VOLUME = "volume"
     COUNT = "count"
+    PACKAGING = "packaging"
     LENGTH = "length"
     AREA = "area"
 
@@ -37,16 +38,22 @@ UNIT_FAMILIES = {
         }
     },
     UnitFamily.COUNT: {
-        "units": ["pcs", "pc", "pieces", "box", "bag", "packet", "carton"],
+        "units": ["pcs", "pc", "pieces"],
         "base_unit": "pcs",
         "conversions": {
             "pcs": 1,
             "pc": 1,
             "pieces": 1,
+        }
+    },
+    UnitFamily.PACKAGING: {
+        "units": ["box", "boxes", "bag", "bags"],
+        "base_unit": "box",
+        "conversions": {
             "box": 1,
+            "boxes": 1,
             "bag": 1,
-            "packet": 1,
-            "carton": 1,
+            "bags": 1,
         }
     }
 }

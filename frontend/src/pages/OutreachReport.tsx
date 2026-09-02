@@ -82,6 +82,9 @@ export function OutreachReport() {
   const [trends, setTrends] = useState<TrendReport | null>(null)
   const [funnel, setFunnel] = useState<{ stage: string; count: number }[]>([])
   const [replies, setReplies] = useState<InboundReply[]>([])
+  const [visibleDays, setVisibleDays] = useState(10)
+  const [visibleDupes, setVisibleDupes] = useState(8)
+  const [visibleBinned, setVisibleBinned] = useState(8)
 
   const load = useCallback(async () => {
     try {
@@ -311,13 +314,13 @@ export function OutreachReport() {
             <div>
               <h2 className="font-display text-lg text-latte">Same name, different company</h2>
               <p className="text-[11px] text-latte/45">
-                Each was written to separately, because the address and mailbox differ. Worth a
+                {dupes.length} potential duplicates. Each was written to separately, because the address and mailbox differ. Worth a
                 look in case any pair is really one business.
               </p>
             </div>
           </div>
           <div className="space-y-3">
-            {dupes.map((g) => (
+            {dupes.slice(0, visibleDupes).map((g) => (
               <div key={g.name} className="rounded-xl border border-caramel/15 bg-bean/25 p-3.5">
                 <p className="text-sm text-latte">
                   {g.name}
@@ -341,6 +344,29 @@ export function OutreachReport() {
               </div>
             ))}
           </div>
+
+          {/* Pagination for duplicates */}
+          {dupes.length > visibleDupes && (
+            <div className="flex justify-center border-t border-caramel/15 pt-4">
+              <button
+                onClick={() => setVisibleDupes((d) => d + 8)}
+                className="rounded-lg border border-gold/30 bg-gold/5 px-6 py-2.5 font-medium text-gold transition hover:bg-gold/10"
+              >
+                Show {Math.min(8, dupes.length - visibleDupes)} more
+              </button>
+            </div>
+          )}
+
+          {visibleDupes > 8 && dupes.length > 8 && (
+            <div className="flex justify-center pt-2">
+              <button
+                onClick={() => setVisibleDupes(8)}
+                className="rounded-lg px-6 py-2.5 font-medium text-latte/60 transition hover:text-latte"
+              >
+                Show less
+              </button>
+            </div>
+          )}
         </Card>
       )}
 
@@ -353,7 +379,8 @@ export function OutreachReport() {
         />
       ) : (
         <div className="space-y-4">
-          {report.days.map((day) => (
+          <div className="space-y-4">
+            {report.days.slice(0, visibleDays).map((day) => (
             <Card key={day.day}>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5">
@@ -420,7 +447,31 @@ export function OutreachReport() {
                 </div>
               )}
             </Card>
-          ))}
+            ))}
+          </div>
+
+          {/* Pagination for days */}
+          {report.days.length > visibleDays && (
+            <div className="flex justify-center border-t border-caramel/15 pt-4">
+              <button
+                onClick={() => setVisibleDays((d) => d + 10)}
+                className="rounded-lg border border-gold/30 bg-gold/5 px-6 py-2.5 font-medium text-gold transition hover:bg-gold/10"
+              >
+                Show {Math.min(10, report.days.length - visibleDays)} more days
+              </button>
+            </div>
+          )}
+
+          {visibleDays > 10 && report.days.length > 10 && (
+            <div className="flex justify-center pt-2">
+              <button
+                onClick={() => setVisibleDays(10)}
+                className="rounded-lg px-6 py-2.5 font-medium text-latte/60 transition hover:text-latte"
+              >
+                Show less
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -431,7 +482,8 @@ export function OutreachReport() {
           <div>
             <h2 className="font-display text-lg text-latte">Recycle bin</h2>
             <p className="text-[11px] text-latte/45">
-              Deleted campaigns. The emails they sent stay in the report above, whatever happens
+              {binned.length > 0 ? `${binned.length} deleted campaign${binned.length === 1 ? '' : 's'}. ` : ''}
+              The emails they sent stay in the report above, whatever happens
               here.
             </p>
           </div>
@@ -439,8 +491,9 @@ export function OutreachReport() {
         {binned.length === 0 ? (
           <p className="py-4 text-center text-sm text-latte/35">Nothing deleted.</p>
         ) : (
-          <div className="space-y-2">
-            {binned.map((c) => (
+          <>
+            <div className="space-y-2">
+              {binned.slice(0, visibleBinned).map((c) => (
               <div
                 key={c.id}
                 className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-caramel/12 bg-bean/25 px-3.5 py-2.5"
@@ -470,8 +523,32 @@ export function OutreachReport() {
                   </button>
                 </div>
               </div>
-            ))}
-          </div>
+              ))}
+            </div>
+
+            {/* Pagination for recycle bin */}
+            {binned.length > visibleBinned && (
+              <div className="flex justify-center border-t border-caramel/15 pt-4">
+                <button
+                  onClick={() => setVisibleBinned((b) => b + 8)}
+                  className="rounded-lg border border-gold/30 bg-gold/5 px-6 py-2.5 font-medium text-gold transition hover:bg-gold/10"
+                >
+                  Show {Math.min(8, binned.length - visibleBinned)} more
+                </button>
+              </div>
+            )}
+
+            {visibleBinned > 8 && binned.length > 8 && (
+              <div className="flex justify-center pt-2">
+                <button
+                  onClick={() => setVisibleBinned(8)}
+                  className="rounded-lg px-6 py-2.5 font-medium text-latte/60 transition hover:text-latte"
+                >
+                  Show less
+                </button>
+              </div>
+            )}
+          </>
         )}
       </Card>
 
@@ -527,6 +604,7 @@ function RepliesReceived({
   const toast = useToast()
   const [showHandled, setShowHandled] = useState(false)
   const [checking, setChecking] = useState(false)
+  const [visibleReplies, setVisibleReplies] = useState(8)
   // Reading on a repeat, for as long as this page is open and the switch is
   // on. Deliberately here rather than on the server: a background reader is a
   // database query every minute whether or not anybody is there, and that is
@@ -627,7 +705,10 @@ function RepliesReceived({
               </>
             )}
           </Button>
-          <Button variant="ghost" onClick={() => setShowHandled((v) => !v)}>
+          <Button variant="ghost" onClick={() => {
+            setShowHandled((v) => !v)
+            setVisibleReplies(8)
+          }}>
             {showHandled ? 'Hide dealt-with' : 'Show all'}
           </Button>
         </div>
@@ -647,8 +728,9 @@ function RepliesReceived({
           hint="Every reply that arrived has been dealt with."
         />
       ) : (
-        <div className="space-y-2.5">
-          {visible.map((r) => (
+        <div className="space-y-4">
+          <div className="space-y-2.5">
+            {visible.slice(0, visibleReplies).map((r) => (
             <div
               key={r.id}
               className="rounded-lg border border-caramel/20 bg-bean/30 px-3.5 py-3"
@@ -732,7 +814,31 @@ function RepliesReceived({
                 )}
               </div>
             </div>
-          ))}
+            ))}
+          </div>
+
+          {/* Pagination for replies */}
+          {visible.length > visibleReplies && (
+            <div className="flex justify-center border-t border-caramel/15 pt-4">
+              <button
+                onClick={() => setVisibleReplies((r) => r + 8)}
+                className="rounded-lg border border-gold/30 bg-gold/5 px-6 py-2.5 font-medium text-gold transition hover:bg-gold/10"
+              >
+                Show {Math.min(8, visible.length - visibleReplies)} more
+              </button>
+            </div>
+          )}
+
+          {visibleReplies > 8 && visible.length > 8 && (
+            <div className="flex justify-center pt-2">
+              <button
+                onClick={() => setVisibleReplies(8)}
+                className="rounded-lg px-6 py-2.5 font-medium text-latte/60 transition hover:text-latte"
+              >
+                Show less
+              </button>
+            </div>
+          )}
         </div>
       )}
     </Card>

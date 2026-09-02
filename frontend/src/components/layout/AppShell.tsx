@@ -72,6 +72,7 @@ const BEVI_STOQ_NAV: NavItem[] = [
   { to: '/app/bevi-stoq/combos', label: 'Combos', icon: ClipboardList },
   { to: '/app/bevi-stoq/requirements', label: 'Requirements', icon: ClipboardList },
   { to: '/app/bevi-stoq/purchases', label: 'Purchases', icon: FileText },
+  { to: '/app/bevi-stoq/history', label: 'History', icon: BarChart3 },
   { to: '/app/bevi-stoq/reports', label: 'Reports', icon: BarChart3 },
 ]
 

@@ -1,4 +1,4 @@
-import { Search, ChevronDown, Download, Trash2, RotateCcw, X } from 'lucide-react'
+import { Search, ChevronDown } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { api } from '../lib/api'

@@ -57,7 +57,6 @@ export function BeviStoqCombos() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [selectedComboId, setSelectedComboId] = useState<number | null>(null)
   const [availability, setAvailability] = useState<ComboAvailability | null>(null)
-  const [loadingAvailability, setLoadingAvailability] = useState(false)
 
   useEffect(() => {
     fetchData()
@@ -128,14 +127,11 @@ export function BeviStoqCombos() {
   const getProductUnit = (id: number) => products.find((p) => p.id === id)?.default_unit || ''
 
   const fetchAvailability = async (comboId: number) => {
-    setLoadingAvailability(true)
     try {
       const res = await api.get<ComboAvailability>(`/api/bevi-stoq/combos/${comboId}/availability`)
       setAvailability(res)
     } catch (err) {
       console.error('Failed to fetch combo availability:', err)
-    } finally {
-      setLoadingAvailability(false)
     }
   }
 

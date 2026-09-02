@@ -32,17 +32,10 @@ interface Location {
   name: string
 }
 
-interface Category {
-  id: number
-  name: string
-}
-
 export function BeviStoqHistory() {
-  const toast = useToast()
   const [movements, setMovements] = useState<StockMovement[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [locations, setLocations] = useState<Location[]>([])
-  const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -64,11 +57,10 @@ export function BeviStoqHistory() {
     setLoading(true)
     setError(null)
     try {
-      const [movRes, prodRes, locRes, catRes] = await Promise.all([
+      const [movRes, prodRes, locRes] = await Promise.all([
         api.get<StockMovement[]>('/api/bevi-stoq/stock-movements'),
         api.get<Product[]>('/api/bevi-stoq/products'),
         api.get<Location[]>('/api/bevi-stoq/locations'),
-        api.get<Category[]>('/api/bevi-stoq/categories'),
       ])
 
       let filtered = movRes || []
@@ -111,7 +103,6 @@ export function BeviStoqHistory() {
       setMovements(filtered)
       setProducts(prodRes || [])
       setLocations(locRes || [])
-      setCategories(catRes || [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load history')
     } finally {

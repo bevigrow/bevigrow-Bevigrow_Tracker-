@@ -164,7 +164,7 @@ export function BeviStoqPurchases() {
           return
         }
         if (line.product_id && !line.unit) {
-          setError('Unit is required for all products')
+          setError('Unit is required for products')
           setSubmitting(false)
           return
         }
@@ -176,17 +176,18 @@ export function BeviStoqPurchases() {
         return
       }
 
-      // Create a purchase for each line
+      // Create a purchase for each line (products and combos)
       let savedCount = 0
       for (const line of validLines) {
         const quantity = parseFloat(line.quantity)
         const amount = line.amount ? parseFloat(line.amount) : null
 
-        if (line.product_id) {
+        if (line.product_id || line.combo_id) {
           const payload = {
             customer_name: formData.customer_name.trim(),
             contact_id: formData.contact_id ? parseInt(formData.contact_id) : null,
-            product_id: line.product_id,
+            product_id: line.product_id || null,
+            combo_id: line.combo_id || null,
             quantity: quantity,
             unit: line.unit || null,
             purchase_date: formData.purchase_date,

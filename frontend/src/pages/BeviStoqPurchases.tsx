@@ -177,6 +177,7 @@ export function BeviStoqPurchases() {
       }
 
       // Create a purchase for each line
+      let savedCount = 0
       for (const line of validLines) {
         const quantity = parseFloat(line.quantity)
         const amount = line.amount ? parseFloat(line.amount) : null
@@ -195,15 +196,23 @@ export function BeviStoqPurchases() {
             notes: formData.notes || null,
           }
 
-          if (editingId && validLines.length === 1) {
-            await api.put(`/api/bevi-stoq/customer-purchases/${editingId}`, payload)
-          } else {
-            await api.post('/api/bevi-stoq/customer-purchases', payload)
+          try {
+            if (editingId && validLines.length === 1) {
+              await api.put(`/api/bevi-stoq/customer-purchases/${editingId}`, payload)
+            } else {
+              await api.post('/api/bevi-stoq/customer-purchases', payload)
+            }
+            savedCount++
+          } catch (lineErr) {
+            const msg = lineErr instanceof Error ? lineErr.message : 'Failed to save purchase line'
+            toast.error(`Line ${savedCount + 1}: ${msg}`)
+            throw lineErr
           }
         }
       }
 
-      toast.success('Purchase recorded successfully')
+      await fetchData()
+      toast.success(`${savedCount} purchase(s) recorded successfully`)
 
       setFormData({
         customer_name: '',

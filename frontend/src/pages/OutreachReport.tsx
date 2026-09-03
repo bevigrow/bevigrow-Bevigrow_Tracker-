@@ -847,33 +847,43 @@ function NotWrittenTo({ report }: { report: DailyReport }) {
               {SKIP_NOTE[outcome] ?? ''}
             </p>
 
-            <div className="mt-2 overflow-x-auto">
-              <table className="w-full min-w-[34rem] border-collapse text-[11.5px]">
-                <thead>
-                  <tr className="text-left text-latte/40">
-                    <th className="py-1 pr-3 font-normal">Company</th>
-                    <th className="py-1 pr-3 font-normal">Where</th>
-                    <th className="py-1 pr-3 font-normal">Address</th>
-                    <th className="py-1 font-normal">Why</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {list.map((r, i) => (
-                    <tr
-                      key={`${r.email}-${r.day}-${i}`}
-                      className="border-t border-caramel/10 align-top"
-                    >
-                      <td className="py-1.5 pr-3 text-latte/80">{r.company}</td>
-                      <td className="py-1.5 pr-3 text-latte/45">
-                        {[r.location, r.country].filter(Boolean).join(', ') || '—'}
-                      </td>
-                      <td className="py-1.5 pr-3 break-all text-latte/55">{r.email ?? '—'}</td>
-                      <td className="py-1.5 text-latte/50">{r.reason ?? r.outcome}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <PaginatedList
+              items={list}
+              initialCount={10}
+              increment={10}
+              containerClassName="mt-2"
+              buttonContainerClassName="flex justify-center border-t border-caramel/15 pt-3"
+            >
+              {(visibleRows) => (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[34rem] border-collapse text-[11.5px]">
+                    <thead>
+                      <tr className="text-left text-latte/40">
+                        <th className="py-1 pr-3 font-normal">Company</th>
+                        <th className="py-1 pr-3 font-normal">Where</th>
+                        <th className="py-1 pr-3 font-normal">Address</th>
+                        <th className="py-1 font-normal">Why</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visibleRows.map((r, i) => (
+                        <tr
+                          key={`${r.email}-${r.day}-${i}`}
+                          className="border-t border-caramel/10 align-top"
+                        >
+                          <td className="py-1.5 pr-3 text-latte/80">{r.company}</td>
+                          <td className="py-1.5 pr-3 text-latte/45">
+                            {[r.location, r.country].filter(Boolean).join(', ') || '—'}
+                          </td>
+                          <td className="py-1.5 pr-3 break-all text-latte/55">{r.email ?? '—'}</td>
+                          <td className="py-1.5 text-latte/50">{r.reason ?? r.outcome}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </PaginatedList>
           </div>
         ))}
       </div>

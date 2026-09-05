@@ -212,7 +212,7 @@ export function BeviStoqProducts() {
           const updatedProductInList = products.find(p => p.id === editingId)
           if (updatedProductInList && updatedProductInList.name === payload.name) {
             console.log('[UPDATE] ✓ Database persistence confirmed - values match')
-            setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, category_id: 0, packaging_status: 'unpacked', low_stock_threshold: '', notes: '', current_quantity: '' })
+            setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, category_id: 0, packaging_status: 'unpacked', low_stock_threshold: '', low_stock_threshold_unit: '', notes: '', current_quantity: '' })
             setEditingId(null)
             setShowForm(false)
             toast.success('Product updated successfully')

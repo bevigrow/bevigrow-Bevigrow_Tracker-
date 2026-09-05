@@ -255,7 +255,7 @@ export function BeviStoqProducts() {
           console.log('Stock quantity or location not provided, skipping stock movement')
         }
 
-        setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, category_id: 0, packaging_status: 'unpacked', low_stock_threshold: '', notes: '', current_quantity: '' })
+        setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, category_id: 0, packaging_status: 'unpacked', low_stock_threshold: '', low_stock_threshold_unit: '', notes: '', current_quantity: '' })
         setEditingId(null)
         setShowForm(false)
         toast.success('Product created successfully with stock')

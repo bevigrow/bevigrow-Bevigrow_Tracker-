@@ -33,6 +33,7 @@ class ProductCreate(BaseModel):
     default_unit: str = Field(..., min_length=1, max_length=50)
     alert_quantity: float | None = Field(None, ge=0)
     low_stock_threshold: float | None = Field(None, ge=0)
+    low_stock_threshold_unit: str | None = Field(None, min_length=1, max_length=50)
     packaging_status: str = Field(default="unpacked")  # "packed" or "unpacked"
     notes: str | None = None
 
@@ -44,6 +45,7 @@ class ProductUpdate(BaseModel):
     quantity: float | None = Field(None, ge=0)  # Current stock quantity (triggers ADJUSTMENT movement)
     alert_quantity: float | None = Field(None, ge=0)
     low_stock_threshold: float | None = Field(None, ge=0)
+    low_stock_threshold_unit: str | None = Field(None, min_length=1, max_length=50)
     packaging_status: str | None = None  # "packed" or "unpacked"
     notes: str | None = None
     active: bool | None = None
@@ -56,6 +58,7 @@ class ProductOut(BaseModel):
     default_unit: str
     alert_quantity: float | None
     low_stock_threshold: float | None
+    low_stock_threshold_unit: str | None
     packaging_status: str
     notes: str | None
     active: bool

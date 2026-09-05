@@ -12,6 +12,7 @@ interface Product {
   default_unit: string
   alert_quantity: number | null
   low_stock_threshold: number | null
+  low_stock_threshold_unit: string | null
   packaging_status: string
   notes: string | null
   active: boolean
@@ -60,6 +61,7 @@ export function BeviStoqProducts() {
     category_id: 0,
     packaging_status: 'unpacked',
     low_stock_threshold: '',
+    low_stock_threshold_unit: '',
     notes: '',
     current_quantity: '', // For edit mode - existing stock
   })
@@ -180,6 +182,7 @@ export function BeviStoqProducts() {
         default_unit: formData.default_unit,
         packaging_status: formData.packaging_status || 'unpacked',
         low_stock_threshold: formData.low_stock_threshold ? parseFloat(formData.low_stock_threshold) : null,
+        low_stock_threshold_unit: formData.low_stock_threshold_unit || null,
         alert_quantity: null,
         notes: formData.notes || null,
       }
@@ -294,6 +297,7 @@ export function BeviStoqProducts() {
       category_id: product.category_id || 0,
       packaging_status: product.packaging_status || 'unpacked',
       low_stock_threshold: product.low_stock_threshold ? product.low_stock_threshold.toString() : '',
+      low_stock_threshold_unit: product.low_stock_threshold_unit || '',
       notes: product.notes || '',
       current_quantity: totalStock.toString(),
     })
@@ -313,7 +317,7 @@ export function BeviStoqProducts() {
         </div>
         <button
           onClick={() => {
-            setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, category_id: 0, packaging_status: 'unpacked', low_stock_threshold: '', notes: '', current_quantity: '' })
+            setFormData({ name: '', default_unit: '', stock_quantity: '', location_id: 0, category_id: 0, packaging_status: 'unpacked', low_stock_threshold: '', low_stock_threshold_unit: '', notes: '', current_quantity: '' })
             setEditingId(null)
             setShowForm(!showForm)
           }}
@@ -493,18 +497,36 @@ export function BeviStoqProducts() {
               </select>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-latte">
-                Low Stock Threshold <span className="text-latte/60">(optional)</span>
-              </label>
-              <input
-                type="number"
-                value={formData.low_stock_threshold}
-                onChange={(e) => setFormData({ ...formData, low_stock_threshold: e.target.value })}
-                className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte placeholder-latte/40 focus:outline-none focus:ring-2 focus:ring-gold/50"
-                placeholder="e.g., 50 (alert when stock ≤ this value)"
-                step="0.01"
-              />
+            <div className="grid grid-cols-3 gap-4">
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-latte">
+                  Low Stock Threshold <span className="text-latte/60">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={formData.low_stock_threshold}
+                  onChange={(e) => setFormData({ ...formData, low_stock_threshold: e.target.value })}
+                  className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte placeholder-latte/40 focus:outline-none focus:ring-2 focus:ring-gold/50"
+                  placeholder="e.g., 50"
+                  step="0.01"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-latte">Unit</label>
+                <select
+                  value={formData.low_stock_threshold_unit || formData.default_unit}
+                  onChange={(e) => setFormData({ ...formData, low_stock_threshold_unit: e.target.value })}
+                  className="mt-1 w-full rounded bg-bean/50 px-3 py-2 text-latte focus:outline-none focus:ring-2 focus:ring-gold/50"
+                >
+                  <option value="">{formData.default_unit || 'Unit'}</option>
+                  {UNITS.map((unit) => (
+                    <option key={unit} value={unit}>
+                      {unit}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div>

@@ -83,6 +83,7 @@ class Product(Base):
     default_unit: Mapped[str] = mapped_column(String(50), nullable=False)
     alert_quantity: Mapped[float | None] = mapped_column("alert_quantity", Float, nullable=True)
     low_stock_threshold: Mapped[float | None] = mapped_column(Float, nullable=True)
+    low_stock_threshold_unit: Mapped[str | None] = mapped_column(String(50), nullable=True)
     packaging_status: Mapped[str] = mapped_column(String(50), default="unpacked", nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)

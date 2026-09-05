@@ -83,9 +83,10 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("bs_categories", "updated_at", "TIMESTAMP WITH TIME ZONE DEFAULT NOW()"),
     ("bs_categories", "updated_by_user_id", "INTEGER"),
 
-    # Products: alert quantity (optional) + notes + audit
+    # Products: alert quantity (optional) + notes + audit + low stock threshold unit
     ("bs_products", "alert_quantity", "FLOAT"),
     ("bs_products", "notes", "TEXT"),
+    ("bs_products", "low_stock_threshold_unit", "VARCHAR(50)"),
     ("bs_products", "updated_at", "TIMESTAMP WITH TIME ZONE DEFAULT NOW()"),
     ("bs_products", "updated_by_user_id", "INTEGER"),
 
